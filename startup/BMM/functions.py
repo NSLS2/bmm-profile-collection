@@ -41,7 +41,7 @@ except ImportError:
 def example_prompt(text='This is an example prompt.  Type something > '):
     foo = animated_prompt(text)
     print(f"You answered {foo}")
-    
+
 
 DEFAULT_INI = '/nsls2/data3/bmm/shared/config/xafs/scan.ini'
 
@@ -82,7 +82,7 @@ def approximate_pitch(energy):
         m = -3.3122e-06
         b = 2.38902936
         return(m*energy + b)
-        
+
 
 # def inflect(word, number):
 #     if abs(number) == 1:
@@ -98,7 +98,7 @@ def clear_dashboard():
     rkvs.set('BMM:scan:type',      '')
     rkvs.set('BMM:scan:starttime', '')
     rkvs.set('BMM:scan:estimated', '')
-    
+
 
 def countdown(t):
     transition = max(int(t/10), 2)
@@ -120,13 +120,13 @@ def elapsed_time(start, slack=None):
     minutes, seconds = divmod(rest, 60)
     print(f'\n\nThat took {hours} hours, {minutes} minutes, {seconds:.0f} seconds')
     return(hours, minutes, seconds)
-        
+
 
 def present_options(suffix='xlsx'):
     options = [x for x in os.listdir(user_ns['BMMuser'].workspace) if x.endswith(suffix)]
     options = sorted(options)
     bold_msg(f'Looking in {user_ns["BMMuser"].workspace}\n')
-    
+
     print(f'Select your {suffix} file:\n')
     for i,x in enumerate(options):
         print(f' {i+1:2}: {x}')
@@ -151,21 +151,21 @@ def plotting_mode(mode):
          dante
          reference
          test
-    
+
     '''
     mode = mode.lower()
     if 'yield' in mode: # ('fluo+yield', 'yield', 'eyield'):
         return 'yield'
 
     elif mode == 'iy':
-        return 'yield'        
+        return 'yield'
 
     elif mode == 'pips':
-        return 'pips'        
+        return 'pips'
 
     elif 'pil' in mode: # ('fluo+pilatus', 'pilatus'):
         return 'pilatus'
-    
+
     elif mode == 'dante':
         return 'dante'
 
@@ -185,11 +185,11 @@ def plotting_mode(mode):
     # deprecated textual distinction between various SDDs
     #elif user_ns['with_xspress3'] and mode == 'xs1':
     #    return 'xs1'
-    
+
     # deprecated analog readout system
     #elif not user_ns['with_xspress3'] and any(x in mode for x in ('fluo', 'flou', 'both')):
     #    return 'fluo'
-    
+
     #deprecated ion chamber testing
     #elif mode == 'icit':
     #    return 'icit'
