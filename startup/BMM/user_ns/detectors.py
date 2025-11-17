@@ -242,7 +242,12 @@ except:
 
 run_report('\t'+'cameras')
 from BMM.camera_device import BMMSnapshot, snap, AxisCaprotoCam
-from BMM.db import file_resource, show_snapshot
+from BMM.user_ns.base import bmm_catalog
+
+import BMMCommon.tools.db
+BMMCommon.tools.db.bmm_catalog = bmm_catalog
+file_resource = BMMCommon.tools.db.file_resource
+show_snapshot = BMMCommon.tools.db.show_snapshot
 
 
 # this root location is deprecated for the camera devices.  The _root

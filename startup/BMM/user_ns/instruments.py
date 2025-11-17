@@ -579,7 +579,7 @@ ln2.closeval = 0
 
                                                                            
 run_report('\tfront-end beam position monitor')
-from BMM.frontend import FEBPM
+from BMMCommon.devices.frontend import FEBPM
 
 try:
     bpm_upstream   = FEBPM('SR:C06-BI{BPM:4}Pos:', name='bpm_upstream')
@@ -602,7 +602,7 @@ def read_bpms():
 ####################################################################
                                                                 
 run_report('\tbusy device')
-from BMM.busy import Busy
+from BMMCommon.devices.busy import Busy
 busy = Busy(name='busy')
 
 
