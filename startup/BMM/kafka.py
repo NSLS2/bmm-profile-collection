@@ -1,5 +1,5 @@
 
-import os
+import os, time
 
 try:
     from bluesky_queueserver import is_re_worker_active
@@ -15,6 +15,7 @@ from nslsii.kafka_utils import _read_bluesky_kafka_config_file
     
 from bluesky_kafka.produce import BasicProducer
 
+from BMM.workspace import rkvs
 from BMM.functions import proposal_base, warning_msg, bold_msg, whisper, error_msg
 from BMM.user_ns.base import bmm_catalog
 
@@ -116,3 +117,63 @@ def regenerate_every_xas_scan(gup=None, since=None, until=None):
     kafka_message({'everyxas': True, 'gup': gup, 'since': since, 'until': until})
     bold_msg('This will take some time to complete.')
     whisper('Progress can be monitored in the terminal window displaying the Kafka file manager.')
+
+
+
+def file_exists(folder=None, filename=None, start=1, stop=2, maxtries=15, number=True, verbose=False):
+    '''Determine if a file of the specified filename exists in a specified
+    folder in the proposals directory.
+
+    This sends a message over kafka asking the file manager worker to
+    search for the file.  The worker posts "true" or "false" to redis.
+    This function sets that redis key to "None" and polls the
+    appropriate redis key for a "true"/"false" value.
+   
+    arguments
+    =========
+    folder: (str)
+      folder in proposal directory to probe [proposal_base()]
+
+    filename: (str)
+      filename to check, i.e. filename with extension but without path
+
+    start: (int)
+      start of extension number range to check
+
+    stop: (int)
+      end of extension number range to check
+
+    maxtries: (int)
+      maximum number of attempts to read before giving up and returning None
+
+    number: (bool)
+      if True, search for numbered extensions.  if False, search for filename as specified
+
+    verbose: (bool)
+      if True, be noisy as we wait for a result
+
+    '''
+    if folder is None:
+        folder = proposal_base()
+    if filename is None:
+        error_msg('No filename supplied to file_exists')
+        return(None)
+    #rkvs = user_ns['rkvs']
+    rkvs.set('BMM:file_exists', 'None')
+    kafka_message({'file_exists': True, 'folder': folder, 'filename': filename, 'start': start, 'stop': stop, 'number': number})
+    answer = rkvs.get('BMM:file_exists').decode('utf8')
+    count = 0
+    if verbose: print(f"{count = }, {answer = }")
+    while answer == 'None':
+        time.sleep(0.1)
+        answer = rkvs.get('BMM:file_exists').decode('utf8')
+        count += 1
+        if verbose: print(f"{count = }, {answer = }")
+        if count > maxtries:
+            return(None)
+    if answer == 'true':
+        return True
+    else:
+        return False
+    
+    

@@ -31,6 +31,9 @@ def refresh_slack():
 def describe_slack():
     bmmbot.describe()
 
+def test_slack():
+    bmmbot.test()
+
     
 def post_to_slack(text, rid=None):
     ## BMM's own Slack channel, soon to be deprecated

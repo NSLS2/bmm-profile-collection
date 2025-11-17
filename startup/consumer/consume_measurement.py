@@ -73,7 +73,7 @@ if os.getenv('USER') == 'workflow-bmm':
 plt.ion()
 plt.rcParams["figure.raise_window"] = False
 
-from slack import refresh_slack, describe_slack
+from slack import refresh_slack, describe_slack, test_slack
 
 def plot_from_kafka_messages(beamline_acronym):
 
@@ -94,7 +94,7 @@ def plot_from_kafka_messages(beamline_acronym):
             if any(x in message for x in ('xafs_sequence', 'glancing_angle', 'align_wheel', 'wafer', 'mono_calibration',
                                           'xrfat', 'linescan', 'xafsscan', 'timescan', 'xrf', 'areascan', 'close', 'logger', 'refresh_slack',
                                           'peakfit', 'stepfit', 'rectanglefit', 'reset_rois',
-                                          'backend', 'xrr')) :
+                                          'backend', 'xrr', 'xrr_alignment', 'xrr_calibration_plot')) :
                 if be_verbose is True:
                     print(f'\n[{datetime.datetime.now().isoformat(timespec="seconds")}]\n{pprint.pformat(message, compact=True)}')
                 else:
@@ -195,6 +195,13 @@ def plot_from_kafka_messages(beamline_acronym):
                     xrr.stop(catalog=bmm_catalog, **message)
                     doing = None
 
+            elif 'xrr_alignment' in message:
+                xrr.alignment(catalog=bmm_catalog, uid=message['uid'], motor=message['motor'], detector=message['detector'])
+
+            elif 'xrr_calibration_plot' in message:
+                xrr.calibration_plot(catalog=bmm_catalog, uid=message['uid'], motor=message['motor'],
+                                     detector=message['detector'], stub=message['stub'])
+
                     
             elif 'reset_rois' in message:
                 xrf.reset_rois()
@@ -267,6 +274,9 @@ def plot_from_kafka_messages(beamline_acronym):
                     
             elif 'describe_slack' in message:
                 describe_slack()
+
+            elif 'test_slack' in message:
+                test_slack()
 
             elif 'backend' in message:
                 print(matplotlib.get_backend())

@@ -157,15 +157,15 @@ l2e = e2l
 
 ## see calibrate_pitch in BMM/mono_calibration.py
 def approximate_pitch(energy):
-    '''Updated 12 September 2024
+    '''Updated 8 September 2025
     '''
     if user_ns['dcm']._crystal == '111':
-        m = -4.3490e-06
-        b = 4.47073688
+        m = -4.1409e-06
+        b = 4.47946925
         return(m*energy + b)
     else:
-        m = -2.9206e-06
-        b = 2.37355640
+        m = -3.3122e-06
+        b = 2.38902936
         return(m*energy + b)
         
 

@@ -1,6 +1,8 @@
 
 from BMM.functions import run_report
-from BMM.metadata import TC, Ring
+from BMM.metadata import TC
+
+from BMMCommon.devices.ring import Ring
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)

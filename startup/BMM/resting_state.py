@@ -68,8 +68,8 @@ def resting_state():
     user_ns['dcm_bragg'].clear_encoder_loss()
     dcm.mode = 'fixed'
     user_ns['m2_bender'].kill()
-    if 'ga' in user_ns:
-        user_ns['ga'].alloff()
+    # if 'ga' in user_ns:
+    #     user_ns['ga'].alloff()
     kafka_message({'resting_state': True,})
     #user_ns['RE'].msg_hook = BMM_msg_hook
     if is_re_worker_active() is False:
@@ -109,8 +109,8 @@ def resting_state_plan():
         yield from mv(electrometer.acquire_mode, 0)
     #yield from mv(user_ns['dm3_bct'].kill_cmd, 1)
     yield from sleep(0.2)
-    if 'ga' in user_ns:
-        yield from user_ns['ga'].alloff_plan()
+    # if 'ga' in user_ns:
+    #     yield from user_ns['ga'].alloff_plan()
     yield from dcm.kill_plan()
     yield from mv(user_ns['dcm_bragg'].clear_enc_lss, 1)
     user_ns['m2_bender'].kill()
@@ -156,8 +156,8 @@ def end_of_macro():
     yield from mv(_locked_dwell_time, 0.5)
     #yield from mv(user_ns['dm3_bct'].kill_cmd, 1)
     yield from sleep(0.2)
-    if 'ga' in user_ns:
-        yield from user_ns['ga'].alloff_plan()
+    # if 'ga' in user_ns:
+    #     yield from user_ns['ga'].alloff_plan()
     yield from dcm.kill_plan()
     yield from mv(user_ns['dcm_bragg'].clear_enc_lss, 1)
     user_ns['m2_bender'].kill()

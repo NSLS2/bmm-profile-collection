@@ -421,7 +421,7 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
         if no_hslits is True:
             pass
         elif mode == 'XRD':
-            yield from mv(slits3.hsize, 2)
+            yield from mv(slits3.hsize, 1.5)  # changed to 1.5 for 500 mA operations
         elif mode in ('D', 'E', 'F'):
             yield from mv(slits3.hsize, 3)
         elif mode in ('A', 'B', 'C'):
@@ -543,6 +543,7 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
             BMMuser.verify_roi(xs, el, edge)
             BMMuser.verify_roi(xs1, el, edge)
             #BMMuser.verify_roi(xs7, el, edge)
+            BMMuser.set_element(el, edge)
         ## feedback
         show_edges()
 

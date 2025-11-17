@@ -1,4 +1,4 @@
-import os, datetime, emojis, re, configparser, numpy
+import os, datetime, emojis, re, configparser, numpy, time
 from lmfit.models import StepModel, RectangleModel
 from matplotlib import get_backend
 import matplotlib
@@ -379,20 +379,45 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, ga=No
     target = 0
     t  = catalog[uid].primary['data']
     positions = numpy.array(t[motor])
+    backwards = False
+    if float(positions[-1]) < float(positions[0]):
+        backwards = True
+
     if signal == 'I0':
         sig = numpy.array(t[signal])
+        thissig = 'I0'
     elif signal == 'It':
         sig = numpy.array(t[signal]) / numpy.array(t['I0'])
+        thissig = 'It/I0'
     elif signal == 'Ir':
         sig = numpy.array(t[signal]) / numpy.array(t['It'])
+        thissig = 'Ir/It'
+    elif signal == 'bicron':
+        sig = numpy.array(t[signal])
+        thissig = 'bicron'
     else:
         sig = numpy.array(t[signal])
+        thissig = signal
 
-    if float(sig[2]) > list(sig)[-2] :
-        ss     = -(sig - sig[2])
+    if signal == 'bicron' and backwards is True:
+        fix = 0
+    elif signal == 'bicron' and backwards is False:
+        fix = 0
+    else:
+        fix = sig[2]
+
+    invert = False
+    if backwards is False and float(sig[2]) > list(sig)[-2]:
+        invert = True
+    if backwards is True and float(sig[2]) < list(sig)[-2]:
+        invert = True
+        
+        
+    if invert is True:
+        ss     = -(sig - fix)
         inverted = 'inverted '
     else:
-        ss     = signal - signal[2]
+        ss     = sig - fix
         inverted    = ''
 
     mod    = StepModel(form='erf')
@@ -401,9 +426,10 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, ga=No
     print(out.fit_report(min_correl=0.2))
 
     target = out.params['center'].value
-    rkvs.set('BMM:peak_position', target)
-    print(f'*** edge of step function found at {motor} position {target:.3f}')
-
+    rkvs.set('BMM:peakposition', target)
+    print(f'*** centroid of step function found at {motor} position {target:.3f}')
+    print(rkvs.get('BMM:peakposition').decode('utf8'))
+    
     if get_backend().lower() != 'agg':
         fig = plt.figure()
         ax = fig.gca()
@@ -411,8 +437,8 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, ga=No
         ax.plot(positions, out.best_fit, color='red')
         ax.scatter(target, out.params['amplitude'].value/2, s=160, marker='x', color='green')
         ax.set_facecolor((0.95, 0.95, 0.95))
-        ax.set_xlabel(f'{motor} (mm)')
-        ax.set_ylabel(f'{inverted}It/I0 and error function')
+        ax.set_xlabel(f'{motor}')
+        ax.set_ylabel(f'{inverted}{thissig} and error function')
         if spinner is not None:
             ax.set_title(f'fit to {motor} scan, spinner {spinner}, center={target:.3f}')
         else:
@@ -420,6 +446,7 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, ga=No
         fig.canvas.manager.show()
         fig.canvas.flush_events()
         #out.plot()
+
 
     ## gather the information needed for the glancing angle auto-alignment summary plot
     if ga is not None and ga.ongoing is True:  # i.e. if currently doing a ga auto-alignment

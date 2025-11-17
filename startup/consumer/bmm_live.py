@@ -5,6 +5,11 @@ import matplotlib.gridspec as gridspec
 from matplotlib.patches import Rectangle
 #from mpl_multitab import MplTabs
 import numpy, pandas
+from scipy.ndimage import center_of_mass
+from scipy import optimize
+
+
+
 import xraylib
 import datetime
 from bluesky import __version__ as bluesky_version
@@ -407,6 +412,8 @@ class LineScan():
             signal = kwargs['data'][self.numerator]
         elif self.numerator == 'Mythen':
             signal = kwargs['data']['mca_full']
+        elif self.numerator in ('Struck', 'Bicron', 'Apd'):
+            signal = kwargs['data']['monitor']
         else:
             print(f'could not determine signal, self.numerator is {self.numerator}')
             return
@@ -1252,6 +1259,9 @@ class XRR():
     # level                 0  1        2        3         4         5         6         7*          8
     measured_attenuation = [1, 6.85865, 47.0088, 318.6107, 2225.346, 15046.19, 97500.05, 668718.718, ]
 
+    mythen_channels = 1280
+    mythen_pixel_size = 0.05 # mm
+    
     def start(self, **kwargs):
         #if self.figure is not None:
         #    plt.close(self.figure.number)
@@ -1265,6 +1275,7 @@ class XRR():
         if 'title'    in kwargs: self.title    = kwargs['title']
 
         self.figure = plt.figure()
+        cid = self.figure.canvas.mpl_connect('button_press_event', self.interpret_click)
 
         if get_backend().lower() == 'agg':
             self.figure.set_figheight(9.5)
@@ -1294,6 +1305,19 @@ class XRR():
         self.linexrr, = self.xrr.plot([],[], label='')
         
     
+    def interpret_click(self, ev):
+        '''Grab location of mouse click.  Identify motor by grabbing the
+        x-axis label from the canvas clicked upon.
+
+        Stash those in Redis.
+        '''
+        x,y = ev.xdata, ev.ydata
+        print('plucked', x, ev.canvas.figure.axes[0].get_xlabel(), ev.canvas.figure.number)
+        if x is not None:
+            rkvs.set('BMM:mouse_event:value', x)
+            rkvs.set('BMM:mouse_event:motor', ev.canvas.figure.axes[0].get_xlabel())
+
+
 
     def stop(self, catalog, **kwargs):
         if get_backend().lower() == 'agg':
@@ -1344,3 +1368,124 @@ class XRR():
         self.figure.canvas.draw()
         self.figure.canvas.flush_events()
         
+    def alignment(self, catalog=None, uid=None, motor=None, detector=None):
+        if catalog is None:
+            print('xrr.alignment: No catalog provided')
+            return
+        if uid is None:
+            print('xrr.alignment: No uid provided')
+            return
+        if motor is None:
+            print('xrr.alignment: No motor provided')
+            return
+        if detector is None:
+            print('xrr.alignment: No detector provided')
+            return
+        data = catalog[uid].primary['data']
+
+        x = numpy.array(data[motor])
+
+        det = detector
+        if detector.lower() == 'mythen':
+            det = 'mca_full'
+        if det not in data:
+            print(f'xrr.alignment: detector {det} not in data table')
+            return
+            
+        y = numpy.array(data[det])
+
+        plt.close('all')
+        fig = plt.figure()
+        cid = fig.canvas.mpl_connect('button_press_event', self.interpret_click)
+        
+        plt.plot(x, y, label='data')
+        ax = plt.gca()
+        ax.set_xlabel(motor)
+        ax.set_ylabel(det)
+        ax.set_facecolor((0.95, 0.95, 0.95))
+
+        sigcom = float(center_of_mass(y)[0])
+        frac = sigcom - int(sigcom)
+        com = x[int(sigcom)] + frac*(x[int(sigcom+1)] - x[int(sigcom)])
+        
+        
+        imax = int(numpy.argmax(y))
+        peak = y[imax]
+        peakpos = x[imax]
+
+        xx = x[0:imax]
+        yy = y[0:imax]
+        halfheight = peak/2
+        q = len(xx[yy<halfheight])
+        frac = (halfheight - yy[q-1]) / (yy[q] - yy[q-1])
+        left = xx[q-1] + frac*(xx[q]-xx[q-1])
+
+        xx = x[imax:]
+        yy = y[imax:]
+        q = len(xx[yy>halfheight])
+        frac = (halfheight - yy[q-1]) / (yy[q] - yy[q-1])
+        right = xx[q-1] + frac*(xx[q]-xx[q-1])
+
+        plt.plot([left, (right+left)/2, right], [halfheight, halfheight, halfheight], label='FWHM', marker='o')
+        ymin, ymax = ax.get_ylim()
+        plt.plot([com, com], [ymin, ymax], label='CoM')
+        plt.plot([peakpos], [peak], label='peak', marker='x')
+        ax.legend(loc='best', shadow=True)
+        
+        fwhm = float(right - left)
+        fwhm_center = left + fwhm/2
+
+        results = {'com': com, 'fwhm': fwhm, 'fwhm_center': fwhm_center, 'peak': peak, 'peakpos': peakpos}
+        print(results)
+        rkvs.set('BMM:xrd:peak_stats', str(results))
+        
+        report = f'''FWHM = {fwhm:.3f}, center = {fwhm_center:.3f}
+center of mass = {com:.3f}
+peak value = {peak:.1f} at {peakpos:.3f}'''
+        ax.set_title(report)
+        print(report)
+
+        
+        
+    def calibration_plot(self, catalog=None, uid=None, stub=None, motor=None, detector=None):
+        '''Swiped from an IBM supplied python file written by Koen deKeyser .
+        '''
+        
+        etaval = float(catalog[uid].baseline['data']['eta'][0])
+        fullmca = catalog[uid].primary['data']['mythen-2_image'][:,0,:].astype(int)
+        
+        monitor = catalog[uid].primary['data']['monitor'][:].reshape(-1,1)
+        counts = fullmca / monitor
+
+        maxvals = numpy.argmax(counts,axis=0) # find maximum number of counts that arrived in a specific detector pixel   
+        two_theta = catalog[uid].primary['data']['delta'][:]
+
+        calibration = -(two_theta[maxvals]-2.0*etaval) # the minus sign is due to the fact that a detector at position two_theta, will see the beam after we rotate over -two_theta
+
+        weights = counts[maxvals,numpy.arange(self.mythen_channels)] # pixels with very low intensity are likely dead, and will result in errors in the calibration, so we ignore them by giving them a very low weight in the fitting
+
+        Yt = numpy.tan(numpy.radians(calibration))
+        Xt = (numpy.arange(self.mythen_channels))
+
+        fitfunc = lambda p, x: (x-p[1])*p[0]# Target function
+        errfunc = lambda p, x, y, weight:((fitfunc(p, x) - y)*weight)
+        p0 = [1.0, 0.05] # detector_settings.pixel_in_Bragg_Brentano] # initial guess
+        p2, success = optimize.leastsq(errfunc, p0[:], args=(Xt, Yt ,weights))
+
+        lookup_table = numpy.arctan((numpy.arange(self.mythen_channels)-p2[1])*p2[0])
+
+        d = self.mythen_pixel_size / p2[0]
+
+        fig = plt.figure()
+        cid = fig.canvas.mpl_connect('button_press_event', self.interpret_click)
+        plt.plot(numpy.arange(self.mythen_channels),calibration, label='measured')
+        plt.plot(numpy.arange(self.mythen_channels),numpy.degrees(lookup_table), label='calibration')
+        ax = plt.gca()
+        ax.set_ylabel(motor)
+        ax.set_xlabel('pixel at beam center')
+        ax.set_facecolor((0.95, 0.95, 0.95))
+        ax.set_title(f'Mythen calibration result\npixel 0 at {int(numpy.round(p2[1]))}\ndistance = {d:.3f} mm')
+        ax.legend(loc='best', shadow=True)
+            
+        results = {'pixelz': p2[1], 'angle_per_pixel': 1/p2[0], 'distance': d}
+        rkvs.set('BMM:xrd:mythen_calibration', str(results))

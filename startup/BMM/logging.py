@@ -215,7 +215,7 @@ def BMM_msg_hook(msg):
     BMM-specific function for RE.msg_hook
     '''
     #print(msg)
-    if msg[0] == 'set':
+    if msg[0] == 'set' and msg[2][0] is not None:
         if 'EpicsMotor' in str(type(msg[1])):
             report('Moving %s to %.3f'  % (msg[1].name, msg[2][0]))
         elif 'EpicsSignal' in str(type(msg[1])):
@@ -224,5 +224,7 @@ def BMM_msg_hook(msg):
             report('Setting %s to %.3f' % (msg[1].name, msg[2][0]), 'whisper')
         elif 'PseudoSingle' in str(type(msg[1])):
             report('Moving %s to %.3f'  % (msg[1].name, msg[2][0]))
-
+    # else:
+    #     report('something went wrong with the last data point')
+    #     print(msg)
 

@@ -19,12 +19,12 @@ class TC(Device):
     temperature = Cpt(EpicsSignal, 'T-I-I')
 
 
-class Ring(Device):
-    current    = Cpt(EpicsSignalRO, ':OPS-BI{DCCT:1}I:Real-I')
-    lifetime   = Cpt(EpicsSignalRO, ':OPS-BI{DCCT:1}Lifetime-I')
-    energy     = Cpt(EpicsSignalRO, '{}Energy_SRBend')
-    mode       = Cpt(EpicsSignalRO, '-OPS{}Mode-Sts', string=True)
-    filltarget = Cpt(EpicsSignalRO, '-HLA{}FillPattern:DesireImA')
+# class Ring(Device):
+#     current    = Cpt(EpicsSignalRO, ':OPS-BI{DCCT:1}I:Real-I')
+#     lifetime   = Cpt(EpicsSignalRO, ':OPS-BI{DCCT:1}Lifetime-I')
+#     energy     = Cpt(EpicsSignalRO, '{}Energy_SRBend')
+#     mode       = Cpt(EpicsSignalRO, '-OPS{}Mode-Sts', string=True)
+#     filltarget = Cpt(EpicsSignalRO, '-HLA{}FillPattern:DesireImA')
 
 
 ## some heuristics for determining state of M2 and M3

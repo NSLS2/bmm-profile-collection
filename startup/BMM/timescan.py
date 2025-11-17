@@ -22,12 +22,12 @@ from BMM.dossier       import DossierTools
 from BMM.functions     import countdown, boxedtext, now, isfloat, inflect, e2l, etok, ktoe, present_options, plotting_mode
 from BMM.functions     import PROMPT, PROMPTNC, animated_prompt
 from BMM.functions     import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
-from BMM.kafka         import kafka_message
+from BMM.kafka         import kafka_message, file_exists
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
 from BMM.metadata      import bmm_metadata, display_XDI_metadata, metadata_at_this_moment
 from BMM.resting_state import resting_state, resting_state_plan
 from BMM.suspenders    import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
-from BMM.xafs          import scan_metadata, file_exists
+from BMM.xafs          import scan_metadata
 
 from BMM.user_ns.base      import bmm_catalog
 from BMM.user_ns.detectors import quadem1, ic0, ic1, ic2, xs, xs1, xs4, xs7, ION_CHAMBERS

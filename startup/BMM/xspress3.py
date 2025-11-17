@@ -557,7 +557,10 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
         
 
     def hinted_roi(self):
-        chan = self.channel01
+        try:
+            chan = self.channel01
+        except:
+            chan = self.channel08
         for i in range(1,21):
             roi = getattr(chan, f'mcaroi{i:02d}')
             if int(roi.kind) == 7:

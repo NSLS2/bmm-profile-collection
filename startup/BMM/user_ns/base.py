@@ -87,15 +87,16 @@ def post_document(name, doc):
         try:
             tiled_writing_client.post_document(name, doc)
         except Exception as exc:
-            print("Document saving failure:", repr(exc))
+            print("(BMM local warning) Document saving failure:", repr(exc))
             error = exc
         else:
             break
-        print(f'sleeping {2**attempt} seconds before trying again...')
+        print(f'(BMM local warning) sleeping {2**attempt} seconds before trying again...')
         time.sleep(2**attempt)
     else:
         # out of attempts
         print('***************************************************')
+        print('(BMM local warning) ')
         print('One last try to connect to tiled.  Wating 2 minutes')
         print(f'Begin sleeping for 2 minutes at {datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")}')
         print('***************************************************')
@@ -103,7 +104,7 @@ def post_document(name, doc):
         try:
             tiled_writing_client.post_document(name, doc)
         except Exception as exc:
-            print("Document saving failure:", repr(exc))
+            print("(BMM local warning) Document saving failure:", repr(exc))
             print("Likeliest cause is a network failure or a Tiled service failure.  Contact beamline staff.")
             error = exc
             raise error

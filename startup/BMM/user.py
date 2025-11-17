@@ -3,6 +3,9 @@ from distutils.dir_util import copy_tree
 import json, pprint, copy, textwrap
 from subprocess import run
 
+from rich import print as cprint
+
+
 #try:
 #    from start_experiment.start_experiment import start_experiment, validate_proposal
 #except:
@@ -23,10 +26,10 @@ facility_dict = md = user_ns["RE"].md
 import BMM.functions
 from BMM.functions import BMM_STAFF, LUSTRE_XAS, LUSTRE_DATA_ROOT, proposal_base
 from BMM.functions import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
-from BMM.kafka     import kafka_message
+from BMM.workspace import rkvs
+from BMM.kafka     import kafka_message, file_exists
 from BMM.logging   import BMM_user_log, BMM_unset_user_log, report
 from BMM.periodictable import edge_energy
-from BMM.workspace     import rkvs
 
 from BMM.user_ns.base import startup_dir, profile_configuration
 
@@ -827,22 +830,25 @@ class BMM_User(Borg):
             os.makedirs(os.path.join(user_workspace, 'templates'))
         self.workspace = user_workspace
 
-        
         self.new_experiment(lustre_root, saf=saf, gup=gup, name=name)
-        if startup is False:
-            self.bmmbot.refresh_channel()   # direct Slack messages to new proposal channel
+        try:
+            # direct Slack messages to new proposal channel
+            self.bmmbot.refresh_channel()
             kafka_message({'refresh_slack': True})  # do the same in the Kafka workers
-            from BMM.xafs import file_exists
-            if file_exists(proposal_base(), '.introduction_made', number=False) is False:
-                text = f'''Welcome to the Slack channel for your beamtime at BMM!
+        except:
+            # at startup, this attribute won't yet exist, but will get
+            # set correctly later in the startup process
+            pass
+        if file_exists(folder=proposal_base(), filename='.introduction_made', number=False) is False:
+            text = f'''Welcome to the Slack channel for your beamtime at BMM!
  
 :speech_balloon: Use this channel for chat.
 :atom_symbol: Beamline messages will be posted on #pass-{gup}-bmm.
 
 BMM data access: https://nsls2.github.io/bmm-beamline-manual/data.html
 Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{gup}`'''
-                self.bmmbot.chat_and_pin(text)
-                kafka_message({'touch': os.path.join(proposal_base(), '.introduction_made')})
+            self.bmmbot.chat_and_pin(text)
+            kafka_message({'touch': os.path.join(proposal_base(), '.introduction_made')})
 
         # preserve BMMuser state to a json string #
         self.prev_fig = None

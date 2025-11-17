@@ -106,6 +106,10 @@ class BMMbot():
         print(f'non_chat_channel  = {self.non_chat_channel}')
         print(f'chat_channel      = {self.non_chat_channel}')
         print(f'random flag emoji = {self.random_flag()}')
+
+    def test(self):
+        self.post(f'testing ... {self.random_flag()}')
+
         
     def refresh_channel(self):
         '''Refresh the ID of the proposal-bmm channel when changing users.

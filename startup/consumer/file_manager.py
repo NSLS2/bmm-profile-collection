@@ -14,7 +14,7 @@ import nslsii
 import nslsii.kafka_utils
 
 from tools import echo_slack, next_index, file_exists, profile_configuration
-from slack import img_to_slack, post_to_slack, refresh_slack, describe_slack
+from slack import img_to_slack, post_to_slack, refresh_slack, describe_slack, test_slack
 
 
 from tiled.client import from_profile
@@ -187,6 +187,9 @@ def manage_files_from_kafka_messages(beamline_acronym):
             elif 'describe_slack' in message:
                 describe_slack()
 
+            elif 'test_slack' in message:
+                test_slack()
+
             elif 'mkdir' in message:
                 if os.path.exists(message['mkdir']) is False:
                     os.makedirs(message['mkdir'])
@@ -254,6 +257,14 @@ def manage_files_from_kafka_messages(beamline_acronym):
 
             elif 'xrrtxt' in message:
                 xrr.to_txt(catalog=bmm_catalog, uid=message['uid'], stub=message['stub'], style=message['style'], logger=logger)
+
+            elif 'xrr_linescan_file' in message:
+                xrr.linescan_file(catalog=bmm_catalog, uid=message['uid'], stub=message['stub'],
+                                     motor=message['motor'], detector=message['detector'], logger=logger)
+                
+            elif 'xrr_calibration_file' in message:
+                xrr.calibration_file(catalog=bmm_catalog, uid=message['uid'], stub=message['stub'],
+                                     motor=message['motor'], detector=['detector'], logger=logger)
                 
     kafka_config = nslsii.kafka_utils._read_bluesky_kafka_config_file(config_file_path="/etc/bluesky/kafka.yml")
 

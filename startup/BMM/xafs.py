@@ -18,7 +18,7 @@ from BMM.dossier         import DossierTools
 from BMM.functions       import countdown, boxedtext, now, isfloat, inflect, e2l, etok, ktoe, present_options, plotting_mode
 from BMM.functions       import PROMPT, DEFAULT_INI, proposal_base, PROMPTNC, animated_prompt
 from BMM.functions       import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
-from BMM.kafka           import kafka_message, close_plots
+from BMM.kafka           import kafka_message, close_plots, file_exists
 from BMM.linescans       import rocking_curve
 from BMM.logging         import BMM_log_info, BMM_msg_hook, report
 from BMM.metadata        import bmm_metadata, display_XDI_metadata, metadata_at_this_moment
@@ -94,62 +94,6 @@ def next_index(folder=None, stub=None, maxtries=6, verbose=False):
     return int(answer)
 
 
-def file_exists(folder=None, filename=None, start=1, stop=2, maxtries=15, number=True, verbose=False):
-    '''Determine if a file of the specified filename exists in a specified
-    folder in the proposals directory.
-
-    This sends a message over kafka asking the file manager worker to
-    search for the file.  The worker posts "true" or "false" to redis.
-    This function sets that redis key to "None" and polls the
-    appropriate redis key for a "true"/"false" value.
-   
-    arguments
-    =========
-    folder: (str)
-      folder in proposal directory to probe [proposal_base()]
-
-    filename: (str)
-      filename to check, i.e. filename with extension but without path
-
-    start: (int)
-      start of extension number range to check
-
-    stop: (int)
-      end of extension number range to check
-
-    maxtries: (int)
-      maximum number of attempts to read before giving up and returning None
-
-    number: (bool)
-      if True, search for numbered extensions.  if False, search for filename as specified
-
-    verbose: (bool)
-      if True, be noisy as we wait for a result
-
-    '''
-    if folder is None:
-        folder = proposal_base()
-    if filename is None:
-        error_msg('No filename supplied to file_exists')
-        return(None)
-    rkvs = user_ns['rkvs']
-    rkvs.set('BMM:file_exists', 'None')
-    kafka_message({'file_exists': True, 'folder': folder, 'filename': filename, 'start': start, 'stop': stop, 'number': number})
-    answer = rkvs.get('BMM:file_exists').decode('utf8')
-    count = 0
-    if verbose: print(f"{count = }, {answer = }")
-    while answer == 'None':
-        time.sleep(0.1)
-        answer = rkvs.get('BMM:file_exists').decode('utf8')
-        count += 1
-        if verbose: print(f"{count = }, {answer = }")
-        if count > maxtries:
-            return(None)
-    if answer == 'true':
-        return True
-    else:
-        return False
-    
 
 
 ## need more error checking:
@@ -673,6 +617,8 @@ def xafs(inifile=None, **kwargs):
                 if k in ('bounds', 'bounds_given', 'steps', 'times'):
                     continue
                 if k in ('npoints', 'dwell', 'delay', 'inttime', 'channelcut', 'bothways'):
+                    continue
+                if k in ('url', 'doi', 'cif'):
                     continue
                 addition = '      %-13s : %-50s\n' % (k,v)
                 text = text + addition.rstrip() + '\n'
