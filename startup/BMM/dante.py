@@ -24,7 +24,7 @@ from BMM.functions     import error_msg, warning_msg, go_msg, url_msg, bold_msg,
 
 import matplotlib.pyplot as plt
 import numpy, xraylib
-from BMM.periodictable import Z_number, edge_number
+from BMMCommon.tools.periodictable import Z_number, edge_number
 
 ###########################################################################
 # ______  ___   _   _ _____ _____              ___   _____________ _____  #

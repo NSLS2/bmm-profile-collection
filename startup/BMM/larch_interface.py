@@ -27,7 +27,6 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 #from BMM.functions import etok, ktoe
-#from BMM.periodictable import edge_energy, element_symbol
 from larch.xray import atomic_symbol, xray_edge
 
 #from BMM import user_ns as user_ns_module

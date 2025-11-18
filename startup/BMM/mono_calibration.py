@@ -11,16 +11,18 @@ from numpy import array, pi, sin, linspace, arange
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 
-from BMM.dcm_parameters import dcm_parameters
+from BMMCommon.optics.dcm_parameters import dcm_parameters
+
 from BMM.edge           import change_edge
 from BMM.functions      import HBARC, boxedtext
 from BMM.functions      import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
 from BMM.kafka          import kafka_message
 from BMM.logging        import BMM_log_info, BMM_msg_hook, report
 from BMM.xafs           import xafs
-from BMM.periodictable  import Z_number
 from BMM.resting_state  import resting_state_plan
 from BMM.suspenders     import BMM_clear_to_start
+
+from BMMCommon.tools.periodictable  import Z_number
 
 from BMM.user_ns.base   import profile_configuration, reload_profile_configuration
 

@@ -13,7 +13,6 @@ from bluesky.preprocessors import finalize_wrapper
 
 from BMM.exceptions    import FailedDCMParaException, ArrivedInModeException
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
-from BMM.periodictable import edge_energy, Z_number, element_symbol
 from BMM.functions     import countdown, approximate_pitch, PROMPT, PROMPTNC, animated_prompt
 from BMM.suspenders    import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.functions     import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
@@ -23,6 +22,9 @@ from BMM.modes         import change_mode, get_mode, pds_motors_ready, MODEDATA
 from BMM.linescans     import rocking_curve, slit_height, mirror_pitch, wiggle_bct, hcenter
 from BMM.resting_state import resting_state_plan
 from BMM.workspace     import rkvs
+
+from BMMCommon.tools.periodictable import edge_energy, Z_number, element_symbol
+
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)

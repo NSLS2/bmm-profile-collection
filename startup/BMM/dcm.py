@@ -10,7 +10,8 @@ from rich import print as cprint
 from BMM.motors         import FMBOEpicsMotor, VacuumEpicsMotor, DeadbandEpicsMotor, BMMDeadBandMotor
 from BMM.functions      import HBARC, approximate_pitch, boxedtext
 from BMM.functions      import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
-from BMM.dcm_parameters import dcm_parameters
+
+from BMMCommon.optics.dcm_parameters import dcm_parameters
 BMM_dcm = dcm_parameters()
 
 from BMM import user_ns as user_ns_module

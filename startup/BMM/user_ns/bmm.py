@@ -5,7 +5,8 @@ logger.setLevel('INFO')
 logger = logging.getLogger('bluesky')
 logger.setLevel('WARNING')
 
-from BMM.user_ns.base import startup_dir
+import redis
+from BMM.user_ns.base import startup_dir, profile_configuration
 from BMM.workspace import initialize_workspace, rkvs_keys
 initialize_workspace()
 
@@ -24,7 +25,7 @@ run_report(__file__, text='functions and other basics')
 run_report('\t'+'logging')
 from BMM.logging             import report, BMM_log_info, BMM_msg_hook#, BMMbot
 
-from BMM_common.bmmbot       import BMMbot
+from BMMCommon.slack.bmmbot  import BMMbot
 
 from bluesky.preprocessors   import finalize_wrapper
 
@@ -37,10 +38,16 @@ from BMM.user import BMM_User
 # rois = ROI()
 
 
-run_report('\t'+'recovering user configuration and setting bmmbot')
+run_report('\t'+'recovering user configuration')
 BMMuser = BMM_User()
 BMMuser.start_experiment_from_serialization()
+run_report('\t'+'configuring Slack bmmbot')
 BMMuser.bmmbot = BMMbot()
+BMMuser.bmmbot._bmmbot_secret = profile_configuration.get('slack', 'bmmbot_secret')
+BMMuser.bmmbot._redis_client = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'))
+BMMuser.bmmbot._pass_api = profile_configuration.get('services', 'pass_api') + "/{pass_id}/slack-channels"
+BMMuser.bmmbot.refresh_channel()
+
 
 if BMMuser.pds_mode is None:
     try:                        # do the right thing when "%run -i"-ed

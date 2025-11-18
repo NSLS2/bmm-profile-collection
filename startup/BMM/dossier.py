@@ -18,7 +18,8 @@ from BMM.functions         import error_msg, bold_msg, whisper, now, proposal_ba
 from BMM.kafka             import kafka_message
 from BMM.logging           import report
 from BMM.modes             import get_mode, describe_mode
-from BMM.periodictable     import edge_energy, Z_number, element_name
+
+from BMMCommon.tools.periodictable import edge_energy, Z_number, element_name
 
 from BMM.user_ns.base      import bmm_catalog
 from BMM.user_ns.detectors import with_cam1, with_cam2, with_webcam, with_anacam

@@ -24,10 +24,11 @@ from BMM.logging         import BMM_log_info, BMM_msg_hook, report
 from BMM.metadata        import bmm_metadata, display_XDI_metadata, metadata_at_this_moment
 from BMM.modes           import get_mode, describe_mode
 from BMM.motor_status    import motor_status
-from BMM.periodictable   import edge_energy, Z_number, element_name
 from BMM.resting_state   import resting_state_plan
 from BMM.suspenders      import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.xafs_functions  import conventional_grid, sanitize_step_scan_parameters
+
+from BMMCommon.tools.periodictable import edge_energy, Z_number, element_name
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)

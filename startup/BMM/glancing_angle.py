@@ -23,11 +23,12 @@ from BMM.logging           import BMM_log_info, BMM_msg_hook, report
 from BMM.linescans         import linescan, prepare_alignment_scan, fetch_peak_position_via_redis
 from BMM.macrobuilder      import BMMMacroBuilder
 from BMM.modes             import get_mode
-from BMM.periodictable     import PERIODIC_TABLE, edge_energy
 from BMM.resting_state     import resting_state_plan
 from BMM.suspenders        import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.xafs_functions    import conventional_grid
 from BMM.user_ns.dwelltime import _locked_dwell_time
+
+from BMMCommon.tools.periodictable import PERIODIC_TABLE, edge_energy
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)

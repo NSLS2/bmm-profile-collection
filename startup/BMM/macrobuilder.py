@@ -5,9 +5,10 @@ from rich import print as cprint
 
 from BMM.functions      import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
 from BMM.functions      import isfloat, present_options
-from BMM.periodictable  import PERIODIC_TABLE, edge_energy
 from BMM.xafs_functions import conventional_grid, sanitize_step_scan_parameters
 from BMM.workspace      import rkvs
+
+from BMMCommon.tools.periodictable  import PERIODIC_TABLE, edge_energy
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
