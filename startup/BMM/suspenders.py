@@ -2,10 +2,12 @@ from bluesky.suspenders import SuspendFloor, SuspendBoolHigh, SuspendBoolLow
 
 import uuid
 
+from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
+
 from BMM.user_ns.detectors   import quadem1
 from BMM.user_ns.metadata    import ring
 from BMM.user_ns.instruments import bmps, idps
-from BMM.functions import bold_msg, PROMPT, error_msg, warning_msg, whisper, PROMPTNC, animated_prompt
+from BMM.functions import bold_msg, PROMPT, error_msg, warning_msg, whisper
 from BMM.kafka import kafka_message
 
 from BMM import user_ns as user_ns_module

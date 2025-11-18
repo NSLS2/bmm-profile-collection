@@ -17,10 +17,12 @@ from bluesky.preprocessors import finalize_wrapper
 from PIL import Image
 from tiled.client import from_profile
 
+from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
+
 from BMM.areascan        import areascan
 from BMM.dossier         import DossierTools
 from BMM.functions       import countdown, boxedtext, now, isfloat, inflect, e2l, etok, ktoe, present_options, plotting_mode
-from BMM.functions       import PROMPT, PROMPTNC, proposal_base, animated_prompt
+from BMM.functions       import PROMPT, proposal_base
 from BMM.functions       import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
 from BMM.kafka           import kafka_message, close_plots, file_exists
 from BMM.logging         import BMM_log_info, BMM_msg_hook, report

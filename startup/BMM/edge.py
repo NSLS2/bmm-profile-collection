@@ -11,9 +11,11 @@ from rich import print as cprint
 from bluesky.plan_stubs import null, sleep, mv, mvr
 from bluesky.preprocessors import finalize_wrapper
 
+from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
+
 from BMM.exceptions    import FailedDCMParaException, ArrivedInModeException
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
-from BMM.functions     import countdown, approximate_pitch, PROMPT, PROMPTNC, animated_prompt
+from BMM.functions     import countdown, approximate_pitch, PROMPT
 from BMM.suspenders    import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.functions     import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
 from BMM.kafka         import kafka_message

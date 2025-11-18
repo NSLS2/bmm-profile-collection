@@ -2,7 +2,6 @@ from ophyd import (SingleTrigger, Component as Cpt, Device, DeviceStatus, EpicsS
 from bluesky.plan_stubs import null, sleep, mv, mvr
 import time
 
-from BMM.functions import error_msg, cold_msg
 from BMM.logging import report, BMM_msg_hook
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)

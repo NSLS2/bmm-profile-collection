@@ -13,6 +13,8 @@ from BMM.user_ns.base import profile_configuration
 import redis
 from redis_json_dict import RedisJSONDict
 
+from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
+
 
 os.environ['PAGER'] = 'less -Ps"type Q to quit: "'    # new ipython (or maybe latest less) obviates need for "most"
 
@@ -35,23 +37,23 @@ except ImportError:
         return False
 
 
-try:
-    from terminaltexteffects.effects.effect_wipe import Wipe
-    def animated_prompt(prompt_text: str) -> str:
-        #if is_re_worker_active is False:
-        effect = Wipe(prompt_text)
-        with effect.terminal_output(end_symbol=" ") as terminal:
-            for frame in effect:
-                terminal.print(frame)
-        return input()
-        #else:
-        #    ans = input(prompt_text).strip()
-        #    return ans
-except:
-    ## fallback if terminaltexteffects is not installed
-    def animated_prompt(prompt_text: str) -> str:
-        ans = input(prompt_text).strip()
-        return ans
+# try:
+#     from terminaltexteffects.effects.effect_wipe import Wipe
+#     def animated_prompt(prompt_text: str) -> str:
+#         #if is_re_worker_active is False:
+#         effect = Wipe(prompt_text)
+#         with effect.terminal_output(end_symbol=" ") as terminal:
+#             for frame in effect:
+#                 terminal.print(frame)
+#         return input()
+#         #else:
+#         #    ans = input(prompt_text).strip()
+#         #    return ans
+# except:
+#     ## fallback if terminaltexteffects is not installed
+#     def animated_prompt(prompt_text: str) -> str:
+#         ans = input(prompt_text).strip()
+#         return ans
     
 def example_prompt(text='This is an example prompt.  Type something > '):
     foo = animated_prompt(text)

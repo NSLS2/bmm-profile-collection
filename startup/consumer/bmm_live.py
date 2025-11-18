@@ -17,7 +17,7 @@ from bluesky import __version__ as bluesky_version
 from slack import img_to_slack
 from tools import experiment_folder, echo_slack, file_resource, profile_configuration
 
-from BMM.periodictable import Z_number, edge_number
+from BMMCommon.tools.periodictable import Z_number, edge_number
 
 #from nslsii.kafka_utils import _read_bluesky_kafka_config_file
 #from bluesky_kafka.produce import BasicProducer

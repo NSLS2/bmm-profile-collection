@@ -1,4 +1,5 @@
 import datetime, signal, pprint, uuid, sys, os, time
+sys.path.append('/home/xf06bm/.ipython/profile_common/')
 sys.path.append('/home/xf06bm/.ipython/profile_collection/startup')
 
 #from bluesky_kafka import RemoteDispatcher

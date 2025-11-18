@@ -13,7 +13,7 @@ from pygments import highlight
 from pygments.lexers import PythonLexer, IniLexer
 from pygments.formatters import HtmlFormatter
 
-from BMM.periodictable import edge_energy, Z_number, element_symbol, element_name
+from BMMCommon.tools.periodictable import edge_energy, Z_number, element_symbol, element_name
 from tools import echo_slack, experiment_folder, file_resource, profile_configuration
 from slack import img_to_slack, post_to_slack
 
