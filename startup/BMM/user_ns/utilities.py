@@ -1,7 +1,8 @@
 from ophyd import EpicsSignalRO
 
-from BMM.functions import run_report, boxedtext
-from BMM.functions import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
+from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+
+from BMM.functions import run_report
 
 from BMMCommon.devices.utilities import Vacuum, TCG, FEVac, GateValve, Thermocouple, OneWireTC, BMM_DIWater, Rack
 

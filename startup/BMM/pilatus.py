@@ -21,7 +21,7 @@ from nslsii.ad33 import SingleTriggerV33
 from ophyd import Component as C
 
 
-from BMM.functions import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
+from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 
 
 ######################################################################################

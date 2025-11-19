@@ -7,15 +7,15 @@ import numpy
 
 from bluesky.plan_stubs import null, sleep, mv, mvr
 
-from BMM.functions      import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
-from BMM.functions      import boxedtext, isfloat, present_options
+from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+from BMMCommon.tools.periodictable import PERIODIC_TABLE, edge_energy
+
+from BMM.functions      import isfloat, present_options
 from BMM.macrobuilder   import BMMMacroBuilder
 from BMM.motors         import EndStationEpicsMotor
 from BMM.logging        import report
 from BMM.xafs_functions import conventional_grid
 from BMM.workspace      import rkvs
-
-from BMMCommon.tools.periodictable import PERIODIC_TABLE, edge_energy
 
 from BMM.user_ns.base import profile_configuration
 

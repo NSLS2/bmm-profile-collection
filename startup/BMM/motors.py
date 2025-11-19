@@ -4,9 +4,10 @@ from ophyd.utils.epics_pvs import fmt_time
 from ophyd.pseudopos import (pseudo_position_argument,
                              real_position_argument)
 
+from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+
 from bluesky.plan_stubs import sleep, mv, null, abs_set
-from BMM.functions import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
-from BMM.functions import boxedtext, PROMPT
+from BMM.functions import PROMPT
 from BMM.logging   import BMM_log_info
 
 import time

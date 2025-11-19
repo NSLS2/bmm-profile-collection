@@ -23,14 +23,13 @@ from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 facility_dict = md = user_ns["RE"].md
 
-import BMM.functions
+from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+from BMMCommon.tools.periodictable import edge_energy
+
 from BMM.functions import BMM_STAFF, LUSTRE_XAS, LUSTRE_DATA_ROOT, proposal_base
-from BMM.functions import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
 from BMM.workspace import rkvs
 from BMM.kafka     import kafka_message, file_exists
 from BMM.logging   import BMM_user_log, BMM_unset_user_log, report
-
-from BMMCommon.tools.periodictable import edge_energy
 
 from BMM.user_ns.base import startup_dir, profile_configuration
 

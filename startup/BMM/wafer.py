@@ -4,9 +4,10 @@ from bluesky.plan_stubs import mv
 from numpy import array
 from sympy import geometry
 
+from BMMCommon.tools.messages import whisper
+
 from BMM.kafka         import kafka_message
 from BMM.linescans     import linescan, prepare_alignment_scan, fetch_peak_position_via_redis
-from BMM.functions     import whisper
 from BMM.resting_state import resting_state_plan
 
 from BMM import user_ns as user_ns_module

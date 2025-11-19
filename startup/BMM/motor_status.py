@@ -2,7 +2,7 @@
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
-from BMM.functions import boxedtext
+from BMMCommon.tools.messages import boxedtext
 
 def motor_metadata(uid=None):
     biglist = (user_ns['xafs_linx'], user_ns['xafs_liny'], user_ns['xafs_pitch'], user_ns['xafs_roll'],

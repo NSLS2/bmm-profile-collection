@@ -14,7 +14,9 @@ from larch.io import create_athena
 
 from PIL import Image
 
-from BMM.functions         import error_msg, bold_msg, whisper, now, proposal_base
+from BMMCommon.tools.messages import error_msg, bold_msg, whisper
+
+from BMM.functions         import now, proposal_base
 from BMM.kafka             import kafka_message
 from BMM.logging           import report
 from BMM.modes             import get_mode, describe_mode

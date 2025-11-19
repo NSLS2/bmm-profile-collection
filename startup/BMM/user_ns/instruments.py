@@ -1,5 +1,8 @@
 import time, json, os
-from BMM.functions import run_report, examine_fmbo_motor_group, error_msg, whisper
+
+from BMMCommon.tools.messages import error_msg, whisper
+
+from BMM.functions import run_report, examine_fmbo_motor_group
 from BMM.workspace import rkvs
 from BMM.user_ns.base import profile_configuration
 

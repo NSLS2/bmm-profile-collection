@@ -15,8 +15,10 @@ from nslsii.kafka_utils import _read_bluesky_kafka_config_file
     
 from bluesky_kafka.produce import BasicProducer
 
+from BMMCommon.tools.messages import warning_msg, bold_msg, whisper, error_msg
+
 from BMM.workspace import rkvs
-from BMM.functions import proposal_base, warning_msg, bold_msg, whisper, error_msg
+from BMM.functions import proposal_base
 from BMM.user_ns.base import bmm_catalog
 
 from BMM import user_ns as user_ns_module

@@ -1,6 +1,9 @@
 
 import os, json, socket, uuid
-from BMM.functions import run_report, whisper
+
+from BMMCommon.tools.messages import whisper
+
+from BMM.functions import run_report
 from BMM.user_ns.base import RE, profile_configuration
 from BMM.user_ns.bmm import BMMuser
 from BMM.workspace import rkvs

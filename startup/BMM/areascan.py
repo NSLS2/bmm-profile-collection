@@ -14,6 +14,8 @@ import os
 import matplotlib.pyplot as plt
 from ophyd.sim import noisy_det
 
+from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+
 from BMM.user_ns.dwelltime import use_1element, use_4element, use_7element
 from BMM.resting_state     import resting_state_plan
 from BMM.suspenders        import BMM_clear_to_start
@@ -21,7 +23,6 @@ from BMM.kafka             import kafka_message
 from BMM.linescans         import motor_nicknames
 from BMM.logging           import BMM_log_info, BMM_msg_hook, report
 from BMM.functions         import countdown, plotting_mode, now
-from BMM.functions         import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
 from BMM.attic.derivedplot       import DerivedPlot, interpret_click, close_all_plots
 from BMM.suspenders        import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.workspace         import rkvs

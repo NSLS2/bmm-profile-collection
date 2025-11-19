@@ -18,7 +18,8 @@ from joblib import dump, load
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
-from BMM.functions       import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
+from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+
 from BMM.larch_interface import Pandrosus
 #from BMM.functions import plotting_mode
 from BMM.user_ns.base import WORKSPACE, bmm_catalog

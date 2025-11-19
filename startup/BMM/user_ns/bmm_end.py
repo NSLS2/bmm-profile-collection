@@ -6,7 +6,10 @@ except ImportError:
         return False
 
 import os, textwrap
-from BMM.functions import boxedtext, run_report, disconnected_msg, error_msg, whisper, verbosebold_msg, proposal_base, bounds
+
+from BMMCommon.tools.messages import disconnected_msg, error_msg, whisper, verbosebold_msg, bold_msg
+
+from BMM.functions import boxedtext, run_report, proposal_base, bounds
 from BMM.workspace import rkvs
 
 from BMM import user_ns as user_ns_module
@@ -81,7 +84,7 @@ gawheel.initialize = '''samx, samy, samp = xafs_x.position, xafs_y.position, xaf
 #########################################################################################
 
 run_report('\t\tspreadsheet/instrument support functions')
-from BMM.functions import present_options, bold_msg
+from BMM.functions import present_options
 from openpyxl import load_workbook
 
 def xlsx():
