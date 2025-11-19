@@ -10,7 +10,7 @@ from bluesky.plan_stubs import null, sleep, mv, mvr
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.periodictable import PERIODIC_TABLE, edge_energy
 
-from BMM.functions      import isfloat, present_options
+from BMM.functions      import present_options
 from BMM.macrobuilder   import BMMMacroBuilder
 from BMM.motors         import EndStationEpicsMotor
 from BMM.logging        import report

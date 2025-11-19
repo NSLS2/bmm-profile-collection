@@ -271,7 +271,7 @@ if BMMuser.pds_mode is None:
 
 run_report('\t'+'change_edge')
 from BMM.edge import show_edges, change_edge, quick_change, xrd_mode
-from BMM.functions import approximate_pitch
+from BMMCommon.optics.dcm_parameters import approximate_pitch
 
 run_report('\t'+'mono calibration')
 from BMM.mono_calibration import calibrate, calibrate_high_end, calibrate_low_end, calibrate_mono, calibrate_pitch

@@ -18,11 +18,12 @@ import pandas
 import matplotlib
 import matplotlib.pyplot as plt
 
+from BMMCommon.tools.misc   import now
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
 
 from BMM.dossier       import DossierTools
-from BMM.functions     import countdown, now, isfloat, inflect, e2l, etok, ktoe, present_options, plotting_mode
+from BMM.functions     import present_options, plotting_mode
 from BMM.functions     import PROMPT
 from BMM.kafka         import kafka_message, file_exists
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report

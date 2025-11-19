@@ -6,9 +6,10 @@ from bluesky.plan_stubs import null, sleep, mv, mvr
 
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
+from BMMCommon.optics.dcm_parameters import approximate_pitch
 
 from BMM.exceptions    import ChangeModeException
-from BMM.functions     import approximate_pitch, countdown, PROMPT
+from BMM.functions     import PROMPT
 from BMM.kafka         import kafka_message
 from BMM.linescans     import rocking_curve, slit_height, mirror_pitch, wiggle_bct
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
@@ -684,7 +685,7 @@ def change_xtals(xtal=None):
 
      print('Performing a rocking curve scan')
      yield from mv(dcm_pitch.kill_cmd, 1)
-     yield from mv(dcm_pitch, approximate_pitch(current_energy))
+     yield from mv(dcm_pitch, approximate_pitch(current_energy, xtal=dcm._crystal))
      yield from sleep(1)
      yield from mv(dcm_pitch.kill_cmd, 1)
      yield from rocking_curve()

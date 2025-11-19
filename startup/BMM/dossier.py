@@ -16,11 +16,12 @@ from PIL import Image
 
 from BMMCommon.tools.messages import error_msg, bold_msg, whisper
 
-from BMM.functions         import now, proposal_base
+from BMM.functions         import proposal_base
 from BMM.kafka             import kafka_message
 from BMM.logging           import report
 from BMM.modes             import get_mode, describe_mode
 
+from BMMCommon.tools.misc import now
 from BMMCommon.tools.periodictable import edge_energy, Z_number, element_name
 
 from BMM.user_ns.base      import bmm_catalog

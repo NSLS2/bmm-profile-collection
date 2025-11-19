@@ -1,8 +1,9 @@
 import os
 
+from BMMCommon.tools.misc     import isfloat
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+from BMMCommon.tools.physics  import *  # HBARC ktoe etok KTOE e2l
 
-from BMM.functions     import isfloat, etok, ktoe
 from BMM.kafka         import kafka_message
 import numpy
 

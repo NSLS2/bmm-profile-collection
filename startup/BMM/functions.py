@@ -1,5 +1,5 @@
 import os, time, datetime, psutil, glob
-import inflection, textwrap, ansiwrap, termcolor
+import termcolor
 from numpy import pi, sin, cos, arcsin, sqrt
 
 from rich import print as cprint
@@ -13,6 +13,7 @@ from BMM.user_ns.base import profile_configuration
 import redis
 from redis_json_dict import RedisJSONDict
 
+from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
 
 
@@ -21,13 +22,13 @@ os.environ['PAGER'] = 'less -Ps"type Q to quit: "'    # new ipython (or maybe la
 
 ## some global parameters
 BMM_STAFF  = ('Bruce Ravel', 'Jean Jordan-Sweet', 'Joe Woicik', 'Joseph Woicik', 'Vesna Stanic')
-HBARC      = 1973.27053324
+#HBARC      = 1973.27053324
 LUSTRE_XAS = os.path.join('/nsls2', 'data3', 'bmm', 'XAS')
 
 LUSTRE_DATA_ROOT = os.path.join('/nsls2', 'data3', 'bmm', 'proposals')
 
 PROMPT = f"[{termcolor.colored('yes', attrs=['underline'])}: y then Enter (or just Enter) ● {termcolor.colored('no', attrs=['underline'])}: n then Enter] "
-PROMPTNC = "[YES: y then Enter (or just Enter) ● NO: n then Enter] "
+#PROMPTNC = "[YES: y then Enter (or just Enter) ● NO: n then Enter] "
 
 try:
     from bluesky_queueserver import is_re_worker_active
@@ -37,24 +38,6 @@ except ImportError:
         return False
 
 
-# try:
-#     from terminaltexteffects.effects.effect_wipe import Wipe
-#     def animated_prompt(prompt_text: str) -> str:
-#         #if is_re_worker_active is False:
-#         effect = Wipe(prompt_text)
-#         with effect.terminal_output(end_symbol=" ") as terminal:
-#             for frame in effect:
-#                 terminal.print(frame)
-#         return input()
-#         #else:
-#         #    ans = input(prompt_text).strip()
-#         #    return ans
-# except:
-#     ## fallback if terminaltexteffects is not installed
-#     def animated_prompt(prompt_text: str) -> str:
-#         ans = input(prompt_text).strip()
-#         return ans
-    
 def example_prompt(text='This is an example prompt.  Type something > '):
     foo = animated_prompt(text)
     print(f"You answered {foo}")
@@ -62,14 +45,6 @@ def example_prompt(text='This is an example prompt.  Type something > '):
 
 DEFAULT_INI = '/nsls2/data3/bmm/shared/config/xafs/scan.ini'
 
-# Black, Blue, Brown, Cyan, DarkGray, Green, NoColor, Normal, Purple,
-# Red, White, Yellow,
-
-# LightBlue, LightCyan, LightGray, LightGreen, LightPurple, LightRed,
-
-# BlinkBlack, BlinkBlue, BlinkCyan, BlinkGreen, BlinkLightGray,
-# BlinkPurple, BlinkRed, BlinkYellow,
-
 try:
     from bluesky_queueserver import is_re_worker_active
 except ImportError:
@@ -77,20 +52,6 @@ except ImportError:
     def is_re_worker_active():
         return False
 
-def colored(text, tint='white', attrs=[], end=None):
-    '''
-    A simple wrapper around rich.print
-    '''
-    if not is_re_worker_active():
-        tint = tint.lower()
-        this = f'[{tint}]{text}[/{tint}]'
-        if end is not None:
-            cprint(f'[{tint}]{text}[/{tint}]', end=end)
-        else:
-            cprint(f'[{tint}]{text}[/{tint}]')
-    else:
-        print(text)
-        
 def run_report(thisfile, text=None):
     '''
     Noisily proclaim to be importing a file of python code.
@@ -106,56 +67,8 @@ def run_report(thisfile, text=None):
     colored(f'{importing} {prepend}{thisfile.split("/")[-1]} {add}', 'cyan')
 
 
-def error_msg(text, end=None):
-    '''Red text'''
-    colored(text, 'red1', end=end)
-def warning_msg(text, end=None):
-    '''Yellow text'''
-    colored(text, 'yellow', end=end)
-def go_msg(text, end=None):
-    '''Green text'''
-    colored(text, 'green', end=end)
-def url_msg(text, end=None):
-    '''Underlined text, intended for URL decoration...'''
-    colored(text, 'underline', end=end)
-def bold_msg(text, end=None):
-    '''Bright yellow text'''
-    colored(text, 'yellow2', end=end)
-def verbosebold_msg(text, end=None):
-    '''Bright cyan text'''
-    colored(text, 'cyan', end=end)
-def list_msg(text, end=None):
-    '''Dark cyan text'''
-    colored(text, 'bold cyan', end=end)
-def disconnected_msg(text, end=None):
-    '''Purple text'''
-    colored(text, 'magenta3', end=end)
-def info_msg(text, end=None):
-    '''Brown text'''
-    colored(text, 'light_goldenrod2', end=end)
-def cold_msg(text, end=None):
-    '''Light blue text'''
-    colored(text, 'blue', end=end)
-def whisper(text, end=None):
-    '''Light gray text'''
-    colored(text, 'bold black', end=end)
 
 ##BMM_logfile = '/home/bravel/BMM_master.log'
-
-KTOE = 3.8099819442818976
-def etok(ee):
-    '''convert relative energy to wavenumber'''
-    return sqrt(ee/KTOE)
-def ktoe(k):
-    '''convert wavenumber to relative energy'''
-    return k*k*KTOE
-
-def e2l(val):
-    """Convert absolute photon energy to photon wavelength"""
-    return 2*pi*HBARC/val
-l2e = e2l
-
-
 
 ## see calibrate_pitch in BMM/mono_calibration.py
 def approximate_pitch(energy):
@@ -171,47 +84,11 @@ def approximate_pitch(energy):
         return(m*energy + b)
         
 
-def isfloat(value):
-    try:
-        float(value)
-        return True
-    except ValueError:
-        return False
-
-def now(fmt="%Y-%m-%dT%H-%M-%S"):
-    return datetime.datetime.now().strftime(fmt)
-
-def inflect(word, number):
-    if abs(number) == 1:
-        return('%d %s' % (number, inflection.singularize(word)))
-    else:
-        return('%d %s' % (number, inflection.pluralize(word)))
-
-# def boxedtext(title, text, tint, width=75):
-#     '''
-#     Put text in a lovely unicode block element box.  The top
-#     of the box will contain a title.  The box elements will
-#     be colored.
-#     '''
-#     remainder = width - 2 - len(title)
-#     ul        = u'\u2554' # u'\u250C'
-#     ur        = u'\u2557' # u'\u2510'
-#     ll        = u'\u255A' # u'\u2514'
-#     lr        = u'\u255D' # u'\u2518'
-#     bar       = u'\u2550' # u'\u2500'
-#     strut     = u'\u2551' # u'\u2502'
-#     template  = '%-' + str(width) + 's'
-
-#     print('')
-#     print(colored(''.join([ul, bar*3, ' ', title, ' ', bar*remainder, ur]), tint))
-#     for line in text.split('\n'):
-#         lne = line.rstrip()
-#         add = ' '*(width-ansiwrap.ansilen(lne))
-#         print(' '.join([colored(strut, tint), lne, add, colored(strut, tint)]))
-#     print(colored(''.join([ll, bar*(width+3), lr]), tint))
-
-def boxedtext(text, title='', color='green'):
-    cprint(Panel(text, title=title, title_align='left', highlight=True, expand=False, border_style=color))
+# def inflect(word, number):
+#     if abs(number) == 1:
+#         return('%d %s' % (number, inflection.singularize(word)))
+#     else:
+#         return('%d %s' % (number, inflection.pluralize(word)))
 
 
 def clear_dashboard():

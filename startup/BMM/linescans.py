@@ -24,6 +24,7 @@ from bluesky.preprocessors import subs_decorator, finalize_wrapper
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
+from BMMCommon.tools.misc     import now
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
 
@@ -31,7 +32,7 @@ from BMM.resting_state import resting_state_plan
 from BMM.suspenders    import BMM_clear_to_start, BMM_clear_suspenders
 from BMM.kafka         import kafka_message
 from BMM.logging       import BMM_log_info, BMM_msg_hook
-from BMM.functions     import countdown, clean_img, PROMPT, now
+from BMM.functions     import clean_img, PROMPT
 from BMM.workspace     import rkvs
 
 from BMM.user_ns.base        import WORKSPACE

@@ -12,9 +12,9 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 
 from BMMCommon.optics.dcm_parameters import dcm_parameters
+from BMMCommon.tools.physics  import *  # HBARC ktoe etok KTOE e2l
 
 from BMM.edge           import change_edge
-from BMM.functions      import HBARC
 from BMM.kafka          import kafka_message
 from BMM.logging        import BMM_log_info, BMM_msg_hook, report
 from BMM.xafs           import xafs

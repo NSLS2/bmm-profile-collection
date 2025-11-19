@@ -5,8 +5,6 @@ import time
 
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 
-from BMM.functions import countdown
-
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 

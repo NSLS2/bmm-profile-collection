@@ -6,7 +6,8 @@ from os import chmod
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-from BMM.functions           import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
+from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+
 from BMM.kafka import kafka_message
 
 from BMM import user_ns as user_ns_module

@@ -22,8 +22,8 @@ from BMM.suspenders        import BMM_clear_to_start
 from BMM.kafka             import kafka_message
 from BMM.linescans         import motor_nicknames
 from BMM.logging           import BMM_log_info, BMM_msg_hook, report
-from BMM.functions         import countdown, plotting_mode, now
-from BMM.attic.derivedplot       import DerivedPlot, interpret_click, close_all_plots
+from BMM.functions         import plotting_mode
+from BMM.attic.derivedplot import DerivedPlot, interpret_click, close_all_plots
 from BMM.suspenders        import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.workspace         import rkvs
 

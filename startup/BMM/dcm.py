@@ -7,12 +7,11 @@ from bluesky.plan_stubs import sleep, mv, mvr, null
 from numpy import pi, sin, cos, arcsin
 from rich import print as cprint
 
-from BMM.motors         import FMBOEpicsMotor, VacuumEpicsMotor, DeadbandEpicsMotor, BMMDeadBandMotor
-from BMM.functions      import HBARC, approximate_pitch
-from BMM.functions      import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
+from BMM.motors    import FMBOEpicsMotor, VacuumEpicsMotor, DeadbandEpicsMotor, BMMDeadBandMotor
 
+from BMMCommon.tools.physics  import *  # HBARC ktoe etok KTOE e2l
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
-from BMMCommon.optics.dcm_parameters import dcm_parameters
+from BMMCommon.optics.dcm_parameters import dcm_parameters, approximate_pitch
 BMM_dcm = dcm_parameters()
 
 from BMM import user_ns as user_ns_module
@@ -134,7 +133,7 @@ class DCM(PseudoPositioner):
         ## move pitch and roll to the Si(111) positions
         this_energy = self.energy.readback.get()
         yield from self.kill_plan()
-        yield from mv(user_ns['dcm_pitch'], approximate_pitch(this_energy), user_ns['dcm_roll'], profile_configuration.getfloat('dcm', 'roll_111')) # -8.05644)
+        yield from mv(user_ns['dcm_pitch'], approximate_pitch(this_energy. self._crystal), user_ns['dcm_roll'], profile_configuration.getfloat('dcm', 'roll_111')) # -8.05644)
         yield from mv(self.energy, this_energy)
         print('DCM is at %.1f eV.  There should be signal in I0.' % self.energy.readback.get())
         yield from sleep(2.0)

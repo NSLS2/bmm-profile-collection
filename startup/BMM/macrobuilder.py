@@ -3,8 +3,10 @@ import os, re, numpy, configparser
 from openpyxl import load_workbook
 from rich import print as cprint
 
-from BMM.functions      import error_msg, warning_msg, go_msg, url_msg, bold_msg, verbosebold_msg, list_msg, disconnected_msg, info_msg, whisper
-from BMM.functions      import isfloat, present_options
+from BMMCommon.tools.misc     import isfloat
+from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+
+from BMM.functions      import present_options
 from BMM.xafs_functions import conventional_grid, sanitize_step_scan_parameters
 from BMM.workspace      import rkvs
 

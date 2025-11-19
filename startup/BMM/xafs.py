@@ -14,11 +14,13 @@ from tiled.client import from_profile
 
 from urllib.parse import quote
 
+from BMMCommon.tools.misc     import now, inflect
+from BMMCommon.tools.physics  import *  # HBARC ktoe etok KTOE e2l
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
 
 from BMM.dossier         import DossierTools
-from BMM.functions       import countdown, now, isfloat, inflect, e2l, etok, ktoe, present_options, plotting_mode
+from BMM.functions       import present_options, plotting_mode
 from BMM.functions       import PROMPT, DEFAULT_INI, proposal_base
 from BMM.kafka           import kafka_message, close_plots, file_exists
 from BMM.linescans       import rocking_curve
