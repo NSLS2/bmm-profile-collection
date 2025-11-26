@@ -13,10 +13,11 @@ from bluesky.preprocessors import finalize_wrapper
 
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
+from BMMCommon.optics.dcm_parameters import approximate_pitch
 
 from BMM.exceptions    import FailedDCMParaException, ArrivedInModeException
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
-from BMM.functions     import approximate_pitch, PROMPT
+from BMM.functions     import PROMPT
 from BMM.suspenders    import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.kafka         import kafka_message
 from BMM.wheel         import show_reference_wheel
@@ -499,7 +500,7 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
         if tune:
             print('Optimizing rocking curve...')
             yield from mv(dcm_pitch.kill_cmd, 1)
-            yield from mv(dcm_pitch, approximate_pitch(energy+target, dcm._crystal))
+            yield from mv(dcm_pitch, approximate_pitch(energy+target, xtal=dcm._crystal))
             yield from sleep(1)
             yield from mv(dcm_pitch.kill_cmd, 1)
             yield from sleep(1)

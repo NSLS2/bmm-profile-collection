@@ -918,7 +918,7 @@ motor_nicknames = {'x'    : xafs_x,     'roll' : xafs_roll,
 ## for consistency with areascan().  This does a simple check to see if the old
 ## argument order is being used and swaps them if need be
 def ls_backwards_compatibility(detin, axin):
-    if type(axin) is str and axin.capitalize() in ('It', 'If', 'I0', 'Iy', 'Ir', 'Both',
+    if type(axin) is str and axin.capitalize() in ('It', 'If', 'I0', 'Iy', 'Pips', 'Ir', 'Both',
                                                    'I0a', 'I0b', 'Ic0', 'Ic1',
                                                    'Xs', 'Xs1', 'Xs4', 'Xs7', 'Pilatus', 'Eiger', 'Dante'):
         return(axin, detin)
@@ -1018,9 +1018,9 @@ def linescan(detector, axis, start, stop, nsteps, dopluck=True, force=False, sta
         BMMuser.motor = thismotor
 
         # sanity checks on detector
-        if detector not in ('It', 'If', 'I0', 'Iy', 'Ir', 'Both', 'Bicron', 'Ic0', 'Ic1', 'Xs', 'Xs1', 'Xs4', 'Xs7', 'Pilatus', 'Eiger', 'Dante'):
+        if detector not in ('It', 'If', 'I0', 'Iy', 'Pips', 'Ir', 'Both', 'Bicron', 'Ic0', 'Ic1', 'Xs', 'Xs1', 'Xs4', 'Xs7', 'Pilatus', 'Eiger', 'Dante'):
             error_msg('\n*** %s is not a linescan measurement (%s)\n' %
-                      (detector, 'it, if, i0, iy, ir, both, bicron, Ic0, Ic1, xs, xs1, xs4, xs7, pilatus, eiger, dante'))
+                      (detector, 'it, if, i0, iy, pips, ir, both, bicron, Ic0, Ic1, xs, xs1, xs4, xs7, pilatus, eiger, dante'))
             yield from null()
             return
 
@@ -1110,6 +1110,8 @@ def linescan(detector, axis, start, stop, nsteps, dopluck=True, force=False, sta
         fluo_detector = None
         if detector in ('Xs', 'Xs1', 'Fluorescence', 'Fluo', 'Flourescence', 'Flou'):
             fluo_detector = xs.name
+        elif detector == 'Pips':
+            fluo_detector = 'pips'
         elif detector == 'Dante':
             fluo_detector = 'Dante'
             

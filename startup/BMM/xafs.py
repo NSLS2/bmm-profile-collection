@@ -742,6 +742,8 @@ def xafs(inifile=None, **kwargs):
 
         if 'yield' in p['mode']:
             quadem1.Iy.kind = 'hinted'
+        if 'pips' in p['mode']:
+            quadem1.Iy.kind = 'hinted'
         if 'xs1' in p['mode']:
             yield from mv(xs1.cam.acquire_time, 0.5)
         elif 'fluo' in p['mode'] or 'flou' in p['mode'] or 'xs' in p['mode'] or 'yield' in p['mode']:
@@ -861,6 +863,8 @@ def xafs(inifile=None, **kwargs):
                 fluo_detector = xs.name
             elif plotting_mode(p['mode']) == 'dante':
                 fluo_detector = 'dante'
+            elif plotting_mode(p['mode']) == 'pips':
+                fluo_detector = 'pips'
             kafka_message({'xafsscan': 'start',
                            'element': p["element"],
                            'edge': p["edge"],
@@ -999,7 +1003,7 @@ def xafs(inifile=None, **kwargs):
                               'count': cnt, }
                 kafka_message({'xafsscan': 'next',
                                'count': cnt })
-                if any(md in p['mode'] for md in ('trans', 'ref', 'test')):
+                if any(md in p['mode'] for md in ('trans', 'ref', 'pips', 'test')):
                     uid = yield from scan_nd([*ION_CHAMBERS], energy_trajectory + dwelltime_trajectory,
                                              md={**xdi, **supplied_metadata, 'plan_name' : f'scan_nd xafs {p["mode"]}',
                                                  'BMM_kafka': { 'hint': f'xafs {p["mode"]}', **more_kafka }})
@@ -1044,7 +1048,7 @@ def xafs(inifile=None, **kwargs):
                 ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
                 ## data evaluation + message to Slack
                 ## also sync data with Google Drive
-                if any(md in p['mode'] for md in ('trans', 'fluo', 'flou', 'both', 'ref', 'xs', 'xs1', 'xs4', 'xs7', 'yield')):
+                if any(md in p['mode'] for md in ('trans', 'fluo', 'flou', 'both', 'ref', 'xs', 'xs1', 'xs4', 'xs7', 'yield', 'pips')):
                     try:
                         score, emoji = user_ns['clf'].evaluate(uid, mode=plotting_mode(p['mode']))
                         report(f"ML data evaluation model: {emoji}", level='bold', slack=True)

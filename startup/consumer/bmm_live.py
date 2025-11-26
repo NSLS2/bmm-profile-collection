@@ -128,7 +128,7 @@ class LineScan():
     detector    = 7
 
     transmission_like = ('It', 'Transmission', 'Trans')
-    fluorescence_like = ('If', 'Xs', 'Xs1', 'Fluorescence', 'Flourescence', 'Fluo', 'Flou', 'Dante')
+    fluorescence_like = ('If', 'Xs', 'Xs1', 'Fluorescence', 'Flourescence', 'Fluo', 'Flou', 'Dante', 'Pips')
     yield_like        = ('Iy', 'Yield')
 
     def start(self, **kwargs):
@@ -202,6 +202,12 @@ class LineScan():
             self.denominator = 'I0'
             self.axes.set_ylabel(f'{self.numerator}/{self.denominator}')
 
+        # ## pips: plot pips/I0
+        # elif self.numerator == 'Pips':
+        #     self.description = 'PIPS'
+        #     self.denominator = 'I0'
+        #     self.axes.set_ylabel(f'{self.numerator}/{self.denominator}')
+
         elif self.numerator == 'Eiger':
             self.line.set_label('specular (ROI3)')
             self.line2, = self.axes.plot([],[], label='diffuse (ROI2)')
@@ -262,6 +268,12 @@ class LineScan():
                 self.description = 'fluorescence (1 channel)'
                 self.denominator = 'I0'
                 self.fl.set_ylabel('fluorescence (1 channel)')
+            elif self.fluo_detector == 'pips':
+                self.line, = self.fl.plot([],[], label='fluorescence')
+                self.linetr, = self.tr.plot([],[], label='transmission', color='tab:orange')
+                self.numerator = 'If'
+                self.description = 'fluorescence (PIPS)'
+                self.denominator = 'I0'
             else:
                 self.line, = self.fl.plot([],[], label='fluorescence')
                 self.linetr, = self.tr.plot([],[], label='transmission', color='tab:orange')
@@ -365,6 +377,8 @@ class LineScan():
         if self.numerator in self.fluorescence_like:
             if self.fluo_detector == '1-element SDD':
                 signal = kwargs['data'][self.xs8]
+            elif self.fluo_detector == 'pips':
+                signal = kwargs['data']['Pips']
             elif self.fluo_detector == '4-element SDD':
                 signal = (kwargs['data'][self.xs1] +
                           kwargs['data'][self.xs2] +
@@ -614,6 +628,20 @@ class XAFSScan():
             self.ref = self.fig.add_subplot(self.gs[1, 1])
             self.axis_list   = [self.mut, self.muf, self.i0, self.ref]
 
+        ## 2x2 grid if pips
+        if self.mode in ('pips'):
+            if get_backend().lower() == 'agg':
+                self.fig.set_figheight(9.5)
+                self.fig.set_figwidth(11)
+            else:
+                self.fig.canvas.manager.window.setGeometry(2240, 1757, 1200, 1093)
+            self.gs = gridspec.GridSpec(2,2)
+            self.mut = self.fig.add_subplot(self.gs[0, 0])
+            self.muf = self.fig.add_subplot(self.gs[0, 1])
+            self.i0  = self.fig.add_subplot(self.gs[1, 0])
+            self.ref = self.fig.add_subplot(self.gs[1, 1])
+            self.axis_list   = [self.mut, self.muf, self.i0, self.ref]
+
         ## 3x2 grid for yield
         elif self.mode == 'yield':
             if get_backend().lower() == 'agg':
@@ -670,7 +698,7 @@ class XAFSScan():
         self.i0.set_title('I0')
 
         ## all plot types except transmission and reference need mu_f
-        if self.mode in ('fluorescence', 'yield', 'pilatus', 'eiger', 'dante'):
+        if self.mode in ('fluorescence', 'yield', 'pips', 'pilatus', 'eiger', 'dante'):
             self.muf.set_ylabel(rf'fluorescence $\mu(E)$  ({self.fluo_detector})')
             self.muf.set_xlabel('energy (eV)')
             self.muf.set_title(f'data: {self.sample}')
@@ -719,7 +747,7 @@ class XAFSScan():
             self.line_mut,   = self.mut.plot([],[], label=f'scan {self.count}')
         self.line_i0,    = self.i0.plot([],[],  label=f'scan {self.count}')
         self.line_ref,   = self.ref.plot([],[], label=f'scan {self.count}')
-        if self.mode in ('fluorescence', 'yield', 'pilatus', 'dante'):
+        if self.mode in ('fluorescence', 'yield', 'pips', 'pilatus', 'dante'):
             self.line_muf, = self.muf.plot([],[], label=f'scan {self.count}')
         if self.mode in ('yield', 'pilatus', 'eiger'):
             self.line_iy,  = self.iy.plot([],[], label=f'scan {self.count}')
@@ -784,7 +812,7 @@ class XAFSScan():
             self.line_mut.set_data(self.energy, self.trans)
 
 
-        if self.mode in ('transmission', 'fluorescence', 'yield', 'dante', 'reference'):
+        if self.mode in ('transmission', 'fluorescence', 'yield', 'pips', 'dante', 'reference'):
             self.refer.append(numpy.log(abs(kwargs['data']['It']/kwargs['data']['Ir'])))
 
         if self.mode in ('pilatus', 'eiger'):  # re-purpose refer and iysig
@@ -797,13 +825,16 @@ class XAFSScan():
             self.line_iy.set_data(self.energy, self.iysig)
 
 
+
         self.line_ref.set_data(self.energy, self.refer)
 
 
         ## and do all that for the fluorescence spectrum if it is being plotted.
-        if self.mode in ('fluorescence', 'yield', 'pilatus', 'eiger', 'dante'):
+        if self.mode in ('fluorescence', 'yield', 'pips', 'pilatus', 'eiger', 'dante'):
             if self.fluo_detector == '1-element SDD':
                 self.fluor.append( kwargs['data'][self.xs8] / kwargs['data']['I0'] )
+            elif self.fluo_detector == 'pips':
+                self.fluor.append( kwargs['data']['Pips'] / kwargs['data']['I0'] )
             elif self.fluo_detector == '4-element SDD':
                 self.fluor.append( (kwargs['data'][self.xs1] +
                                     kwargs['data'][self.xs2] +

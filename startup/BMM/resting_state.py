@@ -22,7 +22,7 @@ from BMM.workspace      import rkvs
 from BMM.user_ns.base        import profile_configuration
 from BMM.user_ns.bmm         import BMMuser
 from BMM.user_ns.dcm         import *
-from BMM.user_ns.dwelltime   import _locked_dwell_time, with_quadem, with_iy, with_pilatus
+from BMM.user_ns.dwelltime   import _locked_dwell_time, with_quadem, with_iy, with_pips, with_pilatus
 from BMM.user_ns.detectors   import quadem1, ION_CHAMBERS, pilatus
 from BMM.user_ns.instruments import xafs_wheel
 
@@ -47,7 +47,7 @@ def resting_state():
     BMMuser.prompt, BMMuser.macro_dryrun, BMMuser.instrument = True, False, ''
     
     if with_quadem is True:
-        if with_iy is True:
+        if with_iy is True or with_pips is True:
             quadem1.Iy.kind = 'hinted'
         else:
             quadem1.Iy.kind = 'omitted'
@@ -94,7 +94,7 @@ def resting_state_plan():
     #BMMuser.prompt, BMMuser.macro_dryrun, BMMuser.instrument , quadem1.Iy.kind = True, False, '', 'omitted'
     #yield from quadem1.on_plan()
     if with_quadem is True:
-        if with_iy is True:
+        if with_iy is True or with_pips is True:
             quadem1.Iy.kind = 'hinted'
         else:
             quadem1.Iy.kind = 'omitted'
@@ -139,7 +139,7 @@ def end_of_macro():
     
     BMMuser.prompt, BMMuser.macro_dryrun, BMMuser.instrument = True, False, ''
     if with_quadem is True:
-        if with_iy is True:
+        if with_iy is True or with_pips is True:
             quadem1.Iy.kind = 'hinted'
         else:
             quadem1.Iy.kind = 'omitted'

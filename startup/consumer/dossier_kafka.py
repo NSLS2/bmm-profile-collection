@@ -1086,7 +1086,9 @@ class XASFile():
         elif 'reference' in catalog[uid].metadata['start']['plan_name']:
             text = 'ln(It/Ir)  --  ln($6/$7)'
         elif 'yield' in catalog[uid].metadata['start']['plan_name']:
-            text = 'ln(It/Ir)  --  ln($8/$5)'
+            text = 'Iy/I0  --  $8/$5'
+        elif 'pips' in catalog[uid].metadata['start']['plan_name']:
+            text = 'Pips/I0  --  $8/$5'
         elif 'test' in catalog[uid].metadata['start']['plan_name']:
             text = 'I0  --  $5'
         return text
@@ -1156,6 +1158,11 @@ class XASFile():
             column_list.append('Iy')
             column_labels.append('Iy')
 
+        if 'pips' in metadata['start']['plan_name'].lower():
+            handle.write( '# Column.8: PIPS nA\n')
+            column_list.append('Pips')
+            column_labels.append('Pips')
+
         
         el = metadata['start']['XDI']['Element']['symbol']
         nchan = 0
@@ -1208,6 +1215,8 @@ class XASFile():
             p['xmu'] = numpy.log(p['Ir']/p['It'])
         elif 'yield' in metadata['start']['plan_name']:
             p['xmu'] = p['Iy']/p['It']
+        elif 'pips' in metadata['start']['plan_name']:
+            p['xmu'] = p['Pips']/p['It']
         elif 'test' in metadata['start']['plan_name']:
             p['xmu'] = p['I0']
         else:

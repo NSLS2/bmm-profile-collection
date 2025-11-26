@@ -190,6 +190,11 @@ class Pandrosus():
             self.group.i0 = numpy.array(table['I0'])
             self.group.signal = numpy.array(table['Iy'])
 
+        elif mode in ('pips'):
+            self.group.mu = numpy.array(table['Pips']/table['I0'])
+            self.group.i0 = numpy.array(table['I0'])
+            self.group.signal = numpy.array(table['Pips'])
+
         elif mode in ('fluorescence', 'flourescence', 'fluo', 'flou', 'xs', 'xs1', 'xs4', 'xs7', 'both'):
             columns = start['XDI']['_dtc']
             if self.verbose:

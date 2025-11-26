@@ -27,13 +27,13 @@ class BMMXspress3Detector_4Element_Base(BMMXspress3DetectorBase):
 if sys.version_info[1] == 9:
     BMMXspress3Detector_4Element = build_detector_class(
         channel_numbers=(1, 2, 3, 4),
-        mcaroi_numbers=range(1, 17),
+        mcaroi_numbers=range(1, 21),
         detector_parent_classes=(BMMXspress3Detector_4Element_Base, )
     )
 else:
     BMMXspress3Detector_4Element = build_xspress3_class(
         channel_numbers=(1, 2, 3, 4),
-        mcaroi_numbers=range(1, 17),
+        mcaroi_numbers=range(1, 21),
         image_data_key="xrf",
         xspress3_parent_classes=(BMMXspress3Detector_4Element_Base, ),
     )

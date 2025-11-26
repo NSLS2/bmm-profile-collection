@@ -80,7 +80,7 @@ from BMM.electrometer import BMMQuadEM, BMMDualEM, dark_current, IntegratedIC
 ION_CHAMBERS = []               # list of ion chambers in use, will be populated below
 
 # configure signal chains for I0/It/Ir, configuration flags from BMM.user_ns.dwelltime
-from BMM.user_ns.dwelltime import with_ic0, with_ic1, with_ic2, with_iy
+from BMM.user_ns.dwelltime import with_ic0, with_ic1, with_ic2, with_iy, with_pips
         
 quadem1 = BMMQuadEM('XF:06BM-BI{EM:1}EM180:', name='quadem1')
 quadem1.enable_electrometer()
@@ -107,15 +107,20 @@ else:
     rkvs.set('BMM:Ir', 'ic2')
 
 ## Electron yield detector: active/inactive
+## PIPS detector: active/inactive
 if with_iy is True:
     quadem1.Iy.kind, quadem1.Iy.name = 'hinted', 'Iy'
     rkvs.set('BMM:Iy', 1)
+elif with_pips is True:
+    quadem1.Iy.kind, quadem1.Iy.name = 'hinted', 'Pips'
+    rkvs.set('BMM:pips', 1)
 else:
     quadem1.Iy.kind, quadem1.Iy.name = 'omitted', 'Iy'
     rkvs.set('BMM:Iy', 0)
+    rkvs.set('BMM:pips', 0)
 
     
-if with_iy is True or with_ic0 is False or with_ic1 is False or with_ic2 is False:
+if with_iy is True or with_pips is True or with_ic0 is False or with_ic1 is False or with_ic2 is False:
     ION_CHAMBERS.append(quadem1)
 
     

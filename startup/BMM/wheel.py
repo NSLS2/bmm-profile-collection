@@ -74,8 +74,9 @@ class WheelMotor(EndStationEpicsMotor):
         return this
 
     def reset(self):
-        '''Return a sample wheel to slot 1'''
+        '''Return a sample wheel to slot 1 on the outer ring'''
         yield from mv(self, self.slotone)
+        yield from self.outer()
         report('Returned to sample wheel slot 1 at %d degrees' % self.slotone, level='bold')
 
     def angle_from_current(self, n):

@@ -847,8 +847,8 @@ class BMM_User(Borg):
 
 BMM data access: https://nsls2.github.io/bmm-beamline-manual/data.html
 Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{gup}`'''
-            self.bmmbot.chat_and_pin(text)
-            kafka_message({'touch': os.path.join(proposal_base(), '.introduction_made')})
+            #self.bmmbot.chat_and_pin(text)
+            #kafka_message({'touch': os.path.join(proposal_base(), '.introduction_made')})
 
         # preserve BMMuser state to a json string #
         self.prev_fig = None

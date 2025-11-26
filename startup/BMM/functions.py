@@ -146,6 +146,7 @@ def plotting_mode(mode):
          transmission
          fluorescence
          yield
+         pips
          pilatus
          dante
          reference
@@ -158,6 +159,9 @@ def plotting_mode(mode):
 
     elif mode == 'iy':
         return 'yield'        
+
+    elif mode == 'pips':
+        return 'pips'        
 
     elif 'pil' in mode: # ('fluo+pilatus', 'pilatus'):
         return 'pilatus'

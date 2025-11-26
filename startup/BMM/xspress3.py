@@ -556,7 +556,8 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
         self.table()
         if doplot:
             self.plot(add=True, uid=uid)
-        
+        if user_ns['shb'].state.get() == 1:
+            error_msg('\n *** Shutter B is closed.')
 
     def hinted_roi(self):
         try:
@@ -698,3 +699,4 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
                         val = 0
                     print(f"  {int(val):7}  ", end='')
                 print('')
+            
