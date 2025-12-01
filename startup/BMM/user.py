@@ -25,6 +25,7 @@ facility_dict = md = user_ns["RE"].md
 
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.periodictable import edge_energy
+import BMMCommon.tools.md
 
 from BMM.functions import BMM_STAFF, LUSTRE_XAS, LUSTRE_DATA_ROOT, proposal_base
 from BMM.workspace import rkvs
@@ -863,6 +864,7 @@ Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{g
             json.dump({'name': name, 'date': date, 'gup' : gup, 'saf' : saf}, outfile)
         os.chmod(jsonfile, 0o444)
 
+        ## update things that use a local folder
         try:
             #xascam._root = os.path.join(self.folder, 'snapshots')
             #xrdcam._root = os.path.join(self.folder, 'snapshots')
@@ -872,7 +874,8 @@ Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{g
         except:
             pass
 
-
+        ## update detectors, etc. that rely upon BMMCommon.tools.md to know the current value of RE.md
+        BMMCommon.tools.md.common_md = user_ns['RE'].md
 
     def start_experiment_from_serialization(self):
         '''In the situation where bsui needs to be stopped (or crashes) before

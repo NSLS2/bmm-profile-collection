@@ -36,7 +36,7 @@ from BMMCommon.tools.periodictable import Z_number, edge_number
 ###########################################################################
 
 
-#from BMM.pilatus import BMMFileStoreHDF5, BMMHDF5Plugin
+#from BMMCommon.devices.pilatus import BMMFileStoreHDF5, BMMHDF5Plugin
 
 class BMMDanteFileStoreHDF5(FileStorePluginBase):
     def __init__(self, *args, **kwargs):

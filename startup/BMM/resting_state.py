@@ -32,6 +32,27 @@ def resting_redis():
     user_ns['rkvs'].set('BMM:scan:estimated', 0)
     return
 
+
+mapping = {'quadem': user_ns['quadem1'],
+           'ic0': user_ns['ic0'],
+           'ic1': user_ns['ic1'],
+           'ic2': user_ns['ic2'],
+           'xspress3': user_ns['xs'],
+           'pilatus': user_ns['pilatus'],
+           'eiger': user_ns['eiger'],
+           'dante': user_ns['dante'],}
+           # Deprecated detectors: struck, dualem
+
+## this does not work because xs does not report as connected ...
+def check_dwell_time():
+    is_ok = True
+    for det in mapping.keys():
+        if f'{det}_dwell_time' in _locked_dwell_time.read_attrs:
+            if mapping[det].connected is not True:
+                print(f'{det} is not connected')
+                is_ok = False
+    return is_ok
+
 def resting_state():
     '''
     Command line tool to bring controls into their resting state:
@@ -61,7 +82,6 @@ def resting_state():
         BMMuser.prompt = False
     if with_quadem is True:
         quadem1.on(quiet=True)
-    _locked_dwell_time.move(0.5)
     for electrometer in ION_CHAMBERS:
         electrometer.acquire.put(1)
         electrometer.acquire_mode.put(0)
@@ -80,6 +100,7 @@ def resting_state():
         xs1 = user_ns['xs1']
         xs1.channel08.get_mcaroi(mcaroi_number=16).kind = 'hinted'
         xs1.channel08.get_mcaroi(mcaroi_number=16).total_rbv.kind = 'hinted'
+    _locked_dwell_time.move(0.5)
     
 def resting_state_plan():
     '''

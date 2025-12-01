@@ -9,6 +9,8 @@ from tiled.client import from_uri, show_logs
 
 from rich import print as cprint
 
+import BMMCommon.tools.md
+
 try:
     from bluesky_queueserver import is_re_worker_active
 except ImportError:
@@ -120,7 +122,7 @@ RE.subscribe(create_datum_page_cb)
 from redis_json_dict import RedisJSONDict
 nsls2_redis = profile_configuration.get('services', 'nsls2_redis')
 RE.md = RedisJSONDict(redis.Redis(nsls2_redis), prefix='xas-')
-
+BMMCommon.tools.md.common_md = RE.md
 
     
 bec.disable_plots()

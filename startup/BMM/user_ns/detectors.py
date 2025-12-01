@@ -281,7 +281,7 @@ if is_re_worker_active() is False and 'ws3' in thishost:
 
 run_report('\t\t'+'USB cameras: usb1, usb2')
 
-from BMM.usb_camera import BMMUVCSingleTrigger
+from BMMCommon.devices.usb_camera import BMMUVCSingleTrigger
 if with_cam1 is True:
     usb1 = BMMUVCSingleTrigger('XF:06BM-ES{UVC-Cam:1}', name="usbcam-1", read_attrs=["jpeg"])
 else:
@@ -332,7 +332,7 @@ def prep_pilatus(pilatus):
 from BMM.user_ns.dwelltime import with_pilatus
 from BMM.user_ns.dcm import dcm
 if with_pilatus is True:
-    from BMM.pilatus import BMMPilatusSingleTrigger,  BMMPilatusTIFFSingleTrigger
+    from BMMCommon.devices.pilatus import BMMPilatusSingleTrigger,  BMMPilatusTIFFSingleTrigger
     run_report('\t'+'Pilatus')
 
     pvbase = "XF:06BMB-ES{Det:PIL100k}:"
