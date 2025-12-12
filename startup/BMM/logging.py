@@ -45,19 +45,20 @@ if os.path.isfile(BMM_log_master_file):
     BMM_logger.addHandler(BMM_log_master)
     chmod(BMM_log_master_file, 0o444)
 
-LUSTRE_ROOT_BMM = '/nsls2/data3/bmm'
-BMM_lustre_log_file = os.path.join(LUSTRE_ROOT_BMM, 'XAS', 'BMM_master.log')
-if os.path.isdir(LUSTRE_ROOT_BMM):
-    if not os.path.isfile(BMM_lustre_log_file):
-        basedir = os.path.dirname(BMM_lustre_log_file)
-        if not os.path.exists(basedir):
-            os.makedirs(basedir)
-        os.mknod(BMM_lustre_log_file)
-    if os.path.isfile(BMM_lustre_log_file):
-        chmod(BMM_lustre_log_file, 0o644)
-        BMM_log_lustre = logging.FileHandler(BMM_lustre_log_file)
-        BMM_log_lustre.setFormatter(BMM_formatter)
-        BMM_logger.addHandler(BMM_log_lustre)
+if False:
+    LUSTRE_ROOT_BMM = '/nsls2/data3/bmm'
+    BMM_lustre_log_file = os.path.join(LUSTRE_ROOT_BMM, 'XAS', 'BMM_master.log')
+    if os.path.isdir(LUSTRE_ROOT_BMM):
+        if not os.path.isfile(BMM_lustre_log_file):
+            basedir = os.path.dirname(BMM_lustre_log_file)
+            if not os.path.exists(basedir):
+                os.makedirs(basedir)
+            os.mknod(BMM_lustre_log_file)
+        if os.path.isfile(BMM_lustre_log_file):
+            chmod(BMM_lustre_log_file, 0o644)
+            BMM_log_lustre = logging.FileHandler(BMM_lustre_log_file)
+            BMM_log_lustre.setFormatter(BMM_formatter)
+            BMM_logger.addHandler(BMM_log_lustre)
     
 
 #------------------------------------------------------------------------------------------
@@ -97,13 +98,13 @@ def BMM_unset_user_log():
 ## use this command to properly format the log message, manage file permissions, etc
 def BMM_log_info(message):
     chmod(BMM_log_master_file, 0o644)
-    chmod(BMM_lustre_log_file, 0o644)
+    #chmod(BMM_lustre_log_file, 0o644)
     entry = ''
     for line in message.split('\n'):
         entry += '    ' + line + '\n'
     BMM_logger.info(entry)
     chmod(BMM_log_master_file, 0o444)
-    chmod(BMM_lustre_log_file, 0o444)
+    #chmod(BMM_lustre_log_file, 0o444)
 
 
 ## small effort to obfuscate the web hook URL, which is secret-ish.  See:
