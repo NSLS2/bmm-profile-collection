@@ -247,7 +247,7 @@ def show_reference_wheel():
 
         boxedtext(text, title=f"Reference wheel, {which} ring", color='yellow')
 
-    if profile_configuration.getboolean('experiments', 'radiological') is True:
+    if False: #profile_configuration.getboolean('experiments', 'radiological') is True:
         text = ''
         for key in profile_configuration['experiments'].keys():
             if '_ref' not in key:
@@ -257,10 +257,10 @@ def show_reference_wheel():
                 elem = f'[yellow1]{elem}[/yellow1]'
             data = profile_configuration.get('experiments', key).split()
             ring = 'outer'
-            if data[0] == 1:
+            if int(data[0]) == 1:
                 ring = 'inner'
-            slot = data[1]
-            text += f'  {elem:>2}: {ring} ring, slot [white]{slot}[/white]\n'
+            slt = data[1]
+            text += f'  {elem:>2}: {ring} ring, slot [white]{slt}[/white]\n'
         boxedtext(text[:-1], title=f"Radiological reference wheel", color='yellow')
 
     

@@ -336,6 +336,8 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
             
             report(f'*CMS:* {scantype} measurement: {el} edge of sample {composition = }, {sample = }, {distance = }, {time = }', slack=config['slack'])
             yield from mv(xafs_det, config['detector_distances'][el])
+            yield from mv(slits3.hsize, config['slits'][el][0])
+            yield from mv(slits3.vsize, config['slits'][el][1])
             if BMMuser.element != el:
                 if config['dryrun'] is False:
                     yield from change_edge(el, focus=True)
@@ -389,6 +391,7 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
     xafs = user_ns['xafs']
     xafs_x, xafs_y, xafs_pitch, xafs_roll = user_ns['xafs_x'], user_ns['xafs_y'], user_ns['xafs_pitch'], user_ns['xafs_roll']
     xafs_detx = user_ns['xafs_detx']
+    slits3 = user_ns['slits3']
     BMMuser.prompt = False
     with open('/nsls2/data3/bmm/legacy/cms.json') as f:
         config = json.load(f)

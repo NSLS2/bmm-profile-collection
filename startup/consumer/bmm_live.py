@@ -629,7 +629,7 @@ class XAFSScan():
             self.axis_list   = [self.mut, self.muf, self.i0, self.ref]
 
         ## 2x2 grid if pips
-        if self.mode in ('pips'):
+        elif self.mode in ('pips'):
             if get_backend().lower() == 'agg':
                 self.fig.set_figheight(9.5)
                 self.fig.set_figwidth(11)
@@ -941,11 +941,14 @@ class XRF():
 
         s = []
         nelem = 4
-        channels = tuple(range(1, 5))
+        channels = tuple(range(0, 4))
         if '1-element SDD' in catalog[uid].metadata['start']['detectors']:
             nelem = 1
             channels = (1, )
             only = 1
+        elif '4-element SDD' in catalog[uid].metadata['start']['detectors']:
+            nelem = 4
+            channels = tuple(range(0, 4))
         elif '7-element SDD' in catalog[uid].metadata['start']['detectors']:
             nelem = 7
             channels = tuple(range(0, 7))

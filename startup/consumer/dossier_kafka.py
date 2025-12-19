@@ -1280,7 +1280,7 @@ class XASFile():
         ## generate dossier files
         if groupby is not None:
             for k in groups.keys():
-                dossier = BMMdossier()
+                dossier = BMMDossier()
                 dossier.rid = str(uuid.uuid4())[:8]
                 dossier.uidlist = groups[k]
                 dossier.write(catalog, logger)

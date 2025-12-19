@@ -268,7 +268,7 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
         position = peak(sig)
         top      = positions[position]
 
-    rkvs.set('BMM:peak_position', top)
+    rkvs.set('BMM:peakposition', top)
     print(f'*** peak found at {motor} position {top}')
 
     #if self.fig is not None:
@@ -337,7 +337,7 @@ def rectanglefit(catalog=None, uid=None, motor=None, signal='It', drop=None, aw=
 
     target = out.params["midpoint"].value
     amplitude = abs(out.params['amplitude'].value)
-    rkvs.set('BMM:peak_position', target)
+    rkvs.set('BMM:peakposition', target)
     print(f'*** midpoint of rectangle scan found at {motor} position {target:.3f}')
 
     if get_backend().lower() != 'agg':

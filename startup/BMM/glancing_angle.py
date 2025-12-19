@@ -257,7 +257,7 @@ class GlancingAngle(Device):
                        'motor_name' : motor.name,
                        'signal'     : 'It',
                        'spinner'    : self.current() })
-        target = fetch_peak_position_via_redis()
+        target = fetch_peak_position_via_redis(verbose=True)
         yield from mv(motor, target)
         
         

@@ -223,7 +223,7 @@ def prepare_alignment_scan(inttime=0.1):
        The default is 0.1 seconds, but can be overwritten if need be.
 
     '''
-    rkvs.set('BMM:peak_position', UNSET_PEAK_POSITION - 0.1)
+    rkvs.set('BMM:peakposition', UNSET_PEAK_POSITION - 0.1)
     yield from mv(_locked_dwell_time, inttime)
     
 
@@ -239,12 +239,12 @@ def fetch_peak_position_via_redis(maxtries=6, verbose=False):
 
     '''
     time.sleep(0.25)
-    top = float(rkvs.get('BMM:peak_position').decode('utf8'))
+    top = float(rkvs.get('BMM:peakposition').decode('utf8'))
     count = 0
     #if verbose: print(f"{count = }, {top = }")
     while top < UNSET_PEAK_POSITION:
         time.sleep(0.1 * 2**count)
-        top = float(rkvs.get('BMM:peak_position').decode('utf8'))
+        top = float(rkvs.get('BMM:peakposition').decode('utf8'))
         count += 1
         if verbose: print(f"{count = }, {top = }", flush=True)
         if count > maxtries:
@@ -294,7 +294,7 @@ def slit_height(start=-1.5, stop=1.5, nsteps=31, move=False, force=False, slp=1.
             #    yield from mv(slits3.vsize, 0.5)
 
             yield from prepare_alignment_scan()
-            #rkvs.set('BMM:peak_position', -10_000_000_000.1)
+            #rkvs.set('BMM:peakposition', -10_000_000_000.1)
             #yield from mv(_locked_dwell_time, 0.1)
             yield from mv(motor.velocity, 0.4)
             yield from mv(motor.kill_cmd, 1)
@@ -416,7 +416,7 @@ def mirror_pitch(start=None, stop=None, nsteps=41, mirror='m3', move=False, forc
             #    yield from mv(slits3.vsize, 0.5)
 
             yield from prepare_alignment_scan()
-            #rkvs.set('BMM:peak_position', -10_000_000_000.1)
+            #rkvs.set('BMM:peakposition', -10_000_000_000.1)
             #yield from mv(_locked_dwell_time, 0.1)
 
             kafka_message({'linescan': 'start',
@@ -533,7 +533,7 @@ def rocking_curve(start=-0.10, stop=0.10, nsteps=101, detector='I0', choice='pea
                     (motor.name, sgnl, start, stop, nsteps, motor.user_readback.get())
 
             yield from prepare_alignment_scan()
-            #rkvs.set('BMM:peak_position', -10_000_000_000.1)
+            #rkvs.set('BMM:peakposition', -10_000_000_000.1)
             #yield from mv(_locked_dwell_time, 0.1)
             yield from dcm.kill_plan()
 
@@ -646,7 +646,7 @@ def hcenter(start=-1, stop=1, nsteps=41, move=False, force=False, choice='peak')
 
         def scan_hcenter():
             yield from prepare_alignment_scan()
-            #rkvs.set('BMM:peak_position', -10_000_000_000.1)
+            #rkvs.set('BMM:peakposition', -10_000_000_000.1)
             #yield from mv(_locked_dwell_time, 0.1)
 
             kafka_message({'linescan': 'start',
