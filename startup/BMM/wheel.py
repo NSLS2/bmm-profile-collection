@@ -247,10 +247,10 @@ def show_reference_wheel():
 
         boxedtext(text, title=f"Reference wheel, {which} ring", color='yellow')
 
-    if False: #profile_configuration.getboolean('experiments', 'radiological') is True:
+    if profile_configuration.getboolean('experiments', 'radiological') is True:
         text = ''
         for key in profile_configuration['experiments'].keys():
-            if '_ref' not in key:
+            if '_ref' not in key or key == 'use_reference':
                 continue
             elem = key.split('_')[0].capitalize()
             if elem == user_ns['BMMuser'].element:

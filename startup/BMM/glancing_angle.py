@@ -443,7 +443,7 @@ class GlancingAngle(Device):
             self.f_uid     = user_ns['rkvs'].get('BMM:ga:fluo_uid').decode('utf-8')
             
         user_ns['RE'].msg_hook = None
-        yield from finalize_wrapper(main_plan(pitch=2, drop=None), cleanup_plan())
+        yield from finalize_wrapper(main_plan(pitch, drop), cleanup_plan())
         user_ns['RE'].msg_hook = BMM_msg_hook
         BMM_clear_suspenders()
  
