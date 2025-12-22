@@ -512,7 +512,7 @@ det = DetectorMount()
 ###########################################################
 
 run_report('\tactuators')
-from BMM.actuators import BMPS_Shutter, IDPS_Shutter, EPS_Shutter
+from BMMCommon.devices.actuators import BMPS_Shutter, IDPS_Shutter, EPS_Shutter
 
 try:
     bmps = BMPS_Shutter('SR:C06-EPS{PLC:1}', name='BMPS')

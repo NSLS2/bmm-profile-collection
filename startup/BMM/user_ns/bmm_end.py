@@ -27,7 +27,7 @@ run_report('\t'+'motor status reporting')
 from BMM.motor_status import motor_status, ms # , motor_metadata, xrd_motors, xrdm
 
 run_report('\t'+'FMBO motor tools')
-from BMM.fmbo import FMBO_status
+from BMMCommon.devices.fmbo import FMBO_status
 
 from BMM.user_ns.base import profile_configuration
 from BMM.desc_string  import set_desc_strings

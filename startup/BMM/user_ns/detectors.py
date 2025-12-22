@@ -249,7 +249,8 @@ except:
 ####################################################
 
 run_report('\t'+'cameras')
-from BMM.camera_device import BMMSnapshot, snap, AxisCaprotoCam
+from BMM.camera_device import BMMSnapshot, snap
+from BMMCommon.devices.axis_webcam import AxisCaprotoCam
 from BMM.user_ns.base import bmm_catalog
 
 import BMMCommon.tools.db

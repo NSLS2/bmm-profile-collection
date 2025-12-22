@@ -122,6 +122,7 @@ RE.subscribe(create_datum_page_cb)
 from redis_json_dict import RedisJSONDict
 nsls2_redis = profile_configuration.get('services', 'nsls2_redis')
 RE.md = RedisJSONDict(redis.Redis(nsls2_redis), prefix='xas-')
+BMMCommon.tools.md.common_re = RE
 BMMCommon.tools.md.common_md = RE.md
 
     
