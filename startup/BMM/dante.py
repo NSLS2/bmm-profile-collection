@@ -362,7 +362,7 @@ class BMMDante(DetectorBase):
 
         '''
         if uid is not None:
-            kafka_message({'xrf': 'plot', 'uid': uid, 'add': add, 'only': only})
+            kafka.message({'xrf': 'plot', 'uid': uid, 'add': add, 'only': only})
         else:
             dcm, BMMuser = user_ns['dcm'], user_ns['BMMuser']
             plt.clf()

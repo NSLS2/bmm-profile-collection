@@ -4,7 +4,7 @@ from BMMCommon.tools.misc     import isfloat
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.physics  import *  # HBARC ktoe etok KTOE e2l
 
-from BMM.kafka         import kafka_message
+from BMM.user_ns.bmm          import kafka
 import numpy
 
 from BMM import user_ns as user_ns_module
@@ -277,7 +277,7 @@ def xrfat(uid, energy=-1, xrffile=None, add=True, only=None, xmax=1500):
         if os.path.isfile(xrffile):
             warning_msg(f'{xrffile} already exists.  The plot will be shown, but the file will not be written.')
             xrffile = None
-    kafka_message({'xrfat': 'start',
+    kafka.message({'xrfat': 'start',
                    'uid' : uid,
                    'energy' : energy,
                    'xrffile' : xrffile,

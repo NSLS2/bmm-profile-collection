@@ -8,7 +8,7 @@ from slack_sdk.errors import SlackApiError
 
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 
-from BMM.kafka import kafka_message
+from BMM.user_ns.bmm import kafka
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
@@ -195,7 +195,7 @@ def report(text, level=None, slack=False, rid=None):
     else:
         print(screen)
     if slack:
-        kafka_message({'echoslack': True,
+        kafka.message({'echoslack': True,
                        'text': text,
                        'img': None,
                        'icon': 'message',

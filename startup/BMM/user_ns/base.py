@@ -147,6 +147,7 @@ if not is_re_worker_active():
     db = Broker(bmm_catalog)
 
 
+print('Subscribing to Publisher')
 from bluesky.callbacks.zmq import Publisher
 publisher = Publisher('localhost:5577')
 RE.subscribe(publisher)

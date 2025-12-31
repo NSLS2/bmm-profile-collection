@@ -80,11 +80,11 @@ def sam(arg):
     return
 
         
-from BMM.kafka import kafka_message
+from BMM.user_ns.bmm import kafka
 @register_line_magic
 def ca(arg):
     '''close all plots'''
-    kafka_message({'close': 'all'})
+    kafka.message({'close': 'all'})
     return None
 
 from BMM.user_ns.detectors import xs4, xs1, xs7, xs

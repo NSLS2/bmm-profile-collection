@@ -7,8 +7,10 @@ logger.setLevel('WARNING')
 
 import redis
 from BMM.user_ns.base import startup_dir, profile_configuration
-from BMM.workspace import initialize_workspace, rkvs_keys
+from BMM.user_ns.kafka import kafka
+from BMM.workspace import initialize_workspace, rkvs, rkvs_keys
 initialize_workspace()
+kafka.rkvs = rkvs
 
 import json, time, os
 
@@ -24,7 +26,7 @@ from BMM.functions            import run_report, elapsed_time
 
 run_report(__file__, text='functions and other basics')
 run_report('\t'+'logging')
-from BMM.logging             import report, BMM_log_info, BMM_msg_hook#, BMMbot
+from BMM.logging import report, BMM_log_info, BMM_msg_hook#, BMMbot
 
 from BMMCommon.tools.misc   import now
 from BMMCommon.slack.bmmbot import BMMbot
@@ -33,11 +35,6 @@ from bluesky.preprocessors   import finalize_wrapper
 
 run_report('\t'+'user')
 from BMM.user import BMM_User
-
-
-# run_report('\t'+'detector ROIs')
-# from BMM.rois import ROI
-# rois = ROI()
 
 
 run_report('\t'+'recovering user configuration')
@@ -49,6 +46,7 @@ BMMuser.bmmbot._bmmbot_secret = profile_configuration.get('slack', 'bmmbot_secre
 BMMuser.bmmbot._redis_client = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'))
 BMMuser.bmmbot._pass_api = profile_configuration.get('services', 'pass_api') + "/{pass_id}/slack-channels"
 BMMuser.bmmbot.refresh_channel()
+kafka.workspace = BMMuser.workspace
 
 
 if BMMuser.pds_mode is None:
@@ -61,13 +59,14 @@ whoami           = BMMuser.show_experiment
 begin_experiment = BMMuser.begin_experiment
 end_experiment   = BMMuser.end_experiment
 
+
 import atexit, os
 
 def teardown():
     print("Shutting down: ", end=' ')
     BMMuser.state_to_redis(filename=os.path.join(BMMuser.workspace, '.BMMuser'), prefix='')
-    from BMM.kafka import producer
-    producer.flush()
+    #from BMM.kafka import producer
+    kafka.producer.flush()
     
 atexit.register(teardown)
 

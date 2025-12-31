@@ -18,19 +18,19 @@ from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 
 from BMM.user_ns.dwelltime import use_1element, use_4element, use_7element
 from BMM.resting_state     import resting_state_plan
-from BMM.suspenders        import BMM_clear_to_start
-from BMM.kafka             import kafka_message
+#from BMM.suspenders        import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
+from BMM.user_ns.bmm       import kafka
 from BMM.linescans         import motor_nicknames
 from BMM.logging           import BMM_log_info, BMM_msg_hook, report
 from BMM.functions         import plotting_mode
 from BMM.attic.derivedplot import DerivedPlot, interpret_click, close_all_plots
-from BMM.suspenders        import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.workspace         import rkvs
 
 from BMM.user_ns.base      import bmm_catalog
 from BMM.user_ns.bmm       import BMMuser
 from BMM.user_ns.dwelltime import _locked_dwell_time
 from BMM.user_ns.detectors import quadem1, xs, xs1, xs4, xs7, ic0, ic1, ic2, ION_CHAMBERS
+from BMM.user_ns.suspenders import suspenders
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
@@ -78,7 +78,7 @@ def areascan(detector,
         if force is True:
             (ok, text) = (True, '')
         else:
-            (ok, text) = BMM_clear_to_start()
+            (ok, text) = suspenders.clear_to_start()
             if force is False and ok is False:
                 error_msg(text)
                 BMMuser.final_log_entry = False
@@ -175,7 +175,7 @@ def areascan(detector,
 
         ini_f, ini_s = fast.position, slow.position
         report(f'Starting areascan at x,y = {fast.position:.3f}, {slow.position:.3f}', level='bold', slack=True)
-        kafka_message({'areascan'     : 'start',
+        kafka.message({'areascan'     : 'start',
                        'slow_motor'   : slow.name,
                        'slow_start'   : startslow,
                        'slow_stop'    : stopslow,
@@ -192,7 +192,7 @@ def areascan(detector,
         
 
         ## engage suspenders right before starting scan sequence
-        if force is False: BMM_suspenders()
+        if force is False: suspenders.set_suspenders()
     
         #@subs_decorator(areaplot)
         def make_areascan(dets,
@@ -220,7 +220,7 @@ def areascan(detector,
                                        slow, slow.position+startslow, slow.position+stopslow, nslow,
                                        fast, fast.position+startfast, fast.position+stopfast, nfast,
                                        fname, snake=False)
-        kafka_message({'areascan': 'stop', 'uid' : asuid, 'filename': fname})
+        kafka.message({'areascan': 'stop', 'uid' : asuid, 'filename': fname})
         report(f'map uid = {asuid}', level='bold', slack=True)
 
         # write .png, .mat, .xlsx with kafka here
@@ -228,7 +228,7 @@ def areascan(detector,
     def cleanup_plan():
         print('Cleaning up after an area scan')
         db = user_ns['db']
-        BMM_clear_suspenders()
+        suspenders.clear_suspenders()
         if BMMuser.final_log_entry is True:
             if is_re_worker_active() is False:
                 BMM_log_info('areascan finished\n\tuid = %s, scan_id = %d' % (bmm_catalog[-1].metadata['start']['uid'],

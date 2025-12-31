@@ -14,17 +14,17 @@ user_ns = vars(user_ns_module)
 
 from BMMCommon.tools.misc   import now
 
-from BMM.kafka          import kafka_message
 from BMM.logging        import BMM_msg_hook
-from BMM.suspenders     import BMM_suspenders, BMM_clear_suspenders
+#from BMM.suspenders     import BMM_suspenders, BMM_clear_suspenders
 from BMM.workspace      import rkvs
 
 from BMM.user_ns.base        import profile_configuration
-from BMM.user_ns.bmm         import BMMuser
-from BMM.user_ns.dcm         import *
+from BMM.user_ns.bmm         import BMMuser, kafka
+from BMM.user_ns.dcm         import dcm
 from BMM.user_ns.dwelltime   import _locked_dwell_time, with_quadem, with_iy, with_pips, with_pilatus
 from BMM.user_ns.detectors   import quadem1, ION_CHAMBERS, pilatus
 from BMM.user_ns.instruments import xafs_wheel
+from BMM.user_ns.dcm         import *
 
 def resting_redis():
     user_ns['rkvs'].set('BMM:scan:type', 'idle')
@@ -86,12 +86,12 @@ def resting_state():
         electrometer.acquire.put(1)
         electrometer.acquire_mode.put(0)
     dcm.kill()
-    user_ns['dcm_bragg'].clear_encoder_loss()
+    dcm.bragg.clear_encoder_loss()
     dcm.mode = 'fixed'
     user_ns['m2_bender'].kill()
     # if 'ga' in user_ns:
     #     user_ns['ga'].alloff()
-    kafka_message({'resting_state': True,})
+    kafka.message({'resting_state': True,})
     #user_ns['RE'].msg_hook = BMM_msg_hook
     if is_re_worker_active() is False:
         matplotlib.use('Qt5Agg')
@@ -134,10 +134,10 @@ def resting_state_plan():
     # if 'ga' in user_ns:
     #     yield from user_ns['ga'].alloff_plan()
     yield from dcm.kill_plan()
-    yield from mv(user_ns['dcm_bragg'].clear_enc_lss, 1)
+    yield from mv(dcm.bragg.clear_enc_lss, 1)
     user_ns['m2_bender'].kill()
     dcm.mode = 'fixed'
-    kafka_message({'resting_state': True,})
+    kafka.message({'resting_state': True,})
     #user_ns['RE'].msg_hook = BMM_msg_hook
     if is_re_worker_active() is False:
         matplotlib.use('Qt5Agg')
@@ -181,7 +181,7 @@ def end_of_macro():
     # if 'ga' in user_ns:
     #     yield from user_ns['ga'].alloff_plan()
     yield from dcm.kill_plan()
-    yield from mv(user_ns['dcm_bragg'].clear_enc_lss, 1)
+    yield from mv(dcm.bragg.clear_enc_lss, 1)
     user_ns['m2_bender'].kill()
     yield from xafs_wheel.recenter()
     dcm.mode = 'fixed'
@@ -189,5 +189,5 @@ def end_of_macro():
     if is_re_worker_active() is False:
         matplotlib.use('Qt5Agg')
     resting_redis()
-    BMM_clear_suspenders()
+    suspenders.clear_suspenders()
 

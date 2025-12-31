@@ -18,15 +18,16 @@ from pathlib import Path
 from BMMCommon.tools.misc import now
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
+from BMMCommon.tools.md import proposal_base
 
-from BMM.functions         import present_options, PROMPT, proposal_base
-from BMM.kafka             import kafka_message
+from BMM.functions         import present_options, PROMPT
+from BMM.user_ns.bmm       import kafka
 from BMM.logging           import BMM_log_info, BMM_msg_hook, report
 from BMM.linescans         import linescan, prepare_alignment_scan, fetch_peak_position_via_redis
 from BMM.macrobuilder      import BMMMacroBuilder
 from BMM.modes             import get_mode
 from BMM.resting_state     import resting_state_plan
-from BMM.suspenders        import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
+#from BMM.suspenders        import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.xafs_functions    import conventional_grid
 from BMM.user_ns.dwelltime import _locked_dwell_time
 
@@ -35,7 +36,8 @@ from BMMCommon.tools.periodictable import PERIODIC_TABLE, edge_energy
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
-from BMM.user_ns.motors  import xafs_garot, xafs_pitch, xafs_x, xafs_y
+from BMM.user_ns.motors     import xafs_garot, xafs_pitch, xafs_x, xafs_y
+from BMM.user_ns.suspenders import suspenders
 
 class GlancingAngle(Device):
     '''A class capturing the movement and control of the glancing angle
@@ -194,14 +196,14 @@ class GlancingAngle(Device):
     def align_pitch(self, force=False):
         '''Find the peak of xafs_pitch scan against It. Plot the
         result. Move to the peak.'''
-        kafka_message({'close': 'last'})
+        kafka.message({'close': 'last'})
         motor = user_ns['xafs_pitch']
         yield from prepare_alignment_scan()
         uid = yield from linescan(motor, 'it', -2.5, 2.5, 51, dopluck=False, force=force)
-        kafka_message({'close': 'last'})
+        kafka.message({'close': 'last'})
 
         
-        kafka_message({'peakfit'    : True,
+        kafka.message({'peakfit'    : True,
                        'uid'        : 'last',
                        'motor_name' : motor.name,
                        'signal'     : 'It',
@@ -230,7 +232,7 @@ class GlancingAngle(Device):
         # signal = table['It']/table['I0']
         # target = signal.idxmax()
         # yield from mv(xafs_pitch, pitch[target])
-        # kafka_message({'glancing_angle' : 'pitch',
+        # kafka.message({'glancing_angle' : 'pitch',
         #                'motor'          : 'xafs_pitch',
         #                'center'         : pitch[target],
         #                'amplitude'      : signal.max(),
@@ -244,15 +246,15 @@ class GlancingAngle(Device):
     def align_linear(self, force=False, drop=None):
         '''Fit an error function to the linear scan against It. Plot the
         result. Move to the centroid of the error function.'''
-        kafka_message({'close': 'last'})
+        kafka.message({'close': 'last'})
         if self.orientation == 'parallel':
             motor = user_ns['xafs_liny']
         else:
             motor = user_ns['xafs_linx']
         yield from prepare_alignment_scan()
         uid = yield from linescan(motor, 'it', -2.3, 2.3, 51, dopluck=False)
-        kafka_message({'close': 'last'})
-        kafka_message({'stepfit'    : True,
+        kafka.message({'close': 'last'})
+        kafka.message({'stepfit'    : True,
                        'uid'        : 'last',
                        'motor_name' : motor.name,
                        'signal'     : 'It',
@@ -279,7 +281,7 @@ class GlancingAngle(Device):
         # whisper(out.fit_report(min_correl=0))
         # target = out.params['center'].value
         # yield from mv(motor, target)
-        # kafka_message({'glancing_angle' : 'linear',
+        # kafka.message({'glancing_angle' : 'linear',
         #                'motor'          : motor.name,
         #                'center'         : target,
         #                'amplitude'      : out.params['amplitude'].value,
@@ -294,7 +296,7 @@ class GlancingAngle(Device):
 
 
     def align_fluo(self, force=False):
-        kafka_message({'close': 'last'})
+        kafka.message({'close': 'last'})
         BMMuser = user_ns['BMMuser']
         yield from prepare_alignment_scan()
         if self.orientation == 'parallel':
@@ -302,8 +304,8 @@ class GlancingAngle(Device):
         else:
             motor = user_ns['xafs_linx']
         uid = yield from linescan(motor, 'xs', -1.8, 1.8, 51, dopluck=False, force=force, stack=False)
-        kafka_message({'close': 'last'})
-        kafka_message({'peakfit'    : True,
+        kafka.message({'close': 'last'})
+        kafka.message({'peakfit'    : True,
                        'uid'        : 'last',
                        'motor_name' : motor.name,
                        'signal'     : 'If',
@@ -340,7 +342,7 @@ class GlancingAngle(Device):
         # #    com = int(center_of_mass(signal)[0])+1
         # #    centroid = yy[com]
         # yield from mv(motor, centroid)
-        # kafka_message({'glancing_angle' : 'fluo',
+        # kafka.message({'glancing_angle' : 'fluo',
         #                'motor'          : motor.name,
         #                'center'         : centroid,
         #                'amplitude'      : signal.max(),
@@ -397,9 +399,9 @@ class GlancingAngle(Device):
 
             report(f'Auto-aligning glancing angle stage, spinner {self.current()}', level='bold', slack=True)
 
-            BMM_suspenders()
+            suspenders.set_suspenders()
             self.alignment_filename = os.path.join(proposal_base(), 'snapshots', f'spinner{self.current()}-alignment-{now()}.png')
-            kafka_message({'glancing_angle' : 'start',
+            kafka.message({'glancing_angle' : 'start',
                            'filename' : self.alignment_filename})
 
             ## first pass in transmission
@@ -412,13 +414,13 @@ class GlancingAngle(Device):
             yield from self.align_linear(drop=drop)
             #self.y_uid = user_ns['db'].v2[-1].metadata['start']['uid'] 
             yield from sleep(1)
-            kafka_message({'close': 'all'})
+            kafka.message({'close': 'all'})
 
             ## for realsies Y in pitch
             yield from self.align_pitch()
             #self.pitch_uid = user_ns['db'].v2[-1].metadata['start']['uid'] 
             yield from sleep(1)
-            kafka_message({'close': 'all'})
+            kafka.message({'close': 'all'})
 
             ## record the flat position
             if self.orientation == 'parallel':
@@ -436,8 +438,8 @@ class GlancingAngle(Device):
         def cleanup_plan():
             yield from mv(_locked_dwell_time, 0.5)
             yield from resting_state_plan()
-            kafka_message({'close': 'all'})
-            kafka_message({'glancing_angle' : 'stop'})
+            kafka.message({'close': 'all'})
+            kafka.message({'glancing_angle' : 'stop'})
             self.y_uid     = user_ns['rkvs'].get('BMM:ga:xy_uid').decode('utf-8')
             self.pitch_uid = user_ns['rkvs'].get('BMM:ga:pitch_uid').decode('utf-8')
             self.f_uid     = user_ns['rkvs'].get('BMM:ga:fluo_uid').decode('utf-8')
@@ -445,7 +447,7 @@ class GlancingAngle(Device):
         user_ns['RE'].msg_hook = None
         yield from finalize_wrapper(main_plan(pitch, drop), cleanup_plan())
         user_ns['RE'].msg_hook = BMM_msg_hook
-        BMM_clear_suspenders()
+        suspenders.clear_suspenders()
  
 
 
@@ -681,7 +683,7 @@ class GlancingAngleMacroBuilder(BMMMacroBuilder):
         if self.close_shutters:
             self.content += self.tab +  'if not dryrun:\n'
             self.content += self.tab +  '    BMMuser.running_macro = False\n'
-            self.content += self.tab +  '    BMM_clear_suspenders()\n'
+            self.content += self.tab +  '    suspenders.clear_suspenders()\n'
             self.content += self.tab +  '    yield from shb.close_plan()\n'
 
             

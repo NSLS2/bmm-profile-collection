@@ -13,6 +13,9 @@ from bluesky.plan_stubs import mv, mvr
 # basic Bluesky/Ophyd/Databroker functionality, deal with QS vs. bsui
 from .base import *
 
+# kafka worker (this is imported early -- MANY things rely on talking via kafka)
+from .kafka import kafka
+
 # define/initialize BMMuser, define ROI object
 from .bmm import *
 
@@ -44,6 +47,9 @@ from .detectors import *
 # valves, temperatures, water flow, etc
 from .utilities import *
 
+# suspenders (this must be imported before bmm_end, which imports all the various experimental plans)
+from .suspenders import suspenders
+
 # everything else, read comments in that file
 from .bmm_end import *
 
@@ -57,7 +63,7 @@ if not is_re_worker_active():
     #warnings.filterwarnings("ignore", module='databroker.mongo_normalized')
 
 
-from BMM.user_ns.bmm import whoami
+#from BMM.user_ns.bmm import whoami
 if BMMuser.trigger is True:     # provide feedback if importing persistent user information 
     if BMMuser.element is not None and with_xspress3 is True: # make sure Xspress3 is configured to measure from the correct ROI
         show_edges()

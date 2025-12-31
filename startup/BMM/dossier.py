@@ -15,9 +15,9 @@ from larch.io import create_athena
 from PIL import Image
 
 from BMMCommon.tools.messages import error_msg, bold_msg, whisper
+from BMMCommon.tools.md       import proposal_base
 
-from BMM.functions         import proposal_base
-from BMM.kafka             import kafka_message
+from BMM.user_ns.bmm       import kafka
 from BMM.logging           import report
 from BMM.modes             import get_mode, describe_mode
 
@@ -191,12 +191,12 @@ class DossierTools():
             yield from mv(xs.cam.acquire_time, 1)
             self.xrfuid = yield from count([xs], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata XRF'})
 
-        kafka_message({'xrf' : 'plot',
+        kafka.message({'xrf' : 'plot',
                        'uid' : self.xrfuid,
                        'add' : False,
                        'filename' : self.xrfsnap,
                        'post' : BMMuser.post_xrf, })
-        kafka_message({'xrf' : 'write',
+        kafka.message({'xrf' : 'write',
                        'uid' : self.xrfuid,
                        'filename' : self.xrffile, })
 
@@ -229,12 +229,12 @@ class DossierTools():
             bold_msg('XAS webcam snapshot')
             webuid = yield from count([xascam], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
             self.websnap, self.webuid = websnap, webuid
-            kafka_message({'copy': True,
+            kafka.message({'copy': True,
                            'uuid': webuid,
                            'target': os.path.join(proposal_base(), 'snapshots', websnap), })
 
             if BMMuser.post_webcam:
-                kafka_message({'echoslack': True,
+                kafka.message({'echoslack': True,
                                'img': os.path.join(proposal_base(), 'snapshots', websnap)})
 
         ### --- analog camera using redgo dongle ------------------------------------------
@@ -255,11 +255,11 @@ class DossierTools():
             whisper('The error text above saying "Error opening file for output:"')
             whisper('happens every time and does not indicate a problem of any sort.\n')
             self.anasnap, self.anauid = anasnap, anauid
-            kafka_message({'copy': True,
+            kafka.message({'copy': True,
                            'file': localfile,
                            'target': os.path.join(proposal_base(), 'snapshots', anasnap), })
             if BMMuser.post_anacam:
-                kafka_message({'echoslack': True,
+                kafka.message({'echoslack': True,
                                'img': os.path.join(proposal_base(), 'snapshots', anasnap)})
 
             
@@ -274,11 +274,11 @@ class DossierTools():
                                                               # this is a throwaway image in hopes of capturing a good one
             usb1uid = yield from count([usb1], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
             self.usb1snap, self.usb1uid = usb1snap, usb1uid
-            kafka_message({'copy': True,
+            kafka.message({'copy': True,
                            'uuid': usb1uid,
                            'target': os.path.join(proposal_base(), 'snapshots', usb1snap), })
             if BMMuser.post_usbcam1:
-                kafka_message({'echoslack': True,
+                kafka.message({'echoslack': True,
                                'img': os.path.join(proposal_base(), 'snapshots', usb1snap)})
 
         ### --- USB camera #2 --------------------------------------------------------------
@@ -290,11 +290,11 @@ class DossierTools():
             bold_msg('USB camera #2 snapshot')
             usb2uid = yield from count([usb2], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
             self.usb2snap, self.usb2uid = usb2snap, usb2uid
-            kafka_message({'copy': True,
+            kafka.message({'copy': True,
                            'uuid': usb2uid,
                            'target': os.path.join(proposal_base(), 'snapshots', usb2snap), })
             if BMMuser.post_usbcam2:
-                kafka_message({'echoslack': True,
+                kafka.message({'echoslack': True,
                                'img': os.path.join(proposal_base(), 'snapshots', usb2snap)})
        
         ### --- capture metadata for dossier -----------------------------------------------

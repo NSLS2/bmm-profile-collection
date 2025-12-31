@@ -210,7 +210,7 @@ class GridMacroBuilder(BMMMacroBuilder):
         if self.close_shutters:
             self.content += self.tab + 'if not dryrun:\n'
             self.content += self.tab + '    BMMuser.running_macro = False\n'
-            self.content += self.tab + '    BMM_clear_suspenders()\n'
+            self.content += self.tab + '    suspenders.clear_suspenders()\n'
             self.content += self.tab + '    yield from shb.close_plan()\n'
 
     def dossier_entry(self):

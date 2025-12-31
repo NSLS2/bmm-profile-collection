@@ -11,7 +11,6 @@ if not os.environ.get('AZURE_TESTING'):
 else:
     redis_host = '127.0.0.1'
 
-
 class NoRedis():
     def set(self, thing, otherthing):
         return None
@@ -32,6 +31,7 @@ SECRET_FILES = ('slack_secret', 'image_uploader_token', 'bmmbot_secret')
 REDISVAR="BMM:scan:type"
 ###################################################################
 
+print(f'Connecting to redis at {redis_host}')
 rkvs.set('BMM:scan:type', 'idle')
 
 def rkvs_keys(printed=True):

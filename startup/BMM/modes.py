@@ -10,17 +10,20 @@ from BMMCommon.optics.dcm_parameters import approximate_pitch
 
 from BMM.exceptions    import ChangeModeException
 from BMM.functions     import PROMPT
-from BMM.kafka         import kafka_message
 from BMM.linescans     import rocking_curve, slit_height, mirror_pitch, wiggle_bct
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
 from BMM.motor_status  import motor_status
 from BMM.resting_state import resting_state_plan
-from BMM.suspenders    import BMM_clear_to_start
+#from BMM.suspenders    import BMM_clear_to_start
+
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
-from BMM.user_ns.base   import profile_configuration
+from BMM.user_ns.base       import profile_configuration
+from BMM.user_ns.bmm        import kafka
+from BMM.user_ns.dcm        import dcm
+from BMM.user_ns.suspenders import suspenders
 
 
 MODEDATA = None
@@ -83,9 +86,9 @@ def motors_in_position(mode=None):
 
 def pds_motors_ready():
     m3, m2, m2_bender, dm3_bct = user_ns['m3'], user_ns['m2'], user_ns['m2_bender'], user_ns['dm3_bct']
-    dcm_pitch, dcm_roll, dcm_perp, dcm_roll, dcm_bragg = user_ns["dcm_pitch"], user_ns["dcm_roll"], user_ns["dcm_perp"], user_ns["dcm_roll"], user_ns["dcm_bragg"]
+    #dcm_pitch, dcm_roll, dcm_perp, dcm_roll, dcm_bragg = user_ns["dcm_pitch"], user_ns["dcm_roll"], user_ns["dcm_perp"], user_ns["dcm_roll"], user_ns["dcm_bragg"]
     mcs8_motors = [m3.xu, m3.xd, m3.yu, m3.ydo, m3.ydi, m2.xu, m2.xd, m2.yu, m2.ydo, m2.ydi, m2_bender,
-                   dcm_pitch, dcm_roll, dcm_perp, dcm_roll, dcm_bragg, dm3_bct]
+                   dcm.pitch, dcm.roll, dcm.perp, dcm.roll, dcm.bragg, dm3.bct]
 
     count = 0
     for m in mcs8_motors:
@@ -123,9 +126,9 @@ def pds_motors_ready():
 #            user_ns['ks'].cycle('m3')
 
 #        # problem_is_dcm = False
-#        # dcm_pitch, dcm_roll, dcm_perp = user_ns['dcm_pitch'], user_ns['dcm_roll'], user_ns['dcm_perp']
-#        # dcm_para, dcm_bragg = user_ns['dcm_para'], user_ns['dcm_bragg']
-#        # for m in (dcm_pitch, dcm_roll, dcm_perp, dcm_para, dcm_bragg):
+#        # dcm.pitch, dcm.roll, dcm.perp = user_ns['dcm_pitch'], user_ns['dcm_roll'], user_ns['dcm_perp']
+#        # dcm.para, dcm.bragg = user_ns['dcm_para'], user_ns['dcm_bragg']
+#        # for m in (dcm.pitch, dcm.roll, dcm.perp, dcm.para, dcm.bragg):
 #        #     if m.amfe.get() or m.amfae.get():
 #        #         problem_is_dcm = True
 #        # if problem_is_dcm is True:
@@ -233,7 +236,7 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
      BMMuser, RE, dcm, dm3_bct, slits3 = user_ns['BMMuser'], user_ns['RE'], user_ns['dcm'], user_ns['dm3_bct'], user_ns['slits3']
      xafs_table, m3, m2, m2_bender = user_ns['xafs_table'], user_ns['m3'], user_ns['m2'], user_ns['m2_bender']
      m2_xu, m2_xd = user_ns['m2_xu'], user_ns['m2_xd']
-     dcm_bragg, dcm_roll, xafs_ref, xafs_refx = user_ns['dcm_bragg'], user_ns['dcm_roll'], user_ns['xafs_ref'], user_ns['xafs_refx']
+     #dcm_bragg, dcm_roll, xafs_ref, xafs_refx = user_ns['dcm_bragg'], user_ns['dcm_roll'], user_ns['xafs_ref'], user_ns['xafs_refx']
      if mode is None:
           print('No mode specified')
           return(yield from null())
@@ -347,7 +350,7 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
           #xafs_refx.user_setpoint.set(ring) # ick!!!
 
      if edge is not None:
-          dcm_bragg.clear_encoder_loss()
+          dcm.bragg.clear_encoder_loss()
           base.extend([dcm.energy, edge])
 
      
@@ -390,11 +393,11 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
      report(f'Moving from mode {current_mode} to mode {mode}', slack=True)
 
      if mode == 'XRD':
-          print('For XRD mode, move to old (pre 4/2025) position for dcm_roll.')
-          yield from mv(dcm_roll, -4.5608)
+          print('For XRD mode, move to old (pre 4/2025) position for dcm.roll.')
+          yield from mv(dcm.roll, -4.5608)
      else:
-          print('For all XAS modes, move to new (post 4/2025) position for dcm_roll.')
-          yield from  mv(dcm_roll, profile_configuration.getfloat('dcm', f'roll_{dcm._crystal}'))
+          print('For all XAS modes, move to new (post 4/2025) position for dcm.roll.')
+          yield from  mv(dcm.roll, profile_configuration.getfloat('dcm', f'roll_{dcm._crystal}'))
           
      if mode in ('D', 'E', 'F') and user_ns['slits3'].vsize.position < 0.4:
           print('Slit height appears to be set for focused beam.  Opening slits.')
@@ -604,14 +607,14 @@ def change_xtals(xtal=None):
           print('No crystal set specified')
           return(yield from null())
 
-     (ok, text) = BMM_clear_to_start()
+     (ok, text) = suspenders.clear_to_start()
      if ok == 0:
           error_msg(text)
           yield from null()
           return
 
      BMMuser, RE, dcm, dm3_bct = user_ns['BMMuser'], user_ns['RE'], user_ns['dcm'], user_ns['dm3_bct']
-     dcm_pitch, dcm_roll, dcm_x = user_ns['dcm_pitch'], user_ns['dcm_roll'], user_ns['dcm_x']
+     #dcm_pitch, dcm_roll, dcm_x = user_ns['dcm_pitch'], user_ns['dcm_roll'], user_ns['dcm_x']
      
      if '111' in xtal:
           xtal = 'Si(111)'
@@ -659,44 +662,44 @@ def change_xtals(xtal=None):
 
      RE.msg_hook = None
      BMM_log_info('Moving to the %s crystals' % xtal)
-     #yield from mv(dcm_pitch.kill_cmd, 1)
-     #yield from mv(dcm_roll.kill_cmd, 1)
+     #yield from mv(dcm.pitch.kill_cmd, 1)
+     #yield from mv(dcm.roll.kill_cmd, 1)
      yield from dcm.kill_plan()
      yield from sleep(1.0) 
      if xtal == 'Si(111)':
-          yield from mv(dcm_pitch, 4.3,
-                        dcm_roll,  profile_configuration.getfloat('dcm', 'roll_111'),
-                        dcm_x,     0.5    )
+          yield from mv(dcm.pitch, 4.3,
+                        dcm.roll,  profile_configuration.getfloat('dcm', 'roll_111'),
+                        dcm.x,     0.5    )
           #dcm._crystal = '111'
           dcm.set_crystal('111')  # set d-spacing and bragg offset
      elif xtal == 'Si(311)':
-          yield from mv(dcm_pitch, 2.28,
-                        dcm_roll,  profile_configuration.getfloat('dcm', 'roll_311'),
-                        dcm_x,     65.3    )
+          yield from mv(dcm.pitch, 2.28,
+                        dcm.roll,  profile_configuration.getfloat('dcm', 'roll_311'),
+                        dcm.x,     65.3    )
           #dcm._crystal = '311'
           dcm.set_crystal('311')  # set d-spacing and bragg offset
           
      yield from sleep(1.0) 
      yield from dcm.kill_plan()
-     #yield from mv(dcm_roll.kill_cmd, 1)
+     #yield from mv(dcm.roll.kill_cmd, 1)
 
      print('Returning to %.1f eV' % current_energy)
      yield from mv(dcm.energy, current_energy)
 
      print('Performing a rocking curve scan')
-     yield from mv(dcm_pitch.kill_cmd, 1)
-     yield from mv(dcm_pitch, approximate_pitch(current_energy, xtal=dcm._crystal))
+     yield from mv(dcm.pitch.kill_cmd, 1)
+     yield from mv(dcm.pitch, approximate_pitch(current_energy, xtal=dcm._crystal))
      yield from sleep(1)
-     yield from mv(dcm_pitch.kill_cmd, 1)
+     yield from mv(dcm.pitch.kill_cmd, 1)
      yield from rocking_curve()
      yield from sleep(1.0)
-     yield from mv(dcm_pitch.kill_cmd, 1)
-     kafka_message({'close': 'line'})
+     yield from mv(dcm.pitch.kill_cmd, 1)
+     kafka.message({'close': 'line'})
      #yield from slit_height(move=True)
      yield from mirror_pitch(move=True)
      RE.msg_hook = BMM_msg_hook
      BMM_log_info(motor_status())
-     kafka_message({'close': 'line'})
+     kafka.message({'close': 'line'})
      end = time.time()
      print('\n\nTime elapsed: %.1f min' % ((end-start)/60))
      yield from sleep(1.0)

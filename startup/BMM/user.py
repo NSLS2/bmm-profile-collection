@@ -10,6 +10,7 @@ from rich import print as cprint
 #    from start_experiment.start_experiment import start_experiment, validate_proposal
 #except:
 from nslsii.sync_experiment import sync_experiment as start_experiment, validate_proposal
+#print(start_experiment.__globals__['__file__'])
 
 try:
     from bluesky_queueserver import is_re_worker_active
@@ -26,11 +27,12 @@ facility_dict = md = user_ns["RE"].md
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.periodictable import edge_energy
 import BMMCommon.tools.md
+from BMMCommon.tools.md import proposal_base
 
-from BMM.functions import BMM_STAFF, LUSTRE_XAS, LUSTRE_DATA_ROOT, proposal_base
-from BMM.workspace import rkvs
-from BMM.kafka     import kafka_message, file_exists
-from BMM.logging   import BMM_user_log, BMM_unset_user_log, report
+from BMM.functions   import BMM_STAFF, LUSTRE_XAS, LUSTRE_DATA_ROOT
+from BMM.workspace   import rkvs
+from BMM.user_ns.bmm import kafka
+from BMM.logging     import BMM_user_log, BMM_unset_user_log, report
 
 from BMM.user_ns.base import startup_dir, profile_configuration
 
@@ -514,7 +516,7 @@ class BMM_User(Borg):
 
     def kafka_establish_folder(self, i, text, folder):
         base = os.path.join('/nsls2', 'data3', 'bmm', 'proposals', facility_dict['cycle'], facility_dict['data_session'])
-        kafka_message({'mkdir': os.path.join(base, folder)}) 
+        kafka.message({'mkdir': os.path.join(base, folder)}) 
         self.print_verb_message(i, 'Verifed', text, '', folder)
         return('Verified')
         
@@ -528,7 +530,7 @@ class BMM_User(Borg):
             dst = os.path.join(dst, "templates")
             wsp = os.path.join(self.workspace, "templates")
 
-        kafka_message({'copy' : True, 'file': src, 'target': dst})
+        kafka.message({'copy' : True, 'file': src, 'target': dst})
         shutil.copyfile(src, os.path.join(wsp, fname))
         verb, pad = 'Copied', ' '
         self.print_verb_message(i, verb, text, pad, dst)
@@ -599,10 +601,10 @@ class BMM_User(Borg):
 
         for f in ('manifest.tmpl', 'logo.png', 'message.png', 'plot.png', 'camera.png', 'blank.png',
                   'style.css', 'trac.css', 'messagelog.css'):
-            kafka_message({'copy': True,
+            kafka.message({'copy': True,
                            'file': os.path.join(startup_dir, 'dossier', f),
                            'target': os.path.join(base, 'dossier'), })
-        kafka_message({'touch': os.path.join(base, 'dossier', 'MANIFEST')})
+        kafka.message({'touch': os.path.join(base, 'dossier', 'MANIFEST')})
         print('    copied html generation files, touched MANIFEST')
         self.kafka_establish_folder(0,    'templates folder', templatefolder)
         self.establish_folder(0,         'templates folder', os.path.join(self.workspace, templatefolder))
@@ -629,7 +631,7 @@ class BMM_User(Borg):
         else:
             verb, pad = 'Found', '  '
         self.print_verb_message(step, verb, 'XAFS INI file', pad, scanini)
-        kafka_message({'copy': True,
+        kafka.message({'copy': True,
                        'file': scanini,
                        'target': os.path.join(base, "templates")})
 
@@ -645,7 +647,7 @@ class BMM_User(Borg):
         else:
             verb, pad = 'Found', '  '
         self.print_verb_message(0, verb, 'raster INI file', pad, scanini)
-        kafka_message({'copy': True,
+        kafka.message({'copy': True,
                        'file': scanini,
                        'target': os.path.join(base, "templates")})
 
@@ -660,7 +662,7 @@ class BMM_User(Borg):
             verb, pad = 'Copied', ' '
         else:
             verb, pad = 'Found', '  '
-        kafka_message({'copy': True,
+        kafka.message({'copy': True,
                        'file': scanini,
                        'target': os.path.join(base, "templates")})
                       
@@ -702,7 +704,7 @@ class BMM_User(Borg):
         else:
             verb, pad = 'Found', '  '
         self.print_verb_message(0, verb, 'macro template', pad, macropy)
-        kafka_message({'copy': True,
+        kafka.message({'copy': True,
                        'file': macropy,
                        'target': os.path.join(base, "templates")})
 
@@ -791,16 +793,14 @@ class BMM_User(Borg):
         ## NSLS-II start experiment infrastructure
         ## this prefix needs to be the same (but without the dash) as the call to RedisJSONDict in user_ns/base.py
         if not is_re_worker_active():  # want to not do this when starting QS environment
+            print('\t\t\tCalling sync_experiment')
             start_experiment(gup, 'bmm', verbose=False, prefix='xas')
-            # sync_experiment(gup, 'bmm', verbose=False, prefix='xas')
         
         if md['data_session'] in ('pass-301027', 'pass-317886'):  # PU proposal numbers of history
             self.experimenters = 'Bruce Ravel'
         else:
             self.experimenters = ", ".join(list((f"{x['first_name']} {x['last_name']}" for x in validate_proposal(f'pass-{gup}', 'bmm')['users'])))
         
-
-            
         lustre_root = os.path.join(LUSTRE_DATA_ROOT, f'{self.cycle}', f'pass-{gup}')
         # if not os.path.isdir(lustre_root):
         #     os.makedirs(lustre_root)
@@ -815,7 +815,6 @@ class BMM_User(Borg):
             local_folder = os.path.join(os.getenv('HOME'), 'Data', 'Visitors', name, date)
         self.name = name
         self.date = date
-
 
         if name in BMM_STAFF:
             user_folder = os.path.join(os.getenv('HOME'), 'Data', 'Staff', name)
@@ -832,15 +831,17 @@ class BMM_User(Borg):
         self.workspace = user_workspace
 
         self.new_experiment(lustre_root, saf=saf, gup=gup, name=name)
+
         try:
             # direct Slack messages to new proposal channel
             self.bmmbot.refresh_channel()
-            kafka_message({'refresh_slack': True})  # do the same in the Kafka workers
+            kafka.message({'refresh_slack': True})  # do the same in the Kafka workers
         except:
             # at startup, this attribute won't yet exist, but will get
             # set correctly later in the startup process
             pass
-        if file_exists(folder=proposal_base(), filename='.introduction_made', number=False) is False:
+
+        if kafka.file_exists(folder=proposal_base(), filename='.introduction_made', number=False) is False:
             text = f'''Welcome to the Slack channel for your beamtime at BMM!
  
 :speech_balloon: Use this channel for chat.
@@ -849,13 +850,14 @@ class BMM_User(Borg):
 BMM data access: https://nsls2.github.io/bmm-beamline-manual/data.html
 Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{gup}`'''
             #self.bmmbot.chat_and_pin(text)
-            #kafka_message({'touch': os.path.join(proposal_base(), '.introduction_made')})
+            #kafka.message({'touch': os.path.join(proposal_base(), '.introduction_made')})
 
         # preserve BMMuser state to a json string #
         self.prev_fig = None
         self.prev_ax  = None
         self.fix()
         self.state_to_redis(filename=os.path.join(self.workspace, '.BMMuser'), prefix=' >> ')
+        print('\n\t\t\tNew BMM experiment started')
 
         jsonfile = os.path.join(os.environ['HOME'], 'Data', '.user.json')
         if os.path.isfile(jsonfile):
@@ -876,7 +878,7 @@ Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{g
 
         ## update detectors, etc. that rely upon BMMCommon.tools.md to know the current value of RE.md
         BMMCommon.tools.md.common_md = user_ns['RE'].md
-
+ 
     def start_experiment_from_serialization(self):
         '''In the situation where bsui needs to be stopped (or crashes) before
         an experiment is properly ended using the end_experiment()

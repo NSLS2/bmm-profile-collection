@@ -46,7 +46,7 @@ md = user_ns["RE"].md
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.periodictable import Z_number, edge_number
 
-from BMM.kafka         import kafka_message
+from BMM.user_ns.bmm  import kafka
 
 from BMM.user_ns.base import startup_dir, profile_configuration
         
@@ -393,7 +393,7 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
         '''This reloads the rois.json file and resets all uses of that information.
         '''
         self.set_rois()
-        kafka_message({'reset_rois': True})
+        kafka.message({'reset_rois': True})
         print('Reloaded rois.json and reset ROI values.')
         
     def measure_roi(self):
@@ -587,7 +587,7 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
         
         '''
         if uid is not None:
-            kafka_message({'xrf': 'plot', 'uid': uid, 'add': add, 'only': only})
+            kafka.message({'xrf': 'plot', 'uid': uid, 'add': add, 'only': only})
         else:
             dcm, BMMuser = user_ns['dcm'], user_ns['BMMuser']
             plt.clf()

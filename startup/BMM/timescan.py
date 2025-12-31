@@ -25,16 +25,17 @@ from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
 from BMM.dossier       import DossierTools
 from BMM.functions     import present_options, plotting_mode
 from BMM.functions     import PROMPT
-from BMM.kafka         import kafka_message, file_exists
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
 from BMM.metadata      import bmm_metadata, display_XDI_metadata, metadata_at_this_moment
 from BMM.resting_state import resting_state, resting_state_plan
-from BMM.suspenders    import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
+#from BMM.suspenders    import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.xafs          import scan_metadata
 
-from BMM.user_ns.base      import bmm_catalog
-from BMM.user_ns.detectors import quadem1, ic0, ic1, ic2, xs, xs1, xs4, xs7, ION_CHAMBERS
-from BMM.user_ns.dwelltime import _locked_dwell_time, use_7element, use_4element, use_1element
+from BMM.user_ns.base       import bmm_catalog
+from BMM.user_ns.bmm        import kafka
+from BMM.user_ns.detectors  import quadem1, ic0, ic1, ic2, xs, xs1, xs4, xs7, ION_CHAMBERS
+from BMM.user_ns.dwelltime  import _locked_dwell_time, use_7element, use_4element, use_1element
+from BMM.user_ns.suspenders import suspenders
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
@@ -87,7 +88,7 @@ def timescan(detector, readings, dwell, delay, outfile=None, force=False, md={})
     ######################################################################
 
     if force is False:
-        (ok, text) = BMM_clear_to_start()
+        (ok, text) = suspenders.clear_to_start()
         if ok is False:
             error_msg(text)
             yield from null()
@@ -140,13 +141,13 @@ def timescan(detector, readings, dwell, delay, outfile=None, force=False, md={})
     rkvs.set('BMM:scan:starttime', str(datetime.datetime.timestamp(datetime.datetime.now())))
     rkvs.set('BMM:scan:estimated', 0)
 
-    kafka_message({'timescan': 'start',
+    kafka.message({'timescan': 'start',
                    'detector' : detector,})
 
     
     uid = yield from count_scan(dets, readings, delay, md)
 
-    kafka_message({'timescan': 'stop',
+    kafka.message({'timescan': 'stop',
                    'fname' : outfile,
                    'uid' : uid, })
     
@@ -174,7 +175,7 @@ def ts2dat(datafile, key):
     -------
     >>> ts2dat('/path/to/myfile.dat', '42447313-46a5-42ef-bf8a-46fedc2c2bd1')
     '''
-    kafka_message({'seadxdi': True, 'uid': key, 'filename': datafile})
+    kafka.message({'seadxdi': True, 'uid': key, 'filename': datafile})
     bold_msg('wrote timescan to %s' % datafile)
 
 
@@ -197,7 +198,7 @@ def sead(inifile=None, force=False, **kwargs):
 
 
         # if force is False:
-        #     (ok, ctstext) = BMM_clear_to_start()
+        #     (ok, ctstext) = suspenders.clear_to_start()
         #     if ok is False:
         #         error_msg(ctstext)
         #         yield from null()
@@ -242,7 +243,7 @@ def sead(inifile=None, force=False, **kwargs):
             error_msg('%s already exists!  Bailing out....' % outfile)
             return(yield from null())
 
-        kafka_message({'dossier': 'start', 'stub': p['filename']})
+        kafka.message({'dossier': 'start', 'stub': p['filename']})
         rid = str(uuid.uuid4())[:8]
         report(f'== starting single energy absorption detection scan', level='bold', slack=True, rid=rid)
 
@@ -353,7 +354,7 @@ def sead(inifile=None, force=False, **kwargs):
 
         ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
         ## engage suspenders right before starting measurement
-        if not force: BMM_suspenders()
+        if not force: suspenders.set_suspenders()
 
         ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
         ## perform the actual time scan
@@ -366,17 +367,17 @@ def sead(inifile=None, force=False, **kwargs):
         if p['shutter'] is True:
             yield from shb.close_plan()
 
-        kafka_message({'seadxdi': True, 'uid' : seaduid, 'filename': outfile})
-        kafka_message({'dossier' : 'set',
+        kafka.message({'seadxdi': True, 'uid' : seaduid, 'filename': outfile})
+        kafka.message({'dossier' : 'set',
                        'rid'     : rid,
                        'folder'  : BMMuser.folder,
                        'uidlist' : [seaduid,],
                        })
-        kafka_message({'dossier' : 'sead', })
+        kafka.message({'dossier' : 'sead', })
                    
     def cleanup_plan():
         print('Cleaning up after single energy absorption detection measurement')
-        BMM_clear_suspenders()
+        suspenders.clear_suspenders()
         how = 'finished  :tada:'
         try:
             if 'primary' not in bmm_catalog[-1].metadata['stop']['num_events']:

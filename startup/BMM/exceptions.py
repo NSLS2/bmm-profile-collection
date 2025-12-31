@@ -1,6 +1,6 @@
 
 class FailedDCMParaException(Exception):
-    '''Raise this Exception when dcm_para fails to arrive in position.'''
+    '''Raise this Exception when dcm.para fails to arrive in position.'''
 
 
 class ArrivedInModeException(Exception):

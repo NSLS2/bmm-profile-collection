@@ -9,7 +9,7 @@ from BMM.user_ns.detectors   import quadem1
 from BMM.user_ns.metadata    import ring
 from BMM.user_ns.instruments import bmps, idps
 from BMM.functions import PROMPT
-from BMM.kafka import kafka_message
+from BMM.user_ns.bmm        import kafka
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
@@ -46,11 +46,11 @@ def beamdown_message():
 *************************************************************
 ''')
     #print(beam_dump_screen_message)
-    kafka_message({'echoslack': True, 'text': ':skull_and_crossbones: Beam has dumped! :skull_and_crossbones:'})
+    kafka.message({'echoslack': True, 'text': ':skull_and_crossbones: Beam has dumped! :skull_and_crossbones:'})
     #post_to_slack(':skull_and_crossbones: Beam has dumped! :skull_and_crossbones:')
     yield from null()
 def beamup_message():
-    kafka_message({'echoslack': True, 'text': ':sunrise: Beam has returned! :sunrise:'})
+    kafka.message({'echoslack': True, 'text': ':sunrise: Beam has returned! :sunrise:'})
     #post_to_slack(':sunrise: Beam has returned! :sunrise:')
     yield from null()
 
@@ -92,12 +92,12 @@ from bluesky.plan_stubs import null
 
 def tell_slack_shb_closed():
     print(beam_dump_screen_message)
-    kafka_message({'echoslack': True, 'text': 'B shutter closed'})
+    kafka.message({'echoslack': True, 'text': 'B shutter closed'})
     #post_to_slack('B shutter closed')
     yield from null()
 def tell_slack_shb_opened():
     #print('triggering opened message')
-    kafka_message({'echoslack': True, 'text': 'B shutter opened'})
+    kafka.message({'echoslack': True, 'text': 'B shutter opened'})
     #post_to_slack('B shutter opened')
     yield from null() 
 try:

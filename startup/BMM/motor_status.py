@@ -52,7 +52,7 @@ def motor_status():
     text += '      Bragg = %8.5f   2nd Xtal Perp  = %7.4f   Para = %8.4f\n' % \
             (user_ns['dcm'].bragg.user_readback.get(), user_ns['dcm'].perp.user_readback.get(), user_ns['dcm'].para.user_readback.get())
     text += '                                  Pitch = %7.4f   Roll = %8.4f\n\n' % \
-            (user_ns['dcm_pitch'].user_readback.get(), user_ns['dcm_roll'].user_readback.get())
+            (user_ns['dcm'].pitch.user_readback.get(), user_ns['dcm'].roll.user_readback.get())
 
     text += ' M2\n      vertical = %7.3f mm            YU  = %7.3f mm\n' % (md[user_ns['m2'].vertical.name], md[user_ns['m2'].yu.name])
     text += '      lateral  = %7.3f mm            YDO = %7.3f mm\n'      % (md[user_ns['m2'].lateral.name],  md[user_ns['m2'].ydo.name])

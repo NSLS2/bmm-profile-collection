@@ -10,6 +10,7 @@ from BMM.modes import MODEDATA
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
+from BMM.user_ns.dcm import dcm
 
 # for use in queue server
 def move(motor, absolute_position):
@@ -30,10 +31,10 @@ def tune_plan(step=0):
     '''
     Tune 2nd crystal pitch from a plan.  Argument is a value for the step, so a relative motion.
     '''
-    yield from mv(dcm_pitch.kill_cmd, 1)
-    yield from mvr(dcm_pitch, step)
+    yield from mv(dcm.pitch.kill_cmd, 1)
+    yield from mvr(dcm.pitch, step)
     yield from sleep(1.0)
-    yield from mv(dcm_pitch.kill_cmd, 1)
+    yield from mv(dcm.pitch.kill_cmd, 1)
 def tune_up():
     yield from tune_plan(step=TUNE_STEP)
 def tune_down():
@@ -43,11 +44,10 @@ def tune(step=0):
     '''
     Tune 2nd crystal pitch from the command line.  Argument is a value for the step, so a relative motion.
     '''
-    dcm_pitch = user_ns['dcm_pitch']
-    dcm_pitch.kill_cmd.put(1)
-    dcm_pitch.user_setpoint.put(dcm_pitch.user_readback.get() + step)
+    dcm.pitch.kill_cmd.put(1)
+    dcm.pitch.user_setpoint.put(dcm_pitch.user_readback.get() + step)
     time.sleep(2.0)
-    dcm_pitch.kill_cmd.put(1)
+    dcm.pitch.kill_cmd.put(1)
 def tu():
     tune(step=TUNE_STEP)
 def td():

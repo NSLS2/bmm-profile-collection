@@ -7,7 +7,7 @@ from bluesky.plan_stubs import sleep, mv, mvr, null
 from numpy import pi, sin, cos, arcsin
 from rich import print as cprint
 
-from BMM.motors    import FMBOEpicsMotor, VacuumEpicsMotor, DeadbandEpicsMotor, BMMDeadBandMotor
+from BMM.motors    import FMBOEpicsMotor, VacuumEpicsMotor, DeadbandEpicsMotor, BMMDeadBandMotor, XAFSEpicsMotor
 
 from BMMCommon.tools.physics  import *  # HBARC ktoe etok KTOE e2l
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
@@ -19,7 +19,8 @@ user_ns = vars(user_ns_module)
 
 from BMM.user_ns.base   import profile_configuration
 from BMM.user_ns.bmm    import BMMuser
-from BMM.user_ns.dcm    import *
+#from BMM.user_ns.dcm    import dcm_bragg, dcm_para, dcm_perp, dcm_pitch, dcm_roll, dcm_x
+
 
 # PV for clearing encoder signal loss
 # XF:06BMA-OP{Mono:DCM1-Ax:Bragg}Mtr_ENC_LSS_CLR_CMD.PROC
@@ -32,6 +33,12 @@ class DCM(PseudoPositioner):
         self.mode    = mode
         self.suppress_channel_cut = False
         #self.prompt  = True
+
+        self.pitch = VacuumEpicsMotor('XF:06BMA-OP{Mono:DCM1-Ax:P2}Mtr',  name='dcm_pitch')
+        self.roll  = VacuumEpicsMotor('XF:06BMA-OP{Mono:DCM1-Ax:R2}Mtr',  name='dcm_roll')
+        self.x     = XAFSEpicsMotor('XF:06BMA-OP{Mono:DCM1-Ax:X}Mtr',     name='dcm_x')
+        self._y    = XAFSEpicsMotor('XF:06BMA-OP{Mono:DCM1-Ax:Y}Mtr',     name='dcm_y')
+        
         super().__init__(*args, **kwargs)
 
     @property
@@ -67,8 +74,8 @@ class DCM(PseudoPositioner):
              '2nd Xtal Perp',  self.perp.user_readback.get(),
              'Para',  self.para.user_readback.get())
         text += "                                      %s = %7.4f   %s = %8.4f" %\
-            ('Pitch', user_ns['dcm_pitch'].user_readback.get(),
-             'Roll',  user_ns['dcm_roll'].user_readback.get())
+            ('Pitch', self.pitch.user_readback.get(),
+             'Roll',  self.roll.user_readback.get())
         #text += "                             %s = %7.4f   %s = %8.4f" %\
         #    ('2nd Xtal pitch', self.pitch.user_readback.get(),
         #     '2nd Xtal roll',  self.roll.user_readback.get())
@@ -78,47 +85,46 @@ class DCM(PseudoPositioner):
 
     def restore(self):
         self.mode = 'fixed'
-        if user_ns['dcm_x'].user_readback.get() < 10:
+        if self.x.user_readback.get() < 10:
             self._crystal = '111'
-        elif user_ns['dcm_x'].user_readback.get() > 10:
+        elif self.x.user_readback.get() > 10:
             self._crystal = '311'
 
     # The pseudo positioner axes:
     energy = Cpt(PseudoSingle, limits=(2900, 25000))
 
 
-    # The real (or physical) positioners:
+    # The real (or physical) positioners, but only bragg, para, and perp are components, the others are just attributes
     #bragg  = Cpt(XAFSEpicsMotor, 'Bragg}Mtr')
     bragg  = Cpt(BMMDeadBandMotor, 'Bragg}Mtr')
     para   = Cpt(VacuumEpicsMotor, 'Par2}Mtr')
     perp   = Cpt(VacuumEpicsMotor, 'Per2}Mtr')
-    #pitch  = Cpt(VacuumEpicsMotor, 'P2}Mtr')
-    #roll   = Cpt(VacuumEpicsMotor, 'R2}Mtr')
+
 
     def recover(self):
         '''Home and re-position all DCM motors after a power interruption.
         '''
-        user_ns['dcm_bragg'].acceleration.put(BMMuser.acc_fast)
-        user_ns['dcm_para'].velocity.put(0.6)
-        user_ns['dcm_para'].hvel_sp.put(0.4)
-        user_ns['dcm_perp'].velocity.put(0.2)
-        user_ns['dcm_perp'].hvel_sp.put(0.2)
-        user_ns['dcm_x'].velocity.put(0.6)
+        self.bragg.acceleration.put(BMMuser.acc_fast)
+        self.para.velocity.put(0.6)
+        self.para.hvel_sp.put(0.4)
+        self.perp.velocity.put(0.2)
+        self.perp.hvel_sp.put(0.2)
+        self.x.velocity.put(0.6)
         ## initiate homing for Bragg, pitch, roll, para, perp, and x
-        yield from mv(user_ns['dcm_bragg'].home_signal, 1)
-        yield from mv(user_ns['dcm_pitch'].home_signal, 1)
-        yield from mv(user_ns['dcm_roll'].home_signal,  1)
-        yield from mv(user_ns['dcm_para'].home_signal,  1)
-        yield from mv(user_ns['dcm_perp'].home_signal,  1)
-        yield from mv(user_ns['dcm_x'].home_signal,     1)
+        yield from mv(self.bragg.home_signal, 1)
+        yield from mv(self.pitch.home_signal, 1)
+        yield from mv(self.roll.home_signal,  1)
+        yield from mv(self.para.home_signal,  1)
+        yield from mv(self.perp.home_signal,  1)
+        yield from mv(self.x.home_signal,     1)
         yield from sleep(1.0)
         ## wait for them to be homed
         print('Begin homing DCM motors:\n')
-        hvalues = (user_ns['dcm_bragg'].hocpl.get(), user_ns['dcm_pitch'].hocpl.get(), user_ns['dcm_roll'].hocpl.get(), user_ns['dcm_para'].hocpl.get(),
-                   user_ns['dcm_perp'].hocpl.get(), user_ns['dcm_x'].hocpl.get())
+        hvalues = (self.bragg.hocpl.get(), self.pitch.hocpl.get(), self.roll.hocpl.get(), self.para.hocpl.get(),
+                   self.perp.hocpl.get(), self.x.hocpl.get())
         while any(v == 0 for v in hvalues):
-            hvalues = (user_ns['dcm_bragg'].hocpl.get(), user_ns['dcm_pitch'].hocpl.get(), user_ns['dcm_roll'].hocpl.get(), user_ns['dcm_para'].hocpl.get(),
-                       user_ns['dcm_perp'].hocpl.get(), user_ns['dcm_x'].hocpl.get())
+            hvalues = (self.bragg.hocpl.get(), self.pitch.hocpl.get(), self.roll.hocpl.get(), self.para.hocpl.get(),
+                       self.perp.hocpl.get(), self.x.hocpl.get())
             strings = ['Bragg', 'pitch', 'roll', 'para', 'perp', 'x']
             for i,v in enumerate(hvalues):
                 strings[i] = f'[white]{strings[i]}[/white]' if hvalues[i] == 1 else f'[green]{strings[i]}[/green]'
@@ -128,41 +134,40 @@ class DCM(PseudoPositioner):
 
         ## move x into the correct position for Si(111)
         print('\n')
-        yield from mv(user_ns['dcm_x'], 1)
-        yield from mv(user_ns['dcm_x'], 0.45)
+        yield from mv(self.x, 1)
+        yield from mv(self.x, 0.45)
         ## move pitch and roll to the Si(111) positions
         this_energy = self.energy.readback.get()
         yield from self.kill_plan()
-        yield from mv(user_ns['dcm_pitch'], approximate_pitch(this_energy. self._crystal), user_ns['dcm_roll'], profile_configuration.getfloat('dcm', 'roll_111')) # -8.05644)
+        yield from mv(self.pitch, approximate_pitch(this_energy. self._crystal), self.roll, profile_configuration.getfloat('dcm', 'roll_111')) # -8.05644)
         yield from mv(self.energy, this_energy)
         print('DCM is at %.1f eV.  There should be signal in I0.' % self.energy.readback.get())
         yield from sleep(2.0)
         yield from self.kill_plan()
 
     def enable(self):
-        yield from mv(user_ns['dcm_para'].enable_cmd,  1)
-        yield from mv(user_ns['dcm_para'].enable_cmd,  1)
-        yield from mv(user_ns['dcm_para'].enable_cmd,  1)
-        yield from mv(user_ns['dcm_para'].enable_cmd, 1)
-        yield from mv(user_ns['dcm_para'].enable_cmd, 1)
+        yield from mv(self.para.enable_cmd,  1)
+        yield from mv(self.perp.enable_cmd,  1)
+        yield from mv(self.pitch.enable_cmd,  1)
+        yield from mv(self.roll.enable_cmd, 1)
         
     def ena(self):
-        user_ns['dcm_para'].enable()
-        user_ns['dcm_perp'].enable()
-        user_ns['dcm_pitch'].enable()
-        user_ns['dcm_roll'].enable()
+        self.para.enable_cmd.put(1)
+        self.perp.enable_cmd.put(1)
+        self.pitch.enable_cmd.put(1)
+        self.roll.enable_cmd.put(1)
 
     def kill(self):
-        user_ns['dcm_para'].kill_cmd.put(1)
-        user_ns['dcm_perp'].kill_cmd.put(1)
-        user_ns['dcm_pitch'].kill_cmd.put(1)
-        user_ns['dcm_roll'].kill_cmd.put(1)
+        self.para.kill_cmd.put(1)
+        self.perp.kill_cmd.put(1)
+        self.pitch.kill_cmd.put(1)
+        self.roll.kill_cmd.put(1)
 
     def kill_plan(self):
-        yield from mv(user_ns['dcm_para'].kill_cmd,  1)
-        yield from mv(user_ns['dcm_perp'].kill_cmd,  1)
-        yield from mv(user_ns['dcm_pitch'].kill_cmd, 1)
-        yield from mv(user_ns['dcm_roll'].kill_cmd,  1)
+        yield from mv(self.para.kill_cmd,  1)
+        yield from mv(self.perp.kill_cmd,  1)
+        yield from mv(self.pitch.kill_cmd, 1)
+        yield from mv(self.roll.kill_cmd,  1)
 
 
     def set_crystal(self, crystal=None):

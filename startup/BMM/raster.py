@@ -20,23 +20,24 @@ from tiled.client import from_profile
 from BMMCommon.tools.misc   import now
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
+from BMMCommon.tools.md import proposal_base
 
 from BMM.areascan        import areascan
 from BMM.dossier         import DossierTools
 from BMM.functions       import present_options, plotting_mode
-from BMM.functions       import PROMPT, proposal_base
-from BMM.kafka           import kafka_message, close_plots, file_exists
+from BMM.user_ns.bmm     import kafka
 from BMM.logging         import BMM_log_info, BMM_msg_hook, report
 from BMM.metadata        import bmm_metadata, display_XDI_metadata, metadata_at_this_moment
 from BMM.motor_status    import motor_status
 from BMM.resting_state   import resting_state_plan
-from BMM.suspenders      import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
+#from BMM.suspenders      import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
-from BMM.user_ns.base      import bmm_catalog
-from BMM.user_ns.dwelltime import _locked_dwell_time
+from BMM.user_ns.base       import bmm_catalog
+from BMM.user_ns.dwelltime  import _locked_dwell_time
+from BMM.user_ns.suspenders import suspenders
 
 def read_ini(inifile, **kwargs):
 
@@ -281,7 +282,7 @@ def raster(inifile=None, **kwargs):
         if 'force' in kwargs and kwargs['force'] is True:
             (ok, text, force) = (True, '', True)
         else:
-            (ok, text) = BMM_clear_to_start()
+            (ok, text) = suspenders.clear_to_start()
             if ok is False:
                 error_msg('\n'+text)
                 bold_msg('Quitting scan sequence....\n')
@@ -299,13 +300,13 @@ def raster(inifile=None, **kwargs):
             error_msg('\ninifile does not exist\n')
             return(yield from null())
 
-        close_plots()
+        kafka.close_plots()
         rid = str(uuid.uuid4())[:8]
         report(f'== starting raster scan', level='bold', slack=True, rid=rid)
 
         p, f = read_ini(inifile, **kwargs)
-        kafka_message({'dossier': 'start', 'stub': p['filename']})
-        kafka_message({'dossier' : 'set', 'rid': rid})
+        kafka.message({'dossier': 'start', 'stub': p['filename']})
+        kafka.message({'dossier' : 'set', 'rid': rid})
 
         fast  = user_ns[p['fast_motor']]
         slow  = user_ns[p['slow_motor']]
@@ -329,9 +330,9 @@ def raster(inifile=None, **kwargs):
             pngout  = f"{p['filename']}.png"
             basename = p['filename']
             seqnumber = 1
-            if file_exists(filename=pngout, number=False):
+            if kafka.file_exists(filename=pngout, number=False):
                 seqnumber = 2
-                while file_exists(filename=os.path.join(BMMuser.folder, 'maps', f"{p['filename']}-{seqnumber:02d}.png"), number=False):
+                while kafka.file_exists(filename=os.path.join(BMMuser.folder, 'maps', f"{p['filename']}-{seqnumber:02d}.png"), number=False):
                     seqnumber += 1
                 basename = "%s-%2.2d" % (p['filename'],seqnumber)
                 pngout = os.path.join(BMMuser.folder, 'maps', f"{p['filename']}-{seqnumber:02d}.png")
@@ -348,7 +349,6 @@ def raster(inifile=None, **kwargs):
             print(f'Rough time estimate: {minutes} min')
             
             
-            #action = input("\nBegin raster scan? " + PROMPT)
             print()
             action = animated_prompt('Begin raster scan? ' + PROMPTNC)
             if action != '':
@@ -388,7 +388,7 @@ def raster(inifile=None, **kwargs):
                           ththth        = p['ththth'],
         )
         
-        kafka_message({'mkdir': os.path.join(proposal_base(), 'maps')})
+        kafka.message({'mkdir': os.path.join(proposal_base(), 'maps')})
 
             
         #if p['detector'].lower() in ('if', 'xs', 'xs1'):
@@ -432,7 +432,7 @@ def raster(inifile=None, **kwargs):
             pass
         else:
             force = False
-            BMM_suspenders()
+            suspenders.set_suspenders()
         uid = yield from areascan(p['detector'],
                                   slow, p['slow_start'], p['slow_stop'], p['slow_steps'],
                                   fast, p['fast_start'], p['fast_stop'], p['fast_steps'],
@@ -441,17 +441,17 @@ def raster(inifile=None, **kwargs):
         #preserve_data(uid, f'{p["filename"]} {dcm.energy.position} eV', xlsxout, matout)
 
         thisuid = bmm_catalog[-1].metadata['start']['uid']  # not sure why this is necessary....
-        kafka_message({'raster': True, 'uid': thisuid})
+        kafka.message({'raster': True, 'uid': thisuid})
 
-        kafka_message({'dossier' : 'set',
+        kafka.message({'dossier' : 'set',
                        'folder'  : BMMuser.folder,
                        'uidlist' : [thisuid,],
                        })
-        kafka_message({'dossier' : 'raster', })
+        kafka.message({'dossier' : 'raster', })
 
         
     def cleanup_plan(inifile):
-        BMM_clear_suspenders()
+        suspenders.clear_suspenders()
         try:
             print('Finishing up after a raster scan')
             yield from mv(dossier.fast, float(dossier.fast_init), dossier.slow, float(dossier.slow_init))

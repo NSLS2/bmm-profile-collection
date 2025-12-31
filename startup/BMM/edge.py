@@ -18,8 +18,8 @@ from BMMCommon.optics.dcm_parameters import approximate_pitch
 from BMM.exceptions    import FailedDCMParaException, ArrivedInModeException
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
 from BMM.functions     import PROMPT
-from BMM.suspenders    import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
-from BMM.kafka         import kafka_message
+#from BMM.suspenders    import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
+from BMM.user_ns.bmm   import kafka
 from BMM.wheel         import show_reference_wheel
 from BMM.modes         import change_mode, get_mode, pds_motors_ready, MODEDATA
 from BMM.linescans     import rocking_curve, slit_height, mirror_pitch, wiggle_bct, hcenter
@@ -33,11 +33,12 @@ from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
 from BMM.user_ns.bmm         import BMMuser
-from BMM.user_ns.dcm         import *
+from BMM.user_ns.dcm         import dcm
 from BMM.user_ns.detectors   import xs, xs1, xs4, xs7
 from BMM.user_ns.dwelltime   import with_xspress3
 from BMM.user_ns.instruments import * #kill_mirror_jacks, m3_ydi, m3_ydo, m3_yu, m3_xd, m3_xu, ks, m2_ydi, m2_ydo, m2_yu
 from BMM.user_ns.motors      import *
+from BMM.user_ns.suspenders  import suspenders
 
 def show_edges():
     show_reference_wheel()
@@ -262,7 +263,7 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
                 user_ns['ks'].cycle('m3')
 
             problem_is_dcm = False
-            for m in (dcm_pitch, dcm_roll, dcm_perp, dcm_roll, dcm_bragg):
+            for m in (dcm.pitch, dcm.roll, dcm.perp, dcm.roll, dcm.bragg):
                 if m.amfe.get() or m.amfae.get():
                     problem_is_dcm = True
             if problem_is_dcm is True:
@@ -292,7 +293,7 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
             return
 
             
-        (ok, text) = BMM_clear_to_start()
+        (ok, text) = suspeders.clear_to_start()
         if ok is False:
             cprint(f'\n[red1]{text}[/red1]\n[yellow2]Quitting change_edge() plan....[/yellow2]\n')
             yield from null()
@@ -320,7 +321,7 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
             yield from null()
             return
 
-        BMM_suspenders()
+        suspenders.set_suspenders()
 
         if energy > 8000:
             mode = 'A' if focus else 'D'
@@ -363,7 +364,7 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
         cprint(f'   [spring_green4]optimizing slits height[/spring_green4]: [white]{str(slits)}[/white]')
         cprint(f'   [spring_green4]optimizing mirror pitch[/spring_green4]: [white]{str(mirror)}[/white]\n')
 
-        ## prepare for the possibility of dcm_para stalling while moving to new energy
+        ## prepare for the possibility of dcm.para stalling while moving to new energy
         if energy+target > dcm.energy.position:
             parity = -1
         else:
@@ -438,18 +439,18 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
             no_ref = True
 
         yield from wiggle_bct()
-        yield from mv(dcm_bragg.acceleration, BMMuser.acc_slow)
+        yield from mv(dcm.bragg.acceleration, BMMuser.acc_slow)
         yield from change_mode(mode=mode, prompt=False, edge=energy+target, reference=el, bender=bender, insist=insist, no_ref=no_ref)
-        yield from mv(dcm_bragg.acceleration, BMMuser.acc_fast)
+        yield from mv(dcm.bragg.acceleration, BMMuser.acc_fast)
 
-        ## verify that dcm_para has arrived in place.  if not, presume
+        ## verify that dcm.para has arrived in place.  if not, presume
         ## that it has stalled.  back off and try again to move
-        dcm_axes = (user_ns["dcm_pitch"], user_ns["dcm_roll"], user_ns["dcm_perp"], user_ns["dcm_roll"], user_ns["dcm_bragg"])
+        dcm_axes = (dcm.pitch, dcm.roll, dcm.perp, dcm.roll, dcm.bragg)
         (bragg, para, perp) = dcm.motor_positions(energy+target, quiet=True)
         count = 0
-        while abs(dcm_para.position - para) > 0.1:
+        while abs(dcm.para.position - para) > 0.1:
             count = count+1
-            report(':bangbang: dcm_para failed to arrive in position.  Attempting to resolve this problem. :bangbang: ', level='warning', slack=True)
+            report(':bangbang: dcm.para failed to arrive in position.  Attempting to resolve this problem. :bangbang: ', level='warning', slack=True)
             faulted_axes = False
             for m in dcm_axes:
                 if m.amfe.get() or m.amfae.get():
@@ -457,13 +458,13 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
                     faulted_axes = True
             if faulted_axes is True:
                 user_ns['ks'].cycle('dcm')
-            yield from mvr(dcm_para, parity*5)
+            yield from mvr(dcm.para, parity*5)
             yield from mv(dcm.energy, energy+target)
             if count > 5:
-                report(':boom: dcm_para failed to arrive in position.  Unable to resolve this problem. :boom:', level='error', slack=True)
-                raise FailedDCMParaException('dcm_para failed to arrive in position.  Unable to resolve this problem. (in BMM/edge.py)')
+                report(':boom: dcm.para failed to arrive in position.  Unable to resolve this problem. :boom:', level='error', slack=True)
+                raise FailedDCMParaException('dcm.para failed to arrive in position.  Unable to resolve this problem. (in BMM/edge.py)')
         if count > 0:
-            report('Able to successfully resolve the stalling of dcm_para.  :sparkler:', slack=True)
+            report('Able to successfully resolve the stalling of dcm.para.  :sparkler:', slack=True)
 
         if arrived_in_mode(mode=mode) is False:
             print('\n')
@@ -499,13 +500,13 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
         ############################
         if tune:
             print('Optimizing rocking curve...')
-            yield from mv(dcm_pitch.kill_cmd, 1)
-            yield from mv(dcm_pitch, approximate_pitch(energy+target, xtal=dcm._crystal))
+            yield from mv(dcm.pitch.kill_cmd, 1)
+            yield from mv(dcm.pitch, approximate_pitch(energy+target, xtal=dcm._crystal))
             yield from sleep(1)
-            yield from mv(dcm_pitch.kill_cmd, 1)
+            yield from mv(dcm.pitch.kill_cmd, 1)
             yield from sleep(1)
             yield from rocking_curve()
-            kafka_message({'close': 'last'})
+            kafka.message({'close': 'last'})
 
         ##########################
         # run a slit height scan #
@@ -516,7 +517,7 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
             if ok is False:
                 return(yield from null())
             yield from slit_height(move=True)
-            kafka_message({'close': 'last'})
+            kafka.message({'close': 'last'})
 
         ###########################
         # run a mirror pitch scan #
@@ -528,13 +529,13 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
                 mirror = 'm3'
             print(f'Optimizing {mirror} pitch...')
             yield from mirror_pitch(mirror=mirror, move=True)
-            kafka_message({'close': 'last'})
+            kafka.message({'close': 'last'})
 
 
         if mode in ('A', 'B', 'C'):
             if no_hslits is False:
                 yield from hcenter(move=True)
-                kafka_message({'close': 'last'})
+                kafka.message({'close': 'last'})
             
         ##################################
         # set reference and roi channels #
@@ -564,7 +565,7 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
         #     print('  * You may need to verify the slit position:  RE(slit_height())')
 
     def cleanup_plan():
-        BMM_clear_suspenders()
+        suspenders.clear_suspenders()
         #yield from dcm.kill_plan()
         yield from mv(m2_bender.kill_cmd, 1)
         BMMuser.state_to_redis(filename=os.path.join(BMMuser.workspace, '.BMMuser'), prefix='')
@@ -576,8 +577,8 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
     user_ns['RE'].msg_hook = None
     start = time.time()
     m3, m2, m2_bender, dm3_bct = user_ns['m3'], user_ns['m2'], user_ns['m2_bender'], user_ns['dm3_bct']
-    dcm_pitch, dcm_perp = user_ns["dcm_pitch"], user_ns["dcm_perp"]
-    dcm_roll, dcm_bragg = user_ns["dcm_roll"], user_ns["dcm_bragg"]
+    #dcm_pitch, dcm_perp = user_ns["dcm_pitch"], user_ns["dcm_perp"]
+    #dcm_roll, dcm_bragg = user_ns["dcm_roll"], user_ns["dcm_bragg"]
     dm3_bct, slits3 = user_ns['dm3_bct'], user_ns['slits3']
     yield from finalize_wrapper(main_plan(el, focus, edge, energy, slits, mirror, tune, target, xrd, bender, insist, no_ref, no_hslits),
                                 cleanup_plan())

@@ -29,20 +29,20 @@ from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
 
 from BMM.resting_state import resting_state_plan
-from BMM.suspenders    import BMM_clear_to_start, BMM_clear_suspenders
-from BMM.kafka         import kafka_message
+#from BMM.suspenders    import BMM_clear_to_start, BMM_clear_suspenders
 from BMM.logging       import BMM_log_info, BMM_msg_hook
 from BMM.functions     import clean_img, PROMPT
 from BMM.workspace     import rkvs
 
 from BMM.user_ns.base        import WORKSPACE
-from BMM.user_ns.bmm         import BMMuser
-from BMM.user_ns.dcm         import *
+from BMM.user_ns.bmm         import BMMuser, kafka
+from BMM.user_ns.dcm         import dcm
 from BMM.user_ns.detectors   import quadem1, ic0, ic1, ic2, xs, xs1, xs4, xs7, pilatus, eiger, dante, ION_CHAMBERS
 from BMM.user_ns.dwelltime   import _locked_dwell_time, with_xspress3, with_quadem, with_struck, use_7element, use_4element, use_1element
 from BMM.user_ns.dwelltime   import with_ic0, with_ic1, with_ic2
 from BMM.user_ns.instruments import m2, m3, slits3, xafs_wheel
 from BMM.user_ns.motors      import *
+from BMM.user_ns.suspenders  import suspenders
 
 def get_mode():
     if m2.vertical.readback.get() < 0: # this is a focused mode
@@ -272,9 +272,8 @@ def slit_height(start=-1.5, stop=1.5, nsteps=31, move=False, force=False, slp=1.
     choice : str 
         'peak' or 'com' (center of mass) ['peak']
     '''
-
     def main_plan(start, stop, nsteps, move, slp, force):
-        (ok, text) = BMM_clear_to_start()
+        (ok, text) = suspenders.clear_to_start()
         if force is False and ok is False:
             error_msg(text)
             yield from null()
@@ -304,20 +303,20 @@ def slit_height(start=-1.5, stop=1.5, nsteps=31, move=False, force=False, slp=1.
             if ok is False:
                 return(yield from null())
 
-            kafka_message({'linescan': 'start',
+            kafka.message({'linescan': 'start',
                            'motor' : motor.name,
                            'detector' : 'I0',
                            'fluo_detector': None,})
             uid = yield from rel_scan([*ION_CHAMBERS], motor, start, stop, nsteps, md={'plan_name' : f'rel_scan linescan {motor.name} I0'})
-            kafka_message({'linescan': 'stop',})
+            kafka.message({'linescan': 'stop',})
             
             user_ns['RE'].msg_hook = BMM_msg_hook
             BMM_log_info(f'slit height scan: {line1}\tuid = {uid}')
             if motor.amfe.get() or motor.amfae.get():
                 user_ns['ks'].cycle('dm3')
             if move:
-                kafka_message({'close': 'last'})
-                kafka_message({'peakfit' : True,
+                kafka.message({'close': 'last'})
+                kafka.message({'peakfit' : True,
                                'uid' : uid,
                                'motor_name' : motor.name,
                                'signal' : 'I0',
@@ -396,7 +395,7 @@ def mirror_pitch(start=None, stop=None, nsteps=41, mirror='m3', move=False, forc
     '''
 
     def main_plan(start, stop, nsteps, move, force):
-        (ok, text) = BMM_clear_to_start()
+        (ok, text) = suspenders.clear_to_start()
         if force is False and ok is False:
             error_msg(text)
             yield from null()
@@ -419,18 +418,18 @@ def mirror_pitch(start=None, stop=None, nsteps=41, mirror='m3', move=False, forc
             #rkvs.set('BMM:peakposition', -10_000_000_000.1)
             #yield from mv(_locked_dwell_time, 0.1)
 
-            kafka_message({'linescan': 'start',
+            kafka.message({'linescan': 'start',
                            'motor' : motor.name,
                            'detector' : 'I0',
                            'fluo_detector': None,})
             uid = yield from rel_scan([*ION_CHAMBERS], motor, start, stop, nsteps, md={'plan_name' : f'rel_scan linescan {motor.name} I0'})
-            kafka_message({'linescan': 'stop',})
+            kafka.message({'linescan': 'stop',})
             
             user_ns['RE'].msg_hook = BMM_msg_hook
             BMM_log_info(f'mirror pitch scan: {line1}\tuid = {uid}')
             if move:
-                kafka_message({'close': 'last'})
-                kafka_message({'peakfit' : True,
+                kafka.message({'close': 'last'})
+                kafka.message({'peakfit' : True,
                                'uid' : uid,
                                'motor_name' : motor.name,
                                'signal' : 'I0',
@@ -507,7 +506,7 @@ def rocking_curve(start=-0.10, stop=0.10, nsteps=101, detector='I0', choice='pea
 
     '''
     def main_plan(start, stop, nsteps, detector, height):
-        (ok, text) = BMM_clear_to_start()
+        (ok, text) = suspenders.clear_to_start()
         if ok is False:
             error_msg(text)
             yield from null()
@@ -542,14 +541,14 @@ def rocking_curve(start=-0.10, stop=0.10, nsteps=101, detector='I0', choice='pea
             #    yield from mv(slitsg.vsize, 5)
                 
             dets = ION_CHAMBERS.copy()
-            kafka_message({'linescan': 'start',
+            kafka.message({'linescan': 'start',
                            'motor' : motor.name,
                            'detector' : 'I0',
                            'fluo_detector': None,})
             uid = yield from rel_scan(dets, motor, start, stop, nsteps, md={'plan_name' : f'rel_scan linescan {motor.name} I0'})
-            kafka_message({'linescan': 'stop',})
-            kafka_message({'close': 'last'})
-            kafka_message({'peakfit' : True,
+            kafka.message({'linescan': 'stop',})
+            kafka.message({'close': 'last'})
+            kafka.message({'peakfit' : True,
                            'uid' : uid,
                            'motor_name' : 'dcm_pitch',
                            'signal' : 'I0',
@@ -593,7 +592,7 @@ def rocking_curve(start=-0.10, stop=0.10, nsteps=101, detector='I0', choice='pea
         countdown(BMMuser.macro_sleep)
         return(yield from null())
     ######################################################################
-    motor = dcm_pitch
+    motor = dcm.pitch
     slit_height = slits3.vsize.readback.get()
     # try:
     #     gonio_slit_height = slitsg.vsize.readback.get()
@@ -631,7 +630,7 @@ def hcenter(start=-1, stop=1, nsteps=41, move=False, force=False, choice='peak')
     '''
 
     def main_plan(start, stop, nsteps, move, force):
-        (ok, text) = BMM_clear_to_start()
+        (ok, text) = suspenders.clear_to_start()
         if force is False and ok is False:
             error_msg(text)
             yield from null()
@@ -649,18 +648,18 @@ def hcenter(start=-1, stop=1, nsteps=41, move=False, force=False, choice='peak')
             #rkvs.set('BMM:peakposition', -10_000_000_000.1)
             #yield from mv(_locked_dwell_time, 0.1)
 
-            kafka_message({'linescan': 'start',
+            kafka.message({'linescan': 'start',
                            'motor' : motor.name,
                            'detector' : 'I0',
                            'fluo_detector': None,})
             uid = yield from rel_scan([*ION_CHAMBERS], motor, start, stop, nsteps, md={'plan_name' : f'rel_scan linescan {motor.name} I0'})
-            kafka_message({'linescan': 'stop',})
+            kafka.message({'linescan': 'stop',})
             
             user_ns['RE'].msg_hook = BMM_msg_hook
             BMM_log_info(f'hcenter scan: {line1}\tuid = {uid}')
             if move:
-                kafka_message({'close': 'last'})
-                kafka_message({'peakfit' : True,
+                kafka.message({'close': 'last'})
+                kafka.message({'peakfit' : True,
                                'uid' : uid,
                                'motor_name' : motor.name,
                                'signal' : 'I0',
@@ -717,17 +716,17 @@ def find_slot(shape='slot'):
             if action[0].lower() == 'n' or action[0].lower() == 'q':
                 return(yield from null())
     
-    kafka_message({'align_wheel' : 'start'})
+    kafka.message({'align_wheel' : 'start'})
     if shape == 'circle':
         yield from rectangle_scan(motor=xafs_y, start=-10,  stop=10,  nsteps=31, detector='It', chore='find_slot')
     else:
         yield from rectangle_scan(motor=xafs_y, start=-3,  stop=3,  nsteps=31, detector='It', chore='find_slot')
-    #kafka_message({'close': 'all'})
+    #kafka.message({'close': 'all'})
     yield from rectangle_scan(motor=xafs_x, start=-10, stop=10, nsteps=31, detector='It', chore='find_slot')
                               #md={'BMM_kafka': {'hint': f'rectanglescan It xafs_x notnegated'}})
     user_ns['xafs_wheel'].in_place()
-    kafka_message({'close': 'all'})
-    kafka_message({'align_wheel' : 'stop'})
+    kafka.message({'close': 'all'})
+    kafka.message({'align_wheel' : 'stop'})
     bold_msg(f'Found slot at (X,Y) = ({xafs_x.position}, {xafs_y.position})')
 
 def find_reference():
@@ -743,7 +742,7 @@ def rectangle_scan(motor=None, start=-20, stop=20, nsteps=41, detector='It',
 
     def main_plan(motor, start, stop, nsteps, detector, negate, filename, move, force, chore, md):
         if force is False:
-            (ok, text) = BMM_clear_to_start()
+            (ok, text) = suspenders.clear_to_start()
             if ok is False:
                 error_msg(text)
                 yield from null()
@@ -790,16 +789,16 @@ def rectangle_scan(motor=None, start=-20, stop=20, nsteps=41, detector='It',
             elif detector == 'Dante':
                 fluo_detector = 'Dante'
             yield from prepare_alignment_scan()
-            kafka_message({'linescan'      : 'start',
+            kafka.message({'linescan'      : 'start',
                            'motor'         : motor.name,
                            'detector'      : detector.capitalize(),
                            'fluo_detector' : fluo_detector,})
             uid = yield from rel_scan(dets, motor, start, stop, nsteps, md={**md, 'plan_name' : f'rel_scan linescan {motor.name} I0'})
-            kafka_message({'linescan': 'stop',})
+            kafka.message({'linescan': 'stop',})
 
             if move is True:
-                kafka_message({'close': 'all'})
-                kafka_message({'rectanglefit' : True,
+                kafka.message({'close': 'all'})
+                kafka.message({'rectanglefit' : True,
                                'uid'          : uid,
                                'signal'       : detector.capitalize(),
                                'motor_name'   : motor.name })
@@ -833,7 +832,7 @@ def peak_scan(motor=None, start=-20, stop=20, nsteps=41, detector='It', find='ma
     ''' Deprecated. needs to be updated for the kafka/data seucrity agent_change_edge
     '''
     def main_plan(motor, start, stop, nsteps, detector, find, how, filename):
-        (ok, text) = BMM_clear_to_start()
+        (ok, text) = suspenders.clear_to_start()
         if ok is False:
             error_msg(text)
             yield from null()
@@ -873,14 +872,14 @@ def peak_scan(motor=None, start=-20, stop=20, nsteps=41, detector='It', find='ma
                 fluo_detector = user_ns['xs'].name
             elif detector == 'Dante':
                 fluo_detector = 'Dante'
-            kafka_message({'linescan': 'start',
+            kafka.message({'linescan': 'start',
                            'motor' : motor.name,
                            'detector' : detector.capitalize(),
                            'fluo_detector': fluo_detector,})
             uid = yield from rel_scan(dets, motor, start, stop, nsteps, md={'plan_name' : f'rel_scan linescan {motor.name} I0'})
-            kafka_message({'linescan': 'stop',})
+            kafka.message({'linescan': 'stop',})
 
-            kafka_message({'stepfit'    : True,
+            kafka.message({'stepfit'    : True,
                            'uid'        : uid,
                            'motor_name' : motor.name,
                            'signal'     : 'It',
@@ -972,7 +971,7 @@ def linescan(detector, axis, start, stop, nsteps, dopluck=True, force=False, sta
 
     def main_plan(detector, axis, start, stop, nsteps, dopluck, force, stack, md):
         if force is False:
-            (ok, text) = BMM_clear_to_start()
+            (ok, text) = suspenders.clear_to_start()
             if ok is False:
                 error_msg(text)
                 yield from null()
@@ -1095,7 +1094,7 @@ def linescan(detector, axis, start, stop, nsteps, dopluck=True, force=False, sta
             value = thismotor.user_readback.get()
         line1 = '%s, %s, %.3f, %.3f, %d -- starting at %.3f\n' % \
                 (thismotor.name, detector, start, stop, nsteps, value)
-        ##BMM_suspenders()            # engage suspenders
+        ##suspenders.set_suspenders()            # engage suspenders
 
         thismd = dict()
         thismd['XDI'] = dict()
@@ -1115,7 +1114,7 @@ def linescan(detector, axis, start, stop, nsteps, dopluck=True, force=False, sta
         elif detector == 'Dante':
             fluo_detector = 'Dante'
             
-        kafka_message({'linescan': 'start',
+        kafka.message({'linescan': 'start',
                        'motor' : thismotor.name,
                        'detector' : detector,
                        'fluo_detector': fluo_detector,
@@ -1130,7 +1129,7 @@ def linescan(detector, axis, start, stop, nsteps, dopluck=True, force=False, sta
             return uid
 
         thisuid = yield from scan_xafs_motor(dets, thismotor, start, stop, nsteps)
-        kafka_message({'linescan': 'stop',})
+        kafka.message({'linescan': 'stop',})
         
         BMM_log_info(f'linescan: {line1}\tuid = {thisuid}')
         if dopluck is True:
@@ -1188,5 +1187,5 @@ def ls2dat(datafile, key):
 
     '''
     #BMMuser, db = user_ns['BMMuser'], user_ns['db']
-    kafka_message({'lsxdi': True, 'uid': key, 'filename': datafile})
+    kafka.message({'lsxdi': True, 'uid': key, 'filename': datafile})
     bold_msg('wrote linescan to %s' % datafile)

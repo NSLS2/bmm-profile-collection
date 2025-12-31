@@ -18,18 +18,19 @@ from BMMCommon.tools.misc     import now, inflect
 from BMMCommon.tools.physics  import *  # HBARC ktoe etok KTOE e2l
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
+from BMMCommon.tools.md import proposal_base
 
 from BMM.dossier         import DossierTools
 from BMM.functions       import present_options, plotting_mode
-from BMM.functions       import PROMPT, DEFAULT_INI, proposal_base
-from BMM.kafka           import kafka_message, close_plots, file_exists
+from BMM.functions       import DEFAULT_INI
+from BMM.user_ns.bmm     import kafka
 from BMM.linescans       import rocking_curve
 from BMM.logging         import BMM_log_info, BMM_msg_hook, report
 from BMM.metadata        import bmm_metadata, display_XDI_metadata, metadata_at_this_moment
 from BMM.modes           import get_mode, describe_mode
 from BMM.motor_status    import motor_status
 from BMM.resting_state   import resting_state_plan
-from BMM.suspenders      import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
+#from BMM.suspenders      import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.xafs_functions  import conventional_grid, sanitize_step_scan_parameters
 
 from BMMCommon.tools.periodictable import edge_energy, Z_number, element_name
@@ -37,9 +38,11 @@ from BMMCommon.tools.periodictable import edge_energy, Z_number, element_name
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
-from BMM.user_ns.base      import bmm_catalog, WORKSPACE
-from BMM.user_ns.dwelltime import _locked_dwell_time, use_7element, use_4element, use_1element
-from BMM.user_ns.detectors import quadem1, xs, xs1, xs4, xs7, ic0, ic1, ic2, pilatus, dante, ION_CHAMBERS
+from BMM.user_ns.base       import bmm_catalog, WORKSPACE
+from BMM.user_ns.dcm        import dcm
+from BMM.user_ns.dwelltime  import _locked_dwell_time, use_7element, use_4element, use_1element
+from BMM.user_ns.detectors  import quadem1, xs, xs1, xs4, xs7, ic0, ic1, ic2, pilatus, dante, ION_CHAMBERS
+from BMM.user_ns.suspenders import suspenders
 
 try:
     from bluesky_queueserver import is_re_worker_active
@@ -84,7 +87,7 @@ def next_index(folder=None, stub=None, maxtries=6, verbose=False):
         return(None)
     rkvs = user_ns['rkvs']
     rkvs.set('BMM:next_index', 'None')
-    kafka_message({'next_index': True, 'folder': folder, 'stub': stub})
+    kafka.message({'next_index': True, 'folder': folder, 'stub': stub})
     time.sleep(1)
     answer = rkvs.get('BMM:next_index').decode('utf8')
     count = 0
@@ -367,9 +370,8 @@ def attain_energy_position(value):
 
     Returns True for success, False for failure
     '''
-    dcm, dcm_bragg = user_ns['dcm'], user_ns['dcm_bragg']
     BMMuser = user_ns['BMMuser']
-    dcm_bragg.clear_encoder_loss()
+    dcm.bragg.clear_encoder_loss()
     yield from mv(dcm.energy, value)
     count = 0
     while abs(dcm.energy.position - value) > 0.2 :
@@ -379,7 +381,7 @@ def attain_energy_position(value):
             yield from null()
             return False
         print('Clearing encoder loss and re-trying movement to pseudo-channel-cut energy...')
-        dcm_bragg.clear_encoder_loss()
+        dcm.bragg.clear_encoder_loss()
         yield from sleep(2)
         yield from mv(dcm.energy, value)
         count = count + 1
@@ -401,19 +403,17 @@ def mono_sanity():
     configuration.
 
     '''
-    dcm   = user_ns['dcm']
-    dcm_x = user_ns['dcm_x']
     msg, isok = '', True
-    if '311' in dcm._crystal and dcm_x.user_readback.get() < 10:
+    if '311' in dcm._crystal and dcm.x.user_readback.get() < 10:
         BMMuser.final_log_entry = False
         msg = 'The DCM is in the 111 position, configured as 311'
         isok = False
-    if '111' in dcm._crystal and dcm_x.user_readback.get() > 10:
+    if '111' in dcm._crystal and dcm.x.user_readback.get() > 10:
         BMMuser.final_log_entry = False
         msg = 'The DCM is in the 311 position, configured as 111'
         isok = False
     if isok is False:
-        msg += '\n\tdcm.x: %.2f mm\t dcm._crystal: %s' % (dcm_x.user_readback.get(), dcm._crystal)
+        msg += '\n\tdcm.x: %.2f mm\t dcm._crystal: %s' % (dcm.x.user_readback.get(), dcm._crystal)
     return(isok, msg)
 
 
@@ -438,7 +438,7 @@ def xas2xdi(datafile, key):
     >>> xas2xdi('/path/to/myfile.xdi', '0783ac3a-658b-44b0-bba5-ed4e0c4e7216')
 
     '''
-    kafka_message({'xasxdi': True, 'uid' : key, 'filename': datafile})
+    kafka.message({'xasxdi': True, 'uid' : key, 'filename': datafile})
     bold_msg('wrote %s' % dfile)
 
 
@@ -476,7 +476,7 @@ def xafs(inifile=None, **kwargs):
         if 'force' in kwargs and kwargs['force'] is True:
             (ok, text) = (True, '')
         else:
-            (ok, text) = BMM_clear_to_start()
+            (ok, text) = suspenders.clear_to_start()
             if ok is False:
                 BMMuser.final_log_entry = False
                 error_msg('\n'+text)
@@ -600,7 +600,7 @@ def xafs(inifile=None, **kwargs):
         if p['usbstick']:
             fname = re.sub(r'[*:?"<>|/\\]', vfatify, fname)
         datafile = os.path.join(p['folder'], fname)
-        if file_exists(filename=fname, start=p['start'], stop=p['start']+p['nscans']):
+        if kafka.file_exists(filename=fname, start=p['start'], stop=p['start']+p['nscans']):
             report(f'{datafile} in range {p["start"]} - {p["start"]+p["nscans"]}: file name conflict!', 'error')
             report('\nOne or more output files already exist!  Quitting scan sequence....\n', 'error')
             BMMuser.final_log_entry = False
@@ -643,7 +643,6 @@ def xafs(inifile=None, **kwargs):
                 else:
                     print(f'\nPseudo-channel-cut energy = {eave:1f}')
 
-            #action = input("\nBegin scan sequence? " + PROMPT)
             print()
             action = animated_prompt('Begin scan sequence? ' + PROMPTNC)
             if action != '':
@@ -666,7 +665,7 @@ def xafs(inifile=None, **kwargs):
             report(f'running rocking curve at pseudo-channel-cut energy {eave:1f} eV', 'bold')
             yield from attain_energy_position(eave)
             yield from rocking_curve()
-            kafka_message({'close': 'last'})
+            kafka.message({'close': 'last'})
             RE.msg_hook = None
         if p['channelcut'] is True:
             yield from attain_energy_position(eave)
@@ -754,7 +753,7 @@ def xafs(inifile=None, **kwargs):
         ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
         ## copy INI file to proposal folder
         if copy_ini is True:
-            kafka_message({'copy' : True, 'file': inifile, 'target': proposal_base()})
+            kafka.message({'copy' : True, 'file': inifile, 'target': proposal_base()})
 
 
         ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
@@ -762,7 +761,7 @@ def xafs(inifile=None, **kwargs):
         if 'force' in kwargs and kwargs['force'] is True:
             pass
         else:
-            BMM_suspenders()
+            suspenders.set_suspenders()
 
         def scan_sequence(clargs): #, noreturn=False):
             ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
@@ -830,10 +829,10 @@ def xafs(inifile=None, **kwargs):
                 
             ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
             ## loop over scan count
-            close_plots()
+            kafka.close_plots()
             rid = str(uuid.uuid4())[:8]
-            kafka_message({'dossier': 'start', 'stub': p['filename']})
-            kafka_message({'dossier': 'set',
+            kafka.message({'dossier': 'start', 'stub': p['filename']})
+            kafka.message({'dossier': 'set',
                            'folder' : BMMuser.folder,
                            'rid'    : rid})
             report(f'"{p["filename"]}", {p["element"]} {p["edge"]} edge, {inflect("scans", p["nscans"])}',
@@ -843,7 +842,7 @@ def xafs(inifile=None, **kwargs):
                 with_yield = True
             else:
                 with_yield = False
-            kafka_message({'xafs_sequence' : 'start',
+            kafka.message({'xafs_sequence' : 'start',
                            'element'       : p["element"],
                            'edge'          : p["edge"],
                            'folder'        : BMMuser.folder,
@@ -865,7 +864,7 @@ def xafs(inifile=None, **kwargs):
                 fluo_detector = 'dante'
             elif plotting_mode(p['mode']) == 'pips':
                 fluo_detector = 'pips'
-            kafka_message({'xafsscan': 'start',
+            kafka.message({'xafsscan': 'start',
                            'element': p["element"],
                            'edge': p["edge"],
                            'mode': plotting_mode(p['mode']),
@@ -879,7 +878,7 @@ def xafs(inifile=None, **kwargs):
                 cnt += 1
                 fname = "%s.%3.3d" % (p['filename'], i)
                 datafile = os.path.join(p['folder'], fname)
-                if file_exists(filename=fname, start=i, stop=i):
+                if kafka.file_exists(filename=fname, start=i, stop=i):
                     ## shouldn't be able to get here, unless a file
                     ## was written since the scan sequence began....
                     report('%s already exists! (How did that happen?) Bailing out....' % (datafile), 'error')
@@ -936,18 +935,18 @@ def xafs(inifile=None, **kwargs):
                     dwelltime_trajectory = cycler(dwell_time, time_grid[::-1])
                     md['Mono']['direction'] = 'backward'
                     yield from attain_energy_position(energy_grid[-1]+5)
-                    #dcm_bragg.clear_encoder_loss()
+                    #dcm.bragg.clear_encoder_loss()
                     #yield from mv(dcm.energy, energy_grid[-1]+5)
                 else:
                     ## if not measuring in both direction, lower acceleration of the mono
                     ## for the rewind, explicitly rewind, then reset for measurement
-                    yield from mv(dcm_bragg.acceleration, BMMuser.acc_slow)
-                    whisper('  Rewinding DCM to %.1f eV with acceleration time = %.2f sec' % (energy_grid[0]-5, dcm_bragg.acceleration.get()))
+                    yield from mv(dcm.bragg.acceleration, BMMuser.acc_slow)
+                    whisper('  Rewinding DCM to %.1f eV with acceleration time = %.2f sec' % (energy_grid[0]-5, dcm.bragg.acceleration.get()))
                     yield from attain_energy_position(energy_grid[0]-5)
-                    #dcm_bragg.clear_encoder_loss()
+                    #dcm.bragg.clear_encoder_loss()
                     #yield from mv(dcm.energy, energy_grid[0]-5)
-                    yield from mv(dcm_bragg.acceleration, BMMuser.acc_fast)
-                    whisper('  Resetting DCM acceleration time to %.2f sec' % dcm_bragg.acceleration.get())
+                    yield from mv(dcm.bragg.acceleration, BMMuser.acc_fast)
+                    whisper('  Resetting DCM acceleration time to %.2f sec' % dcm.bragg.acceleration.get())
 
 
                 if plotting_mode(p['mode']) in ('fluorescence', 'yield', 'pilatus'):
@@ -1001,7 +1000,7 @@ def xafs(inifile=None, **kwargs):
                               'edge': p["edge"],
                               'repetitions': p["nscans"],
                               'count': cnt, }
-                kafka_message({'xafsscan': 'next',
+                kafka.message({'xafsscan': 'next',
                                'count': cnt })
                 if any(md in p['mode'] for md in ('trans', 'ref', 'pips', 'test')):
                     uid = yield from scan_nd([*ION_CHAMBERS], energy_trajectory + dwelltime_trajectory,
@@ -1031,14 +1030,14 @@ def xafs(inifile=None, **kwargs):
                 else:
                     error_msg('No valid plotting mode provided!')
 
-                kafka_message({'xafs_sequence'      :'add',
+                kafka.message({'xafs_sequence'      :'add',
                                'uid'                : uid})
                 
                 if plotting_mode(p['mode']) in ('fluorescence', 'yield', 'pilatus'):  # dante???
                     hdf5_uid = xs.hdf5.file_name.value
                     
                 uidlist.append(uid)
-                kafka_message({'xasxdi': True, 'uid' : uid, 'filename': os.path.basename(datafile)})
+                kafka.message({'xasxdi': True, 'uid' : uid, 'filename': os.path.basename(datafile)})
                 bold_msg('wrote %s' % datafile)
                 if not is_re_worker_active():
                     BMM_log_info(f'energy scan finished, uid = {uid}, scan_id = {bmm_catalog[uid].metadata["start"]["scan_id"]}\ndata file written to {datafile}')
@@ -1067,10 +1066,10 @@ def xafs(inifile=None, **kwargs):
             
             print('Returning to fixed exit mode') #  and returning DCM to %1.f' % eave)
             dcm.mode = 'fixed'
-            #yield from mv(dcm_bragg.acceleration, BMMuser.acc_slow)
-            #dcm_bragg.clear_encoder_loss()
+            #yield from mv(dcm.bragg.acceleration, BMMuser.acc_slow)
+            #dcm.bragg.clear_encoder_loss()
             #yield from mv(dcm.energy, eave)
-            #yield from mv(dcm_bragg.acceleration, BMMuser.acc_fast)
+            #yield from mv(dcm.bragg.acceleration, BMMuser.acc_fast)
 
         ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
         ## execute this scan sequence plan
@@ -1078,7 +1077,7 @@ def xafs(inifile=None, **kwargs):
 
     def cleanup_plan(inifile):
         print('Finishing up after an XAFS scan sequence')
-        BMM_clear_suspenders()
+        suspenders.clear_suspenders()
 
         if not is_re_worker_active():
             how = 'finished  :tada:'
@@ -1098,19 +1097,19 @@ def xafs(inifile=None, **kwargs):
             else:
                 pass
 
-            kafka_message({'dossier' : 'set', 'uidlist' : uidlist, })
+            kafka.message({'dossier' : 'set', 'uidlist' : uidlist, })
             time.sleep(3.0)
-        kafka_message({'dossier' : 'write', })
+        kafka.message({'dossier' : 'write', })
 
         if len(uidlist) > 0:
             basename = rkvs.get('BMM:dossier:basename').decode('utf-8')
             if basename is None:
-                kafka_message({'xafsscan': 'stop', 'filename': None})
+                kafka.message({'xafsscan': 'stop', 'filename': None})
             else:
-                #kafka_message({'xafsscan': 'stop', 'filename': os.path.join(BMMuser.folder, 'snapshots', f'{basename}_liveplot.png')})
-                #kafka_message({'xafs_sequence':'stop', 'filename': os.path.join(BMMuser.folder, 'snapshots', f'{basename}.png')})
-                kafka_message({'xafsscan': 'stop', 'filename': f'snapshots/{basename}_liveplot.png', 'uid': uidlist[0]})
-                kafka_message({'xafs_sequence':'stop', 'filename': f'snapshots/{basename}.png'})
+                #kafka.message({'xafsscan': 'stop', 'filename': os.path.join(BMMuser.folder, 'snapshots', f'{basename}_liveplot.png')})
+                #kafka.message({'xafs_sequence':'stop', 'filename': os.path.join(BMMuser.folder, 'snapshots', f'{basename}.png')})
+                kafka.message({'xafsscan': 'stop', 'filename': f'snapshots/{basename}_liveplot.png', 'uid': uidlist[0]})
+                kafka.message({'xafs_sequence':'stop', 'filename': f'snapshots/{basename}.png'})
                 
         dcm.mode = 'fixed'
         yield from resting_state_plan()
@@ -1119,7 +1118,7 @@ def xafs(inifile=None, **kwargs):
         yield from mv(dcm_roll.kill_cmd, 1)
 
     RE, BMMuser, dcm, dwell_time = user_ns['RE'], user_ns['BMMuser'], user_ns['dcm'], user_ns['dwell_time']
-    dcm_bragg, dcm_pitch, dcm_roll, dcm_x = user_ns['dcm_bragg'], user_ns['dcm_pitch'], user_ns['dcm_roll'], user_ns['dcm_x']
+    ##dcm_bragg, dcm_pitch, dcm_roll, dcm_x = user_ns['dcm_bragg'], user_ns['dcm_pitch'], user_ns['dcm_roll'], user_ns['dcm_x']
     xafs_wheel, ga, linkam, gmb, lakeshore = user_ns['xafs_wheel'], user_ns['ga'], user_ns['linkam'], user_ns['gmb'], user_ns['lakeshore']
     refl = user_ns['refl']
     rkvs = user_ns['rkvs']
@@ -1213,10 +1212,10 @@ def remake_dossier(stub=None, uidlist=None, folder=None):
         first = bmm_catalog[uidlist[0]].metadata['start']['XDI']['_filename']
         stub = os.path.splitext(first)[0]
         
-    kafka_message({'dossier': 'start', 'stub': stub})
-    kafka_message({'dossier': 'set', 'folder': folder, 'rid': str(uuid.uuid4())[:8]})
-    kafka_message({'dossier': 'set', 'uidlist': uidlist})
-    kafka_message({'dossier': 'write'})
+    kafka.message({'dossier': 'start', 'stub': stub})
+    kafka.message({'dossier': 'set', 'folder': folder, 'rid': str(uuid.uuid4())[:8]})
+    kafka.message({'dossier': 'set', 'uidlist': uidlist})
+    kafka.message({'dossier': 'write'})
 
 
     

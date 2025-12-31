@@ -6,9 +6,9 @@ from sympy import geometry
 
 from BMMCommon.tools.messages import whisper
 
-from BMM.kafka         import kafka_message
 from BMM.linescans     import linescan, prepare_alignment_scan, fetch_peak_position_via_redis
 from BMM.resting_state import resting_state_plan
+from BMM.user_ns.bmm   import kafka
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
@@ -88,9 +88,9 @@ class Wafer():
             motor = user_ns['xafs_liny']
         yield from prepare_alignment_scan()
         uid = yield from linescan(motor, 'it', -2, 2, 41, dopluck=False)
-        kafka_message({'close': 'last'})
+        kafka.message({'close': 'last'})
 
-        kafka_message({'stepfit'    : True,
+        kafka.message({'stepfit'    : True,
                        'uid'        : 'last',
                        'motor_name' : motor.name,
                        'signal'     : 'It',
@@ -110,7 +110,7 @@ class Wafer():
         # self.out    = mod.fit(ss, pars, x=array(yy))
         # whisper(self.out.fit_report(min_correl=0))
         # target = self.out.params['center'].value
-        # kafka_message({'wafer'     : 'edge',
+        # kafka.message({'wafer'     : 'edge',
         #                'motor'     : motor.name,
         #                'xaxis'     : list(yy),
         #                'data'      : list(ss),

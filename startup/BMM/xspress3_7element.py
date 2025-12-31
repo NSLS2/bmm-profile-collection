@@ -8,8 +8,6 @@ if sys.version_info[1] == 9:
 else:
     from nslsii.areadetector.xspress3 import build_xspress3_class
 
-#from BMM.xspress3_tools import build_BMM_xspress3_class
-    
 ################################################################################
 # Notes:
 #

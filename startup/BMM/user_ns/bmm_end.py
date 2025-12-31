@@ -9,7 +9,8 @@ import os, textwrap
 
 from BMMCommon.tools.messages import disconnected_msg, error_msg, whisper, verbosebold_msg, bold_msg
 
-from BMM.functions import boxedtext, run_report, proposal_base, bounds
+from BMMCommon.tools.md import proposal_base
+from BMM.functions import boxedtext, run_report, bounds
 from BMM.workspace import rkvs
 
 from BMM import user_ns as user_ns_module
@@ -35,14 +36,17 @@ if profile_configuration.getboolean('miscellaneous', 'set_desc_strings'):
     run_report('\t'+'setting motor description strings')
     set_desc_strings()
 
-run_report('\t'+'suspenders')
-from BMM.suspenders import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
+###### deprecating #####
+#run_report('\t'+'suspenders (old version)')
+#from BMM.suspenders import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
+###### deprecating #####
 
 run_report('\t'+'linescan, rocking curve, slit_height, mirror_pitch, find_slot, pluck')
 from BMM.linescans import linescan, pluck, rocking_curve, slit_height, mirror_pitch, ls2dat, find_slot, rectangle_scan, hcenter
 
-run_report('\t'+'kafka')
-from BMM.kafka import close_line_plots, close_plots, kafka_message, preserve, regenerate_file
+#run_report('\t'+'kafka')
+#from BMM.kafka import close_line_plots, close_plots, kafka_message, preserve, regenerate_file
+
 
 run_report('\t'+'support for wafer samples')
 from BMM.wafer import Wafer
@@ -189,13 +193,13 @@ the templates folder of your data directory.
         wmb.spreadsheet(spreadsheet, sheet, double=True)
 
     rkvs.set('BMM:automation:type', instrument)
-    kafka_message({'copy': True,
+    kafka.message({'copy': True,
                    'file': os.path.join(BMMuser.workspace, spreadsheet),
                    'target': proposal_base(), })
-    kafka_message({'copy': True,
+    kafka.message({'copy': True,
                    'file': os.path.join(BMMuser.workspace, f'{sheet}.ini'),
                    'target': proposal_base(), })
-    kafka_message({'copy': True,
+    kafka.message({'copy': True,
                    'file': os.path.join(BMMuser.workspace, f'{sheet}_macro.py'),
                    'target': proposal_base(), })
 
@@ -475,12 +479,12 @@ def xrf_measurement(stub=None, timestamp=True, post=False, add=False):
     yield from mv(xs.cam.acquire_time, 1)
     uid = yield from count([xs], 1, md = {'plan_name' : 'count xafs_metadata XRF'})
 
-    kafka_message({'xrf' : 'plot',
+    kafka.message({'xrf' : 'plot',
                    'uid' : uid,
                    'add' : add,
                    'filename' : xrfsnap,
                    'post' : post, })
-    kafka_message({'xrf' : 'write',
+    kafka.message({'xrf' : 'write',
                    'uid' : uid,
                    'filename' : xrffile, })
 

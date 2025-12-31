@@ -1,6 +1,7 @@
 import sys
 sys.path.append('/home/xf06bm/.ipython/profile_common/')
 sys.path.append('/home/xf06bm/.local/lib/python3.11/site-packages/')
+#sys.path.insert(0, '/home/xf06bm/git/clones/nslsii/')
 
 from BMM.user_ns import *
 

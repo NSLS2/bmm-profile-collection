@@ -15,16 +15,18 @@ from BMMCommon.optics.dcm_parameters import dcm_parameters
 from BMMCommon.tools.physics  import *  # HBARC ktoe etok KTOE e2l
 
 from BMM.edge           import change_edge
-from BMM.kafka          import kafka_message
 from BMM.logging        import BMM_log_info, BMM_msg_hook, report
 from BMM.xafs           import xafs
 from BMM.resting_state  import resting_state_plan
-from BMM.suspenders     import BMM_clear_to_start
+#from BMM.suspenders     import BMM_clear_to_start
 
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.periodictable  import Z_number
 
-from BMM.user_ns.base   import profile_configuration, reload_profile_configuration
+from BMM.user_ns.base       import profile_configuration, reload_profile_configuration
+from BMM.user_ns.bmm        import kafka
+from BMM.user_ns.dcm        import dcm
+from BMM.user_ns.suspenders import suspenders
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
@@ -43,8 +45,8 @@ reference_position = None # profile_configuration.get('dcm', 'calibration_positi
 
 def calibrate_low_end(mono='111', focus=False):
     '''Step through the lower 5 elements of the mono calibration procedure.'''
-    BMMuser, shb, dcm_pitch = user_ns['BMMuser'], user_ns['shb'], user_ns['dcm_pitch']
-    (ok, text) = BMM_clear_to_start()
+    BMMuser, shb = user_ns['BMMuser'], user_ns['shb']
+    (ok, text) = suspenders.clear_to_start()
     if ok is False:
         error_msg('\n'+text) + bold_msg('Quitting macro....\n')
         return(yield from null())
@@ -69,48 +71,48 @@ def calibrate_low_end(mono='111', focus=False):
             handle.write('thistitle = Si(%s) calibration curve\n' % mono)
             handle.write('reference = Kraft et al, Review of Scientific Instruments 67, 681 (1996)\n')
             handle.write('doi       = https://doi.org/10.1063/1.1146657\n\n')
-            handle.write('##       found, tabulated, found_angle, dcm_pitch\n')
+            handle.write('##       found, tabulated, found_angle, dcm.pitch\n')
             handle.write('[edges]\n')
             handle.flush()
 
 
         if Z_number('Fe') >= startwith:
             yield from change_edge('Fe', target=0, focus=focus)
-            pitch = dcm_pitch.user_readback.get()
+            pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='fecal', mode=reference_position, element='Fe', sample='Fe foil', comment=f'calibrating Si{mono}', copy=False)
-            kafka_message({'close': 'last'})
+            kafka.message({'close': 'last'})
             handle.write('fe = 11111.11,    7110.75,    22222.22,   %.5f\n' % pitch)
             handle.flush()
 
         if Z_number('Co') >= startwith:
             yield from change_edge('Co', target=0, focus=focus)
-            pitch = dcm_pitch.user_readback.get()
+            pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='cocal', mode=reference_position, element='Co', sample='Co foil', comment=f'calibrating Si{mono}', copy=False)
-            kafka_message({'close': 'last'})
+            kafka.message({'close': 'last'})
             handle.write('co = 11111.11,    7708.78,    22222.22,   %.5f\n' % pitch)
             handle.flush()
 
         if Z_number('Ni') >= startwith:
             yield from change_edge('Ni', target=0, focus=focus)
-            pitch = dcm_pitch.user_readback.get()
+            pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='nical', mode=reference_position, element='Ni', sample='Ni foil', comment=f'calibrating Si{mono}', copy=False)
-            kafka_message({'close': 'last'})
+            kafka.message({'close': 'last'})
             handle.write('ni = 11111.11,    8331.49,    22222.22,   %.5f\n' % pitch)
             handle.flush()
 
         if Z_number('Cu') >= startwith:
             yield from change_edge('Cu', target=0, focus=focus)
-            pitch = dcm_pitch.user_readback.get()
+            pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='cucal', mode=reference_position, element='Cu', sample='Cu foil', comment=f'calibrating Si{mono}', copy=False)
-            kafka_message({'close': 'last'})
+            kafka.message({'close': 'last'})
             handle.write('cu = 11111.11,    8980.48,    22222.22,   %.5f\n' % pitch)
             handle.flush()
 
         if Z_number('Zn') >= startwith:
             yield from change_edge('Zn', target=0, focus=focus)
-            pitch = dcm_pitch.user_readback.get()
+            pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='zncal', mode=reference_position, element='Zn', sample='Zn foil', comment=f'calibrating Si{mono}', copy=False)
-            kafka_message({'close': 'last'})
+            kafka.message({'close': 'last'})
             handle.write('zn = 11111.11,    9660.76,    22222.22,   %.5f\n' % pitch)
 
         handle.flush()
@@ -126,7 +128,7 @@ def calibrate_low_end(mono='111', focus=False):
 def calibrate_high_end(mono='111', focus=False):
     '''Step through the upper 5 elements of the mono calibration procedure.'''
     BMMuser, shb, dcm_pitch = user_ns['BMMuser'], user_ns['shb'], user_ns['dcm_pitch']
-    (ok, text) = BMM_clear_to_start()
+    (ok, text) = suspenders.clear_to_start()
     if ok is False:
         error_msg('\n'+text) + bold_msg('Quitting macro....\n')
         return(yield from null())
@@ -143,41 +145,41 @@ def calibrate_high_end(mono='111', focus=False):
 
         if Z_number('Pt') >= startwith:
             yield from change_edge('Pt', target=0, focus=focus)
-            pitch = dcm_pitch.user_readback.get()
+            pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='ptcal', mode=reference_position, element='Pt', edge='L3', sample='Pt foil', comment=f'calibrating Si{mono}', copy=False)
-            kafka_message({'close': 'last'})
+            kafka.message({'close': 'last'})
             handle.write('pt = 11111.11,    11562.76,    22222.22,   %.5f\n' % pitch)
             handle.flush()
 
         if Z_number('Au') >= startwith:
             yield from change_edge('Au', target=0, focus=focus)
-            pitch = dcm_pitch.user_readback.get()
+            pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='aucal', mode=reference_position, element='Au', edge='L3', sample='Au foil', comment=f'calibrating Si{mono}', copy=False)
-            kafka_message({'close': 'last'})
+            kafka.message({'close': 'last'})
             handle.write('au = 11111.11,    11919.70,    22222.22,   %.5f\n' % pitch)
             handle.flush()
 
         if Z_number('Pb') >= startwith:
             yield from change_edge('Pb', target=0, focus=focus)
-            pitch = dcm_pitch.user_readback.get()
+            pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='pbcal', mode=reference_position, element='Pb', edge='L3', sample='Pb foil', comment=f'calibrating Si{mono}', copy=False)
-            kafka_message({'close': 'last'})
+            kafka.message({'close': 'last'})
             handle.write('pb = 11111.11,    13035.07,    22222.22,   %.5f\n' % pitch)
             handle.flush()
 
         if Z_number('Nb') >= startwith:
             yield from change_edge('Nb', target=0, focus=focus)
-            pitch = dcm_pitch.user_readback.get()
+            pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='nbcal', mode=reference_position, element='Nb', sample='Nb foil', comment=f'calibrating Si{mono}', copy=False)
-            kafka_message({'close': 'last'})
+            kafka.message({'close': 'last'})
             handle.write('nb = 11111.11,     18982.97,   22222.22,   %.5f\n' % pitch)
             handle.flush()
 
         if Z_number('Mo') >= startwith:
             yield from change_edge('Mo', target=0, focus=focus)
-            pitch = dcm_pitch.user_readback.get()
+            pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='mocal', mode=reference_position, element='Mo', sample='Mo foil', comment=f'calibrating Si{mono}', copy=False)
-            kafka_message({'close': 'last'})
+            kafka.message({'close': 'last'})
             handle.write('mo = 11111.11,    20000.36,    22222.22,   %.5f\n' % pitch)
 
         handle.flush()
@@ -240,7 +242,7 @@ def calibrate_pitch(mono='111'):
 
     
 def calibrate_mono(mono='111'):
-    BMMuser, shb, dcm, dcm_pitch = user_ns['BMMuser'], user_ns['shb'], user_ns['dcm'], user_ns['dcm_pitch']
+    BMMuser, shb = user_ns['BMMuser'], user_ns['shb']
     BMM_dcm = dcm_parameters()
 
     # read content from INI file
@@ -319,7 +321,7 @@ def calibrate_mono(mono='111'):
         boxedtext(text, title='new values for BMM/dcm_parameters.py', color='green')
 
     ## plot with the kafka consumer
-    kafka_message({'mono_calibration' : True,
+    kafka.message({'mono_calibration' : True,
                    'found'    : found,
                    'ee'       : ee,
                    'tt'       : tt,
