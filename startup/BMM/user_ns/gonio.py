@@ -1,5 +1,5 @@
 
-from BMM.slits import GonioSlits
+from bmm_tools.devices.slits import GonioSlits
 
 ## goniometer table
 # print(f'{TAB}XRD motor group')

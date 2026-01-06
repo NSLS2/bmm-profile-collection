@@ -224,11 +224,11 @@ from BMM.mirror_trigonometry import move_m2, move_m3
                                
 
 run_report('\tslits')
-from BMM.slits import Slits #, recover_slits2, recover_slits3
+from bmm_tools.devices.slits import StandardSlits, GonioSlits
 
 ## DM3
 print(f'{TAB}FMBO motor group: slits3')
-sl = slits3 = Slits('XF:06BM-BI{Slt:02-Ax:',  name='slits3')
+sl = slits3 = StandardSlits('XF:06BM-BI{Slt:02-Ax:',  name='slits3')
 slits3.nominal = [7.0, 1.0, 0.0, 0.0]
 wait_for_connection(slits3)
 
@@ -261,7 +261,7 @@ examine_fmbo_motor_group(slits3list)
 ## DM2
 print(f'{TAB}FMBO motor group: slits2')
 
-slits2 = Slits('XF:06BMA-OP{Slt:01-Ax:',  name='slits2')
+slits2 = StandardSlits('XF:06BMA-OP{Slt:01-Ax:',  name='slits2')
 slits2.nominal = [18.0, 1.1, 0.0, 0.6]
 slits2.top.user_offset.put(-1.4247)
 slits2.bottom.user_offset.put(-1.0926)
