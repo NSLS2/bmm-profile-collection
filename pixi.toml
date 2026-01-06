@@ -36,6 +36,7 @@ ophyd-async = ">=0.13.7,<0.14"
 [feature.profile.pypi-dependencies]
 emojis = "*"
 pvxslibs = ">=1.3.2, <2"
+bmm_tools = { git = "https://github.com/NSLS2/bmm_tools", branch = "main" }
 
 [feature.terminal.dependencies]
 ipython = ">=9.5.0"
