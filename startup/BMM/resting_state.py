@@ -93,8 +93,8 @@ def resting_state():
     #     user_ns['ga'].alloff()
     kafka.message({'resting_state': True,})
     #user_ns['RE'].msg_hook = BMM_msg_hook
-    if is_re_worker_active() is False:
-        matplotlib.use('Qt5Agg')
+    ##if is_re_worker_active() is False:
+    ##    matplotlib.use('Qt5Agg')
     resting_redis()
     if profile_configuration.getboolean('sdd', 'xspress3') is True:
         xs1 = user_ns['xs1']
@@ -139,8 +139,8 @@ def resting_state_plan():
     dcm.mode = 'fixed'
     kafka.message({'resting_state': True,})
     #user_ns['RE'].msg_hook = BMM_msg_hook
-    if is_re_worker_active() is False:
-        matplotlib.use('Qt5Agg')
+    ##if is_re_worker_active() is False:
+    ##    matplotlib.use('Qt5Agg')
     resting_redis()
     if profile_configuration.getboolean('sdd', 'xspress3') is True:
         xs1 = user_ns['xs1']
@@ -186,8 +186,8 @@ def end_of_macro():
     yield from xafs_wheel.recenter()
     dcm.mode = 'fixed'
     user_ns['RE'].msg_hook = BMM_msg_hook
-    if is_re_worker_active() is False:
-        matplotlib.use('Qt5Agg')
+    #if is_re_worker_active() is False:
+    #    matplotlib.use('Qt5Agg')
     resting_redis()
     suspenders.clear_suspenders()
 

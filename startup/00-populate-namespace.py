@@ -7,7 +7,6 @@ from BMM.user_ns import *
 
 
 
-
 # def handler(signum, frame):
 #     #print(f'Handling signal {signum} ({signal.Signals(signum).name}).')
 #     text = termcolor.colored('''

@@ -1,16 +1,18 @@
+import time
+
 from ophyd import (EpicsMotor, PseudoPositioner, PseudoSingle, Signal, Device, PositionerBase, Component as Cpt, EpicsSignal, EpicsSignalRO)
 from ophyd.epics_motor import EpicsMotor, required_for_connection, AlarmSeverity
 from ophyd.utils.epics_pvs import fmt_time
 from ophyd.pseudopos import (pseudo_position_argument,
                              real_position_argument)
 
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
-
 from bluesky.plan_stubs import sleep, mv, null, abs_set
-from BMM.functions import PROMPT
-from BMM.logging   import BMM_log_info
 
-import time
+from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+from BMMCommon.tools.animated_prompt import PROMPTNC
+
+
+
 
 status_list = {'MTACT' : 1, 'MLIM'  : 0, 'PLIM'  : 0, 'AMPEN' : 0,
                'LOOPM' : 1, 'TIACT' : 0, 'INTMO' : 1, 'DWPRO' : 0,
@@ -284,14 +286,14 @@ class FMBOEpicsMotor(EpicsMotor):
 
     def home(self, force=False):
         if force is False:
-            action = input(f"\nBegin homing {self.name}? " + PROMPT)
+            action = input(f"\nBegin homing {self.name}? " + PROMPTNC)
             if action != '':
                 if action[0].lower() == 'n' or action[0].lower() == 'q':
                     return
         self.home_signal.put(1)
 
     def clear_encoder_loss(self):
-        BMM_log_info('clearing encoder loss for %s' % self.name)
+        print(f'clearing encoder loss for {self.name}')
         self.clear_enc_lss.put(1)
         self.enable()
 

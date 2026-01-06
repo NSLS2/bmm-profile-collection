@@ -583,15 +583,15 @@ if not is_re_worker_active():
     config_bluesky_logging(file='/home/xf06bm/logs/bluesky.log', level='DEBUG')
 
 
-try:
-    from bluesky_widgets.utils.streaming import stream_documents_into_runs
-    from bluesky_widgets.models.plot_builders import Lines
-    from bluesky_widgets.qt.figures import QtFigure
-    # model = Lines("xafs_y", ["I0"], max_runs=1)
-    # view = QtFigure(model.figure)
-    # view.show()
-except:
-    pass
+# try:
+#     from bluesky_widgets.utils.streaming import stream_documents_into_runs
+#     from bluesky_widgets.models.plot_builders import Lines
+#     from bluesky_widgets.qt.figures import QtFigure
+#     # model = Lines("xafs_y", ["I0"], max_runs=1)
+#     # view = QtFigure(model.figure)
+#     # view.show()
+# except:
+#     pass
 
 
 #import logging

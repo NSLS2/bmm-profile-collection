@@ -2,14 +2,14 @@ from ophyd.sim import SynAxis
 from ophyd import EpicsMotor, EpicsSignalRO
 
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+from BMMCommon.devices.motors import FMBOEpicsMotor, XAFSEpicsMotor, VacuumEpicsMotor, EndStationEpicsMotor, EncodedEndStationEpicsMotor, EpicsMotorWithDial
+from BMMCommon.devices.motors import define_XAFSEpicsMotor, define_EndStationEpicsMotor, define_EncodedEndStationEpicsMotor
 
 from BMM.functions import run_report, examine_fmbo_motor_group
 import time
 
 run_report(__file__, text='individual motor definitions')
 
-from BMM.motors import FMBOEpicsMotor, XAFSEpicsMotor, VacuumEpicsMotor, EndStationEpicsMotor, EncodedEndStationEpicsMotor
-from BMM.motors import EpicsMotorWithDial
 
 TAB = '\t\t\t'
 
@@ -40,24 +40,6 @@ def check_for_connection(m):
             disconnected_msg(f'      {walk.item.name} is a disconnected PV')
     return(False)
 
-def define_XAFSEpicsMotor(prefix, name='unnamed'):
-    '''Deal gracefully with a motor whose IOC is not running or whose
-    controller is turned off.  An unconnected motor will be
-    instantiated as a SynAxis.  This allows bsui to start, which can
-    be handy when doing development or troubleshooting activities.
-
-    '''
-    this = XAFSEpicsMotor(prefix, name=name)
-    time.sleep(0.2)
-    count = 0
-    while this.connected is False:  #  try for no more than 3 seconds
-        count += 1
-        time.sleep(0.5)
-        if count > 6:
-            break
-    if this.connected is False:
-        this = SynAxis(name=name)
-    return(this)
 
 
 ## DM1
@@ -118,56 +100,6 @@ if 'XAFSEpicsMotor' in str(type(dm3_foils)):
 
 
 
-def define_EndStationEpicsMotor(prefix, name='unnamed'):
-    '''Deal gracefully with a motor whose IOC is not running or whose
-    controller is turned off.  See discussion at the top of
-    BMM/user_ns/instruments.py
-    '''
-    this = EndStationEpicsMotor(prefix, name=name)
-    count = 0
-    while this.connected is False:  #  try for no more than 3 seconds
-        count += 1
-        time.sleep(0.5)
-        if count > 6:
-            break
-    if this.connected is False:
-        this = SynAxis(name=name)
-    return(this)
-
-def define_EncodedEndStationEpicsMotor(prefix, name='unnamed'):
-    '''Deal gracefully with a motor whose IOC is not running or whose
-    controller is turned off.  See discussion at the top of
-    BMM/user_ns/instruments.py
-    '''
-    try:
-        this = EncodedEndStationEpicsMotor(prefix, name=name)
-        count = 0
-        while this.connected is False:  #  try for no more than 3 seconds
-            count += 1
-            time.sleep(0.5)
-            if count > 6:
-                break
-        if this.connected is False:
-            this = SynAxis(name=name)
-        return this
-    except:
-        return SynAxis(name=name)
-
-def define_EpicsMotor(prefix, name='unnamed'):
-    '''Deal gracefully with a motor whose IOC is not running or whose
-    controller is turned off.  See discussion at the top of
-    BMM/user_ns/instruments.py
-    '''
-    this = EpicsMotor(prefix, name=name)
-    count = 0
-    while this.connected is False:  #  try for no more than 3 seconds
-        count += 1
-        time.sleep(0.5)
-        if count > 6:
-            break
-    if this.connected is False:
-        this = SynAxis(name=name)
-    return(this)
 
     
 ## XAFS stages

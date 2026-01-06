@@ -7,12 +7,12 @@ import numpy
 
 from bluesky.plan_stubs import null, sleep, mv, mvr
 
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+from BMMCommon.tools.messages      import *  # error_msg et al. + boxedtext
 from BMMCommon.tools.periodictable import PERIODIC_TABLE, edge_energy
+from BMMCommon.devices.motors      import EndStationEpicsMotor
 
 from BMM.functions      import present_options
 from BMM.macrobuilder   import BMMMacroBuilder
-from BMM.motors         import EndStationEpicsMotor
 from BMM.logging        import report
 from BMM.xafs_functions import conventional_grid
 from BMM.workspace      import rkvs

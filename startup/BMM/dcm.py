@@ -7,19 +7,14 @@ from bluesky.plan_stubs import sleep, mv, mvr, null
 from numpy import pi, sin, cos, arcsin
 from rich import print as cprint
 
-from BMM.motors    import FMBOEpicsMotor, VacuumEpicsMotor, DeadbandEpicsMotor, BMMDeadBandMotor, XAFSEpicsMotor
-
+from BMMCommon.devices.motors import FMBOEpicsMotor, VacuumEpicsMotor, DeadbandEpicsMotor, BMMDeadBandMotor, XAFSEpicsMotor
 from BMMCommon.tools.physics  import *  # HBARC ktoe etok KTOE e2l
 from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
 from BMMCommon.optics.dcm_parameters import dcm_parameters, approximate_pitch
 BMM_dcm = dcm_parameters()
 
-from BMM import user_ns as user_ns_module
-user_ns = vars(user_ns_module)
-
-from BMM.user_ns.base   import profile_configuration
-from BMM.user_ns.bmm    import BMMuser
-#from BMM.user_ns.dcm    import dcm_bragg, dcm_para, dcm_perp, dcm_pitch, dcm_roll, dcm_x
+#from BMM.user_ns.base   import profile_configuration
+#from BMM.user_ns.bmm    import BMMuser
 
 
 # PV for clearing encoder signal loss
@@ -33,6 +28,10 @@ class DCM(PseudoPositioner):
         self.mode    = mode
         self.suppress_channel_cut = False
         #self.prompt  = True
+
+        ## some configuration
+        self.roll_111 = -6.05644
+        self.acc_fast = 0.2
 
         self.pitch = VacuumEpicsMotor('XF:06BMA-OP{Mono:DCM1-Ax:P2}Mtr',  name='dcm_pitch')
         self.roll  = VacuumEpicsMotor('XF:06BMA-OP{Mono:DCM1-Ax:R2}Mtr',  name='dcm_roll')
@@ -100,11 +99,23 @@ class DCM(PseudoPositioner):
     para   = Cpt(VacuumEpicsMotor, 'Par2}Mtr')
     perp   = Cpt(VacuumEpicsMotor, 'Per2}Mtr')
 
+    
+    @property
+    def wavelength(self):
+        return 2*pi*self.HBARC / (self.energy*1000)
 
+    @property
+    def en(self):
+        return float('%.6f' % self.energy)
+
+    @property
+    def lam(self):
+        return float('%.6f' % self.wavelength)
+    
     def recover(self):
         '''Home and re-position all DCM motors after a power interruption.
         '''
-        self.bragg.acceleration.put(BMMuser.acc_fast)
+        self.bragg.acceleration.put(self.acc_fast)
         self.para.velocity.put(0.6)
         self.para.hvel_sp.put(0.4)
         self.perp.velocity.put(0.2)
@@ -139,7 +150,7 @@ class DCM(PseudoPositioner):
         ## move pitch and roll to the Si(111) positions
         this_energy = self.energy.readback.get()
         yield from self.kill_plan()
-        yield from mv(self.pitch, approximate_pitch(this_energy. self._crystal), self.roll, profile_configuration.getfloat('dcm', 'roll_111')) # -8.05644)
+        yield from mv(self.pitch, approximate_pitch(this_energy. self._crystal), self.roll, self.roll_111) # -8.05644)
         yield from mv(self.energy, this_energy)
         print('DCM is at %.1f eV.  There should be signal in I0.' % self.energy.readback.get())
         yield from sleep(2.0)

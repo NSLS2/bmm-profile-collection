@@ -1,14 +1,17 @@
 from BMM.functions import run_report
 run_report(__file__, text='Monochromator definitions')
 
-from BMM.motors              import FMBOEpicsMotor, VacuumEpicsMotor, XAFSEpicsMotor, DeadbandEpicsMotor, BMMDeadBandMotor
-from BMM.user_ns.motors      import mcs8_motors
-from BMM.functions           import examine_fmbo_motor_group
+from BMMCommon.tools.wait_for_connection import wait_for_connection
+from BMMCommon.devices.motors import FMBOEpicsMotor, VacuumEpicsMotor, XAFSEpicsMotor, DeadbandEpicsMotor, BMMDeadBandMotor
+
+from BMM.user_ns.motors       import mcs8_motors
+from BMM.functions            import examine_fmbo_motor_group
+from BMM.user_ns.base import startup_dir, profile_configuration
+from BMM.user_ns.bmm  import BMMuser
 
 # see comment at top of BMM/user_ns/instruments.py
 from ophyd.sim import SynAxis
 
-from BMMCommon.tools.wait_for_connection import wait_for_connection
 
 TAB = '\t\t\t'
 
@@ -17,6 +20,8 @@ from BMM.dcm import DCM
 #from BMM.user_ns.motors import dcm_x
 
 dcm = DCM('XF:06BMA-OP{Mono:DCM1-Ax:', name='dcm', crystal='111')
+dcm.roll_111 = profile_configuration.getfloat('dcm', 'roll_111')
+dcm.acc_fast = BMMuser.acc_fast
 wait_for_connection(dcm)
 
 print(f'{TAB}FMBO motor group: dcm')
@@ -42,7 +47,6 @@ if dcm.connected is True:
     dcm.bragg.user_readback.kind = 'hinted'
     dcm.bragg.user_setpoint.kind = 'config'
     dcm.bragg.velocity.put(0.4)
-    from BMM.user_ns.bmm import BMMuser
     dcm.bragg.acceleration.put(BMMuser.acc_fast)
 
     ## for some reason, this needs to be set explicitly

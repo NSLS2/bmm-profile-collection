@@ -72,9 +72,9 @@ def wait_for_connection(thing):
 
 
 run_report('\tmirrors and tables')
-from BMM.motors import XAFSEpicsMotor, Mirrors, XAFSTable, GonioTable, EndStationEpicsMotor
+from BMMCommon.devices.motors import XAFSEpicsMotor, Mirrors, XAFSTable, GonioTable, EndStationEpicsMotor
 from BMM.user_ns.bmm import BMMuser
-from BMM.user_ns.motors import mcs8_motors, xafs_motors, define_EndStationEpicsMotor
+from BMM.user_ns.motors import mcs8_motors, xafs_motors
 
 
 ## collimating mirror
