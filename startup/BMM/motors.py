@@ -8,8 +8,8 @@ from ophyd.pseudopos import (pseudo_position_argument,
 
 from bluesky.plan_stubs import sleep, mv, null, abs_set
 
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
-from BMMCommon.tools.animated_prompt import PROMPTNC
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.animated_prompt import PROMPTNC
 
 
 

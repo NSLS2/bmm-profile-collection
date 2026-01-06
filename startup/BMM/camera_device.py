@@ -25,7 +25,7 @@ from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 md = user_ns["RE"].md
 
-from BMMCommon.tools.misc import now
+from bmm_tools.tools.misc import now
 from BMM.logging import report
 
 from BMM.user_ns.bmm import BMMuser

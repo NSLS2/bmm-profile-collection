@@ -24,9 +24,9 @@ from bluesky.preprocessors import subs_decorator, finalize_wrapper
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
-from BMMCommon.tools.misc     import now
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
-from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
+from bmm_tools.tools.misc     import now
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
 
 from BMM.resting_state import resting_state_plan
 #from BMM.suspenders    import BMM_clear_to_start, BMM_clear_suspenders

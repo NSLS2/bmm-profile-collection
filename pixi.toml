@@ -59,3 +59,6 @@ qs-server = "uvicorn --host localhost --port 60610 bluesky_httpserver.server:app
 [environments]
 terminal = {features=["profile", "terminal"], solve-group="profile"}
 qs = {features=["profile", "qs"], solve-group="profile"}
+
+[dependencies]
+inflection = ">=0.5.1,<0.6"

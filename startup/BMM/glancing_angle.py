@@ -15,10 +15,10 @@ import configparser
 import numpy
 from pathlib import Path
 
-from BMMCommon.tools.misc import now
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
-from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
-from BMMCommon.tools.md import proposal_base
+from bmm_tools.tools.misc import now
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
+from bmm_tools.tools.md import proposal_base
 
 from BMM.functions         import present_options, PROMPT
 from BMM.user_ns.bmm       import kafka
@@ -31,7 +31,7 @@ from BMM.resting_state     import resting_state_plan
 from BMM.xafs_functions    import conventional_grid
 from BMM.user_ns.dwelltime import _locked_dwell_time
 
-from BMMCommon.tools.periodictable import PERIODIC_TABLE, edge_energy
+from bmm_tools.tools.periodictable import PERIODIC_TABLE, edge_energy
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)

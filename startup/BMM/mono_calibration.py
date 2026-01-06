@@ -11,8 +11,8 @@ from numpy import array, pi, sin, linspace, arange
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 
-from BMMCommon.optics.dcm_parameters import dcm_parameters
-from BMMCommon.tools.physics  import *  # HBARC ktoe etok KTOE e2l
+from bmm_tools.optics.dcm_parameters import dcm_parameters
+from bmm_tools.tools.physics  import *  # HBARC ktoe etok KTOE e2l
 
 from BMM.edge           import change_edge
 from BMM.logging        import BMM_log_info, BMM_msg_hook, report
@@ -20,8 +20,8 @@ from BMM.xafs           import xafs
 from BMM.resting_state  import resting_state_plan
 #from BMM.suspenders     import BMM_clear_to_start
 
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
-from BMMCommon.tools.periodictable  import Z_number
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.periodictable  import Z_number
 
 from BMM.user_ns.base       import profile_configuration, reload_profile_configuration
 from BMM.user_ns.bmm        import kafka

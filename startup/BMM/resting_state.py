@@ -12,7 +12,7 @@ import matplotlib
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
-from BMMCommon.tools.misc   import now
+from bmm_tools.tools.misc   import now
 
 from BMM.logging        import BMM_msg_hook
 #from BMM.suspenders     import BMM_suspenders, BMM_clear_suspenders

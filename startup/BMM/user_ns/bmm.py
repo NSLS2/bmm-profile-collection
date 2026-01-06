@@ -21,15 +21,15 @@ mpl.rcParams['figure.raise_window'] = False
 #DATA = os.path.join(os.getenv('HOME'), 'Data', 'bucket') + '/'
 BMM_CONFIGURATION_LOCATION = os.path.join(startup_dir, 'lookup_table')
 
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 from BMM.functions            import run_report, elapsed_time
 
 run_report(__file__, text='functions and other basics')
 run_report('\t'+'logging')
 from BMM.logging import report, BMM_log_info, BMM_msg_hook#, BMMbot
 
-from BMMCommon.tools.misc   import now
-from BMMCommon.slack.bmmbot import BMMbot
+from bmm_tools.tools.misc   import now
+from bmm_tools.slack.bmmbot import BMMbot
 
 from bluesky.preprocessors   import finalize_wrapper
 

@@ -7,9 +7,9 @@ except ImportError:
 
 import os, textwrap
 
-from BMMCommon.tools.messages import disconnected_msg, error_msg, whisper, verbosebold_msg, bold_msg
+from bmm_tools.tools.messages import disconnected_msg, error_msg, whisper, verbosebold_msg, bold_msg
 
-from BMMCommon.tools.md import proposal_base
+from bmm_tools.tools.md import proposal_base
 from BMM.functions import boxedtext, run_report, bounds
 from BMM.workspace import rkvs
 
@@ -28,7 +28,7 @@ run_report('\t'+'motor status reporting')
 from BMM.motor_status import motor_status, ms # , motor_metadata, xrd_motors, xrdm
 
 run_report('\t'+'FMBO motor tools')
-from BMMCommon.devices.fmbo import FMBO_status
+from bmm_tools.devices.fmbo import FMBO_status
 
 from BMM.user_ns.base import profile_configuration
 from BMM.desc_string  import set_desc_strings
@@ -275,7 +275,7 @@ if BMMuser.pds_mode is None:
 
 run_report('\t'+'change_edge')
 from BMM.edge import show_edges, change_edge, quick_change, xrd_mode
-from BMMCommon.optics.dcm_parameters import approximate_pitch
+from bmm_tools.optics.dcm_parameters import approximate_pitch
 
 run_report('\t'+'mono calibration')
 from BMM.mono_calibration import calibrate, calibrate_high_end, calibrate_low_end, calibrate_mono, calibrate_pitch

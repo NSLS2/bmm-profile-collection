@@ -2,7 +2,7 @@ import numpy, json, os, time
 from tqdm import tqdm           # progress bar
 from pprint import pprint
 
-from BMMCommon.tools.periodictable import element_symbol, edge_energy, Z_number
+from bmm_tools.tools.periodictable import element_symbol, edge_energy, Z_number
 from BMM.functions import elapsed_time
 
 from BMM import user_ns as user_ns_module

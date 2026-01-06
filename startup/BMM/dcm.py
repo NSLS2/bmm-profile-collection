@@ -7,10 +7,10 @@ from bluesky.plan_stubs import sleep, mv, mvr, null
 from numpy import pi, sin, cos, arcsin
 from rich import print as cprint
 
-from BMMCommon.devices.motors import FMBOEpicsMotor, VacuumEpicsMotor, DeadbandEpicsMotor, BMMDeadBandMotor, XAFSEpicsMotor
-from BMMCommon.tools.physics  import *  # HBARC ktoe etok KTOE e2l
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
-from BMMCommon.optics.dcm_parameters import dcm_parameters, approximate_pitch
+from bmm_tools.devices.motors import FMBOEpicsMotor, VacuumEpicsMotor, DeadbandEpicsMotor, BMMDeadBandMotor, XAFSEpicsMotor
+from bmm_tools.tools.physics  import *  # HBARC ktoe etok KTOE e2l
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.optics.dcm_parameters import dcm_parameters, approximate_pitch
 BMM_dcm = dcm_parameters()
 
 #from BMM.user_ns.base   import profile_configuration

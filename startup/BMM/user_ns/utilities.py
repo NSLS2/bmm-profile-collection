@@ -1,10 +1,10 @@
 from ophyd import EpicsSignalRO
 
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 
 from BMM.functions import run_report
 
-from BMMCommon.devices.utilities import Vacuum, TCG, FEVac, GateValve, Thermocouple, OneWireTC, BMM_DIWater, Rack
+from bmm_tools.devices.utilities import Vacuum, TCG, FEVac, GateValve, Thermocouple, OneWireTC, BMM_DIWater, Rack
 
 run_report(__file__, text='monitor utilities')
 

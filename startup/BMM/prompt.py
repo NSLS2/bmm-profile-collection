@@ -2,7 +2,7 @@
 # note that this file will never be imported when using queueserver
 # so the explicit calls to IPython functionality should be OK
 
-#from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+#from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)

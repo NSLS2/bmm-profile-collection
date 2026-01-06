@@ -14,7 +14,7 @@ import os
 import matplotlib.pyplot as plt
 from ophyd.sim import noisy_det
 
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 
 from BMM.user_ns.dwelltime import use_1element, use_4element, use_7element
 from BMM.resting_state     import resting_state_plan

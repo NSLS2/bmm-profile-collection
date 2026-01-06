@@ -2,8 +2,8 @@ from bluesky.suspenders import SuspendFloor, SuspendBoolHigh, SuspendBoolLow
 
 import uuid
 
-from BMMCommon.tools.messages import bold_msg, error_msg, warning_msg, whisper
-from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
+from bmm_tools.tools.messages import bold_msg, error_msg, warning_msg, whisper
+from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
 
 from BMM.user_ns.detectors   import quadem1
 from BMM.user_ns.metadata    import ring

@@ -1,9 +1,9 @@
 from ophyd.sim import SynAxis
 from ophyd import EpicsMotor, EpicsSignalRO
 
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
-from BMMCommon.devices.motors import FMBOEpicsMotor, XAFSEpicsMotor, VacuumEpicsMotor, EndStationEpicsMotor, EncodedEndStationEpicsMotor, EpicsMotorWithDial
-from BMMCommon.devices.motors import define_XAFSEpicsMotor, define_EndStationEpicsMotor, define_EncodedEndStationEpicsMotor
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.devices.motors import FMBOEpicsMotor, XAFSEpicsMotor, VacuumEpicsMotor, EndStationEpicsMotor, EncodedEndStationEpicsMotor, EpicsMotorWithDial
+from bmm_tools.devices.motors import define_XAFSEpicsMotor, define_EndStationEpicsMotor, define_EncodedEndStationEpicsMotor
 
 from BMM.functions import run_report, examine_fmbo_motor_group
 import time

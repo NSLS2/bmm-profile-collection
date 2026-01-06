@@ -24,7 +24,7 @@ from BMM.functions     import error_msg, warning_msg, go_msg, url_msg, bold_msg,
 
 import matplotlib.pyplot as plt
 import numpy, xraylib
-from BMMCommon.tools.periodictable import Z_number, edge_number
+from bmm_tools.tools.periodictable import Z_number, edge_number
 
 ###########################################################################
 # ______  ___   _   _ _____ _____              ___   _____________ _____  #
@@ -36,7 +36,7 @@ from BMMCommon.tools.periodictable import Z_number, edge_number
 ###########################################################################
 
 
-#from BMMCommon.devices.pilatus import BMMFileStoreHDF5, BMMHDF5Plugin
+#from bmm_tools.devices.pilatus import BMMFileStoreHDF5, BMMHDF5Plugin
 
 class BMMDanteFileStoreHDF5(FileStorePluginBase):
     def __init__(self, *args, **kwargs):

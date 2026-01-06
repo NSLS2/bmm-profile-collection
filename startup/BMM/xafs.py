@@ -14,11 +14,11 @@ from tiled.client import from_profile
 
 from urllib.parse import quote
 
-from BMMCommon.tools.misc     import now, inflect
-from BMMCommon.tools.physics  import *  # HBARC ktoe etok KTOE e2l
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
-from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
-from BMMCommon.tools.md import proposal_base
+from bmm_tools.tools.misc     import now, inflect
+from bmm_tools.tools.physics  import *  # HBARC ktoe etok KTOE e2l
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
+from bmm_tools.tools.md import proposal_base
 
 from BMM.dossier         import DossierTools
 from BMM.functions       import present_options, plotting_mode
@@ -33,7 +33,7 @@ from BMM.resting_state   import resting_state_plan
 #from BMM.suspenders      import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.xafs_functions  import conventional_grid, sanitize_step_scan_parameters
 
-from BMMCommon.tools.periodictable import edge_energy, Z_number, element_name
+from bmm_tools.tools.periodictable import edge_energy, Z_number, element_name
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)

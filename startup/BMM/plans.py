@@ -3,7 +3,7 @@ import time
 
 from rich import print as cprint
 
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 
 from BMM.modes import MODEDATA
 

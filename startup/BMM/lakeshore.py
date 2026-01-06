@@ -5,7 +5,7 @@ from ophyd.signal import DerivedSignal
 from ophyd.areadetector.base import EpicsSignalWithRBV
 from ophyd.sim import FakeEpicsSignal
 
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)

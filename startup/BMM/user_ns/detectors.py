@@ -1,7 +1,7 @@
 
 import os, json, socket, uuid
 
-from BMMCommon.tools.messages import whisper
+from bmm_tools.tools.messages import whisper
 
 from BMM.functions import run_report
 from BMM.user_ns.base import RE, profile_configuration
@@ -250,13 +250,13 @@ except:
 
 run_report('\t'+'cameras')
 from BMM.camera_device import BMMSnapshot, snap
-from BMMCommon.devices.axis_webcam import AxisCaprotoCam
+from bmm_tools.devices.axis_webcam import AxisCaprotoCam
 from BMM.user_ns.base import bmm_catalog
 
-import BMMCommon.tools.db
-BMMCommon.tools.db.bmm_catalog = bmm_catalog
-file_resource = BMMCommon.tools.db.file_resource
-show_snapshot = BMMCommon.tools.db.show_snapshot
+import bmm_tools.tools.db
+bmm_tools.tools.db.bmm_catalog = bmm_catalog
+file_resource = bmm_tools.tools.db.file_resource
+show_snapshot = bmm_tools.tools.db.show_snapshot
 
 
 # this root location is deprecated for the camera devices.  The _root
@@ -282,7 +282,7 @@ if is_re_worker_active() is False and 'ws3' in thishost:
 
 run_report('\t\t'+'USB cameras: usb1, usb2')
 
-from BMMCommon.devices.usb_camera import BMMUVCSingleTrigger
+from bmm_tools.devices.usb_camera import BMMUVCSingleTrigger
 if with_cam1 is True:
     usb1 = BMMUVCSingleTrigger('XF:06BM-ES{UVC-Cam:1}', name="usbcam-1", read_attrs=["jpeg"])
 else:
@@ -333,7 +333,7 @@ def prep_pilatus(pilatus):
 from BMM.user_ns.dwelltime import with_pilatus
 from BMM.user_ns.dcm import dcm
 if with_pilatus is True:
-    from BMMCommon.devices.pilatus import BMMPilatusSingleTrigger,  BMMPilatusTIFFSingleTrigger
+    from bmm_tools.devices.pilatus import BMMPilatusSingleTrigger,  BMMPilatusTIFFSingleTrigger
     run_report('\t'+'Pilatus')
 
     pvbase = "XF:06BMB-ES{Det:PIL100k}:"

@@ -1,8 +1,8 @@
 from BMM.functions import run_report
 run_report(__file__, text='Monochromator definitions')
 
-from BMMCommon.tools.wait_for_connection import wait_for_connection
-from BMMCommon.devices.motors import FMBOEpicsMotor, VacuumEpicsMotor, XAFSEpicsMotor, DeadbandEpicsMotor, BMMDeadBandMotor
+from bmm_tools.tools.wait_for_connection import wait_for_connection
+from bmm_tools.devices.motors import FMBOEpicsMotor, VacuumEpicsMotor, XAFSEpicsMotor, DeadbandEpicsMotor, BMMDeadBandMotor
 
 from BMM.user_ns.motors       import mcs8_motors
 from BMM.functions            import examine_fmbo_motor_group

@@ -1,7 +1,7 @@
 from ophyd import EpicsSignalRO
 import os, subprocess, shutil, socket
 import redis
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 #import BMM.functions  #from BMM.functions import verbosebold_msg, error_msg
 from BMM.user_ns.base import startup_dir, profile_configuration
 

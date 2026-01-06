@@ -14,15 +14,15 @@ from larch.io import create_athena
 
 from PIL import Image
 
-from BMMCommon.tools.messages import error_msg, bold_msg, whisper
-from BMMCommon.tools.md       import proposal_base
+from bmm_tools.tools.messages import error_msg, bold_msg, whisper
+from bmm_tools.tools.md       import proposal_base
 
 from BMM.user_ns.bmm       import kafka
 from BMM.logging           import report
 from BMM.modes             import get_mode, describe_mode
 
-from BMMCommon.tools.misc import now
-from BMMCommon.tools.periodictable import edge_energy, Z_number, element_name
+from bmm_tools.tools.misc import now
+from bmm_tools.tools.periodictable import edge_energy, Z_number, element_name
 
 from BMM.user_ns.base      import bmm_catalog
 from BMM.user_ns.detectors import with_cam1, with_cam2, with_webcam, with_anacam

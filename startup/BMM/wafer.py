@@ -4,7 +4,7 @@ from bluesky.plan_stubs import mv
 from numpy import array
 from sympy import geometry
 
-from BMMCommon.tools.messages import whisper
+from bmm_tools.tools.messages import whisper
 
 from BMM.linescans     import linescan, prepare_alignment_scan, fetch_peak_position_via_redis
 from BMM.resting_state import resting_state_plan

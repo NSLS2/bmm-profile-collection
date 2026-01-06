@@ -3,14 +3,14 @@ import os, re, numpy, configparser
 from openpyxl import load_workbook
 from rich import print as cprint
 
-from BMMCommon.tools.misc     import isfloat
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.misc     import isfloat
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 
 from BMM.functions      import present_options
 from BMM.xafs_functions import conventional_grid, sanitize_step_scan_parameters
 from BMM.workspace      import rkvs
 
-from BMMCommon.tools.periodictable  import PERIODIC_TABLE, edge_energy
+from bmm_tools.tools.periodictable  import PERIODIC_TABLE, edge_energy
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)

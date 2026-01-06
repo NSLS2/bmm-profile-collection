@@ -43,8 +43,8 @@ user_ns = vars(user_ns_module)
 md = user_ns["RE"].md
 
 
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
-from BMMCommon.tools.periodictable import Z_number, edge_number
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.periodictable import Z_number, edge_number
 
 from BMM.user_ns.bmm  import kafka
 

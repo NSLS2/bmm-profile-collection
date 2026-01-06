@@ -17,10 +17,10 @@ from bluesky.preprocessors import finalize_wrapper
 from PIL import Image
 from tiled.client import from_profile
 
-from BMMCommon.tools.misc   import now
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
-from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
-from BMMCommon.tools.md import proposal_base
+from bmm_tools.tools.misc   import now
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
+from bmm_tools.tools.md import proposal_base
 
 from BMM.areascan        import areascan
 from BMM.dossier         import DossierTools

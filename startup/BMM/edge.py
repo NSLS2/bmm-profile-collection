@@ -11,9 +11,9 @@ from rich import print as cprint
 from bluesky.plan_stubs import null, sleep, mv, mvr
 from bluesky.preprocessors import finalize_wrapper
 
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
-from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
-from BMMCommon.optics.dcm_parameters import approximate_pitch
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
+from bmm_tools.optics.dcm_parameters import approximate_pitch
 
 from BMM.exceptions    import FailedDCMParaException, ArrivedInModeException
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
@@ -26,7 +26,7 @@ from BMM.linescans     import rocking_curve, slit_height, mirror_pitch, wiggle_b
 from BMM.resting_state import resting_state_plan
 from BMM.workspace     import rkvs
 
-from BMMCommon.tools.periodictable import edge_energy, Z_number, element_symbol
+from bmm_tools.tools.periodictable import edge_energy, Z_number, element_symbol
 
 
 from BMM import user_ns as user_ns_module

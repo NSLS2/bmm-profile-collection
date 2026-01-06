@@ -191,8 +191,8 @@ from BMM.logging        import report
 from BMM.resting_state  import resting_state_plan
 from BMM.user_ns.motors import xafs_x
 
-from BMMCommon.tools.misc import now
-from BMMCommon.tools.periodictable  import Z_number, element_symbol
+from bmm_tools.tools.misc import now
+from bmm_tools.tools.periodictable  import Z_number, element_symbol
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)

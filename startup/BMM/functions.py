@@ -13,8 +13,8 @@ from BMM.user_ns.base import profile_configuration
 import redis
 from redis_json_dict import RedisJSONDict
 
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
-from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
 
 
 os.environ['PAGER'] = 'less -Ps"type Q to quit: "'    # new ipython (or maybe latest less) obviates need for "most"

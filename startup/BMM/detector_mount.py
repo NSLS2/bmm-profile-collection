@@ -4,7 +4,7 @@ from bluesky.plans import count
 from numpy import array, sqrt, log, ceil, floor
 from lmfit.models import ExponentialModel
 
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)

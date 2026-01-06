@@ -4,9 +4,9 @@ from openpyxl import load_workbook
 
 from bluesky.plan_stubs import null, sleep, mv, mvr
 
-from BMMCommon.tools.messages import *  # error_msg et al. + boxedtext
-from BMMCommon.tools.animated_prompt import PROMPTNC, animated_prompt
-from BMMCommon.optics.dcm_parameters import approximate_pitch
+from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
+from bmm_tools.optics.dcm_parameters import approximate_pitch
 
 from BMM.exceptions    import ChangeModeException
 from BMM.functions     import PROMPT

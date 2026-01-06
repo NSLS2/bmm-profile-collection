@@ -1,6 +1,6 @@
 import time, json, os
 
-from BMMCommon.tools.messages import error_msg, whisper
+from bmm_tools.tools.messages import error_msg, whisper
 
 from BMM.functions import run_report, examine_fmbo_motor_group
 from BMM.workspace import rkvs
@@ -72,7 +72,7 @@ def wait_for_connection(thing):
 
 
 run_report('\tmirrors and tables')
-from BMMCommon.devices.motors import XAFSEpicsMotor, Mirrors, XAFSTable, GonioTable, EndStationEpicsMotor
+from bmm_tools.devices.motors import XAFSEpicsMotor, Mirrors, XAFSTable, GonioTable, EndStationEpicsMotor
 from BMM.user_ns.bmm import BMMuser
 from BMM.user_ns.motors import mcs8_motors, xafs_motors
 
@@ -512,7 +512,7 @@ det = DetectorMount()
 ###########################################################
 
 run_report('\tactuators')
-from BMMCommon.devices.actuators import BMPS_Shutter, IDPS_Shutter, EPS_Shutter
+from bmm_tools.devices.actuators import BMPS_Shutter, IDPS_Shutter, EPS_Shutter
 
 try:
     bmps = BMPS_Shutter('SR:C06-EPS{PLC:1}', name='BMPS')
@@ -585,7 +585,7 @@ ln2.closeval = 0
 
                                                                            
 run_report('\tfront-end beam position monitor')
-from BMMCommon.devices.frontend import FEBPM
+from bmm_tools.devices.frontend import FEBPM
 
 try:
     bpm_upstream   = FEBPM('SR:C06-BI{BPM:4}Pos:', name='bpm_upstream')
@@ -608,7 +608,7 @@ def read_bpms():
 ####################################################################
                                                                 
 run_report('\tbusy device')
-from BMMCommon.devices.busy import Busy
+from bmm_tools.devices.busy import Busy
 busy = Busy(name='busy')
 
 
