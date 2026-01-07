@@ -719,8 +719,20 @@ if refldet is not None:
                                                                                 
 
 run_report('\tamplifier kill switches')
-from BMM.killswitch import KillSwitch
+from bmm_tools.tools.killswitch import KillSwitch
+from BMM.user_ns.dcm import dcm
+from BMM.user_ns.motors import dm3_bct, dm3_bpm, dm3_foils, dm3_fs
+
 ks = KillSwitch('XF:06BMB-CT{DIODE-Local:4}', name='amplifier kill switches')
+ks.dcm_device = dcm
+ks.slits2_device = slits2
+ks.slits3_device = slits3
+ks.m2_device = m2
+ks.m3_device = m3
+ks.dm3_axes = (dm3_bct, dm3_bpm, dm3_foils, dm3_fs)
+
+
+
 
 #######################################################
 #  _   _ ___________   _   _ ___________ _____ _____  #

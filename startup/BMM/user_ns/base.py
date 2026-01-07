@@ -140,14 +140,15 @@ RE.msg_hook = ts_msg_hook
 
 bmm_catalog = None
 
+print()
 if not is_re_worker_active():
-    print('Connecting to Tiled: bmm_catalog, db')
+    cprint('[cyan]Connecting to Tiled: bmm_catalog, db[/cyan]')
     from tiled.client import from_profile
     bmm_catalog = from_profile('bmm')
     db = Broker(bmm_catalog)
 
 
-print('Subscribing to Publisher')
+cprint('[cyan]Subscribing to Publisher[/cyan]')
 from bluesky.callbacks.zmq import Publisher
 publisher = Publisher('localhost:5577')
 RE.subscribe(publisher)

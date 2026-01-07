@@ -44,9 +44,6 @@ if profile_configuration.getboolean('miscellaneous', 'set_desc_strings'):
 run_report('\t'+'linescan, rocking curve, slit_height, mirror_pitch, find_slot, pluck')
 from BMM.linescans import linescan, pluck, rocking_curve, slit_height, mirror_pitch, ls2dat, find_slot, rectangle_scan, hcenter
 
-#run_report('\t'+'kafka')
-#from BMM.kafka import close_line_plots, close_plots, kafka_message, preserve, regenerate_file
-
 
 run_report('\t'+'support for wafer samples')
 from BMM.wafer import Wafer

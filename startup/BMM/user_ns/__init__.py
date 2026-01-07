@@ -25,21 +25,21 @@ from .bmm import *
 # define motor groups and individual motors, ancillary motor functionality
 from .motors import *
 
+# dcm motor group
+from .dcm import *
+
 # mirrors, slits, XAS sample & reference wheel, detector mount, actuators (shutters, flags)
 # busy device, Linkam, Lakeshore, motor grid, kill switches
 from .instruments import *
 
 # limited goniometer support
-from .gonio import *
+#from .gonio import *
 
 # Ring object, baseline definition
 from .metadata import *
 
 # tie together integration times of various detectors
 from .dwelltime import *
-
-# dcm motor group
-from .dcm import *
 
 # Struck (deprecated), electrometers, optical cameras, Pilatus, Xspress3 (4 channel & 1 channel)
 from .detectors import *
@@ -53,6 +53,7 @@ from .suspenders import suspenders
 # everything else, read comments in that file
 from .bmm_end import *
 
+# some candy for bsui 
 if not is_re_worker_active():
     print('\t', end='')
     get_ipython().run_line_magic("xmode", "Plain")

@@ -65,7 +65,6 @@ import atexit, os
 def teardown():
     print("Shutting down: ", end=' ')
     BMMuser.state_to_redis(filename=os.path.join(BMMuser.workspace, '.BMMuser'), prefix='')
-    #from BMM.kafka import producer
     kafka.producer.flush()
     
 atexit.register(teardown)

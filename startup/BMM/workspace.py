@@ -1,6 +1,7 @@
 from ophyd import EpicsSignalRO
 import os, subprocess, shutil, socket
 import redis
+from rich import print as cprint
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 #import BMM.functions  #from BMM.functions import verbosebold_msg, error_msg
 from BMM.user_ns.base import startup_dir, profile_configuration
@@ -31,7 +32,7 @@ SECRET_FILES = ('slack_secret', 'image_uploader_token', 'bmmbot_secret')
 REDISVAR="BMM:scan:type"
 ###################################################################
 
-print(f'Connecting to redis at {redis_host}')
+cprint(f'[cyan]Connecting to redis at {redis_host}[/cyan]')
 rkvs.set('BMM:scan:type', 'idle')
 
 def rkvs_keys(printed=True):

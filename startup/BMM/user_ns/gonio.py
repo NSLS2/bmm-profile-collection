@@ -3,7 +3,7 @@ from bmm_tools.devices.slits import GonioSlits
 
 ## goniometer table
 # print(f'{TAB}XRD motor group')
-# gonio_table = GonioTable('XF:06BM-ES{SixC-Ax:Tbl_', name='gonio_table', mirror_length=1117.6,  mirror_width=711.12)
+# gonio_table = GonioTable('XF:06BM-ES{SixC-Ax:Tbl_', name='gonio_table', length=1117.6,  width=711.12)
 # wait_for_connection(gonio_table)
 
 # xrd_delta  = EndStationEpicsMotor('XF:06BM-ES{SixC-Ax:VTTH}Mtr',    name='delta')
