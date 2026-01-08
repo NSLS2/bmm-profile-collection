@@ -1,7 +1,6 @@
 from ophyd import EpicsSignal
-
-from BMM import user_ns as user_ns_module
-user_ns = vars(user_ns_module)
+from BMM.user_ns.motors import xafs_mtr8, xafs_linxs, xafs_linx, xafs_liny, xafs_pitch, xafs_roll
+from BMM.user_ns.instruments import xafs_rotb
 
 def set_desc_strings():
     '''A bunch of motors have .DESC that are set weirdly in their IOC
@@ -9,6 +8,12 @@ def set_desc_strings():
     But that field is a read/write PV, so it is a fixable problem at
     the bsui level.  The point is to have sensible strings displayed
     on CSS screens.
+
+    This only needs to be run on the occasion that a string needs to
+    be reset.  Normally we can trust save/restore to remember
+    description strings.  This function is imported into the bsui
+    namespace when miscellaneous.set_desc_strings is set to True in
+    BMM_configuration.ini
 
     '''
     
@@ -80,13 +85,12 @@ def set_desc_strings():
     toss = EpicsSignal('XF:06BM-ES{MC:09-Ax:3}Mtr.DESC', name='toss')
     toss.put('xafs_spare')      # was Axis #3
     
-    
 
+    
     ## most of these are motors that have been repurposed and so are used in bsui by different names.
     ## pitch and roll are confusing.  those two were defined in the wrong orientation way back when,
     ## so they got swapped in bsui.  that means that XF:06BMA-BI{XAFS-Ax:Roll}Mtr is used for the pitch
     ## direction and same for the other direction.  just awful and should be fixed in the IOC
-    for s in ('xafs_mtr8', 'xafs_linxs', 'xafs_rotb', 'xafs_linx', 'xafs_liny', 'xafs_pitch', 'xafs_roll'): # xafs_lins
-        m = user_ns[s]
-        toss = EpicsSignal(f'{m.prefix}.DESC', name = 'toss')
-        toss.put(m.name)
+    for s in (xafs_mtr8, xafs_linxs, xafs_rotb, xafs_linx, xafs_liny, xafs_pitch, xafs_roll): # xafs_lins
+        toss = EpicsSignal(f'{s.prefix}.DESC', name = 'toss')
+        toss.put(s.name)

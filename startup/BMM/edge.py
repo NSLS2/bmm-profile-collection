@@ -17,7 +17,6 @@ from bmm_tools.optics.dcm_parameters import approximate_pitch
 
 from BMM.exceptions    import FailedDCMParaException, ArrivedInModeException
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
-from BMM.functions     import PROMPT
 from BMM.user_ns.bmm   import kafka
 from BMM.wheel         import show_reference_wheel
 from BMM.modes         import change_mode, get_mode, pds_motors_ready, MODEDATA
@@ -373,7 +372,6 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
         if is_re_worker_active() is True:
             BMMuser.prompt = False
         if BMMuser.prompt:
-            #action = input("\nBegin energy change? " + PROMPT)
             print()
             action = animated_prompt('Begin energy change? ' + PROMPTNC)
             if action != '':
@@ -383,7 +381,7 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
                 warning_msg('\nMoving to mode C for focused beam and an edge energy below 6 keV.')
                 warning_msg("You will not get optimal harmonic rejection.")
                 whisper("This message is informational, not indicative of a problem with your experiment.")
-                #action = input("You will not get optimal harmonic rejection.  Continue anyway? " + PROMPT)
+                #action = input("You will not get optimal harmonic rejection.  Continue anyway? " + PROMPTNC)
                 #if action != '':
                 #    if action[0].lower() == 'n' or action[0].lower() == 'q':
                 #        return(yield from null())

@@ -30,7 +30,7 @@ from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
 
 from BMM.resting_state import resting_state_plan
 from BMM.logging       import BMM_log_info, BMM_msg_hook
-from BMM.functions     import clean_img, PROMPT
+from BMM.functions     import clean_img
 from BMM.workspace     import rkvs
 
 from BMM.user_ns.base        import WORKSPACE
@@ -155,7 +155,6 @@ def pluck(suggested_motor=None):
         question = f'\nMove ({motor_name}, {motor_name2}) to ({position:.3f}, {position2:.3f}) ? '
         
     
-    #action = input(question + PROMPT)
     print()
     action = animated_prompt(question + PROMPTNC)
     if action != '':
@@ -327,7 +326,6 @@ def slit_height(start=-1.5, stop=1.5, nsteps=31, move=False, force=False, slp=1.
                 yield from mv(motor, top)
                 
             else:
-                #action = input('\n' + bold_msg('Pluck motor position from the plot? ' + PROMPT))
                 print()
                 action = animated_prompt('Pluck motor position from the plot? ' + PROMPTNC)
                 if action != '':
@@ -440,7 +438,6 @@ def mirror_pitch(start=None, stop=None, nsteps=41, mirror='m3', move=False, forc
                 yield from mv(motor, top)
 
             else:
-                #action = input('\n' + bold_msg('Pluck motor position from the plot? ' + PROMPT))
                 print()
                 action = animated_prompt('Pluck motor position from the plot? ' + PROMPTNC)
                 if action != '':
@@ -670,7 +667,6 @@ def hcenter(start=-1, stop=1, nsteps=41, move=False, force=False, choice='peak')
                 yield from mv(motor, top)
 
             else:
-                #action = input('\n' + bold_msg('Pluck motor position from the plot? ' + PROMPT))
                 print()
                 action = animated_prompt('Pluck slits3.hcenter position from the plot? ' + PROMPTNC)
                 if action != '':
@@ -708,7 +704,6 @@ def find_slot(shape='slot'):
     if is_re_worker_active() is True:
         BMMuser.prompt = False
     if BMMuser.prompt:
-        #action = input("\nIs the beam currently on a slot in the outer ring? " + PROMPT)
         print()
         action = animated_prompt('Is the beam currently on a slot in the outer ring? ' + PROMPTNC)
         if action != '':
@@ -1132,7 +1127,6 @@ def linescan(detector, axis, start, stop, nsteps, dopluck=True, force=False, sta
         
         BMM_log_info(f'linescan: {line1}\tuid = {thisuid}')
         if dopluck is True:
-            #action = input('\n' + bold_msg('Pluck motor position from the plot? ' + PROMPT))
             print()
             action = animated_prompt('Pluck motor position from the plot? ' + PROMPTNC)
             if action != '':

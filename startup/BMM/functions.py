@@ -27,9 +27,6 @@ LUSTRE_XAS = os.path.join('/nsls2', 'data3', 'bmm', 'XAS')
 
 LUSTRE_DATA_ROOT = os.path.join('/nsls2', 'data3', 'bmm', 'proposals')
 
-PROMPT = f"[{termcolor.colored('yes', attrs=['underline'])}: y then Enter (or just Enter) ● {termcolor.colored('no', attrs=['underline'])}: n then Enter] "
-#PROMPTNC = "[YES: y then Enter (or just Enter) ● NO: n then Enter] "
-
 try:
     from bluesky_queueserver import is_re_worker_active
 except ImportError:
@@ -70,26 +67,6 @@ def run_report(thisfile, text=None):
 
 ##BMM_logfile = '/home/bravel/BMM_master.log'
 
-## see calibrate_pitch in BMM/mono_calibration.py
-def approximate_pitch(energy):
-    '''Updated 8 September 2025
-    '''
-    if user_ns['dcm']._crystal == '111':
-        m = -4.1409e-06
-        b = 4.47946925
-        return(m*energy + b)
-    else:
-        m = -3.3122e-06
-        b = 2.38902936
-        return(m*energy + b)
-
-
-# def inflect(word, number):
-#     if abs(number) == 1:
-#         return('%d %s' % (number, inflection.singularize(word)))
-#     else:
-#         return('%d %s' % (number, inflection.pluralize(word)))
-
 
 def clear_dashboard():
     '''Clean up in a way that helps the cadashboard utility'''
@@ -98,20 +75,6 @@ def clear_dashboard():
     rkvs.set('BMM:scan:type',      '')
     rkvs.set('BMM:scan:starttime', '')
     rkvs.set('BMM:scan:estimated', '')
-
-
-def countdown(t):
-    transition = max(int(t/10), 2)
-    while t:
-        mins, secs = divmod(t, 60)
-        if t > transition:
-            timeformat = bold_msg('{:02d}:{:02d}'.format(mins, secs))
-        else:
-            timeformat = warning_msg('{:02d}:{:02d}'.format(mins, secs))
-        print(timeformat, end='\r')
-        time.sleep(1)
-        t -= 1
-    print('Done!', end='\r')
 
 
 def elapsed_time(start, slack=None):
@@ -272,17 +235,6 @@ def clean_img():
         pass
 
 
-def facility_md():
-    nsls2_redis = profile_configuration.get('services', 'nsls2_redis')
-    redis_client = redis.Redis(host=nsls2_redis)
-    the_dict = RedisJSONDict(redis_client=redis_client, prefix='xas-')
-    return the_dict
-
-
-def proposal_base():
-    base = os.path.join('/nsls2', 'data3', 'bmm', 'proposals', user_ns['RE'].md['cycle'], user_ns['RE'].md['data_session'])
-    return base
-
 def slurp(folder, fname):
     'Slurp a text file into a string.'
     with open(os.path.join(folder,fname), 'r') as myfile:
@@ -300,9 +252,6 @@ def find_hdf5_files(folder=None):
             hdf5file = file_resource(uid)
             print(f'{fl:35} ---> {os.path.basename(hdf5file)}')
 
-# f = open(os.path.join(folder, 'mapping.txt'), "w")
-# f.write(f'{fl:35} ---> {os.path.basename(hdf5file)}\n')
-# f.close()
 
 def bounds(base=0.5, coef=0.25, end='14k', edge=0.3):
     '''Generate strings that can be used in an XAS automation spreadsheet
@@ -353,3 +302,60 @@ def bounds(base=0.5, coef=0.25, end='14k', edge=0.3):
     answer += f'times  =     {base:.2f}  {base:.2f}  {base:.2f}  {1/time:.2f}k  {1/time:.2f}k'
 
     print(answer)
+
+
+
+
+
+
+
+
+
+
+
+# ## see calibrate_pitch in BMM/mono_calibration.py
+# def approximate_pitch(energy):
+#     '''Updated 8 September 2025
+#     '''
+#     if user_ns['dcm']._crystal == '111':
+#         m = -4.1409e-06
+#         b = 4.47946925
+#         return(m*energy + b)
+#     else:
+#         m = -3.3122e-06
+#         b = 2.38902936
+#         return(m*energy + b)
+
+
+# def inflect(word, number):
+#     if abs(number) == 1:
+#         return('%d %s' % (number, inflection.singularize(word)))
+#     else:
+#         return('%d %s' % (number, inflection.pluralize(word)))
+
+# def countdown(t):
+#     transition = max(int(t/10), 2)
+#     while t:
+#         mins, secs = divmod(t, 60)
+#         if t > transition:
+#             timeformat = bold_msg('{:02d}:{:02d}'.format(mins, secs))
+#         else:
+#             timeformat = warning_msg('{:02d}:{:02d}'.format(mins, secs))
+#         print(timeformat, end='\r')
+#         time.sleep(1)
+#         t -= 1
+#     print('Done!', end='\r')
+
+
+# def facility_md():
+#     nsls2_redis = profile_configuration.get('services', 'nsls2_redis')
+#     redis_client = redis.Redis(host=nsls2_redis)
+#     the_dict = RedisJSONDict(redis_client=redis_client, prefix='xas-')
+#     return the_dict
+
+
+# def proposal_base():
+#     base = os.path.join('/nsls2', 'data3', 'bmm', 'proposals', user_ns['RE'].md['cycle'], user_ns['RE'].md['data_session'])
+#     return base
+
+    

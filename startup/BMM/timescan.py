@@ -24,7 +24,6 @@ from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
 
 from BMM.dossier       import DossierTools
 from BMM.functions     import present_options, plotting_mode
-from BMM.functions     import PROMPT
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
 from BMM.metadata      import bmm_metadata, display_XDI_metadata, metadata_at_this_moment
 from BMM.resting_state import resting_state, resting_state_plan
@@ -258,7 +257,6 @@ def sead(inifile=None, force=False, **kwargs):
             BMMuser.prompt = False
         if BMMuser.prompt:
             boxedtext(text + '\n      %-13s : %-50s\n' % ('output file',outfile), title='How does this look?', color='green')
-            #action = input("\nBegin time scan? " + PROMPT)
             print()
             action = animated_prompt('Begin time scan? ' + PROMPTNC)
             if action != '':

@@ -9,7 +9,6 @@ from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
 from bmm_tools.optics.dcm_parameters import approximate_pitch
 
 from BMM.exceptions    import ChangeModeException
-from BMM.functions     import PROMPT
 from BMM.linescans     import rocking_curve, slit_height, mirror_pitch, wiggle_bct
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
 from BMM.motor_status  import motor_status
@@ -285,7 +284,6 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
      ######################################################################
 
      if mode == 'B':
-          #action = input("You are entering Mode B -- focused beam below 6 keV cannot be properly configured for harmonic rejection. Continue? " + PROMPT)
           print()
           action = animated_prompt('You are entering Mode B -- focused beam below 6 keV cannot be properly configured for harmonic rejection. Continue? ' + PROMPTNC)
           if action !='' and action[0].lower() != 'y':
@@ -307,7 +305,6 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
           description = 'focused at goniometer, >8 keV'
           print('Moving to mode %s (%s)' % (mode, description))
      if prompt:
-          #action = input("Begin moving motors? " + PROMPT)
           print()
           action = animated_prompt('Begin moving motors? ' + PROMPTNC)
           if action != '':
@@ -641,7 +638,6 @@ def change_xtals(xtal=None):
      ######################################################################
 
      report(f'Moving to {xtal} crystals', level='bold', slack=True, rid=True)
-     #action = input('Begin moving motors? ' + PROMPT)
      print()
      action = animated_prompt('Begin moving motors? ' + PROMPTNC)
      if action != '':

@@ -793,7 +793,7 @@ class BMM_User(Borg):
         ## NSLS-II start experiment infrastructure
         ## this prefix needs to be the same (but without the dash) as the call to RedisJSONDict in user_ns/base.py
         if not is_re_worker_active():  # want to not do this when starting QS environment
-            print('\t\t\tCalling sync_experiment')
+            cprint('\n[light_coral]Calling sync_experiment. Enter [r]your[/r] BNL username & password at the prompts.[/light_coral]\n')
             start_experiment(gup, 'bmm', verbose=False, prefix='xas')
         
         if md['data_session'] in ('pass-301027', 'pass-317886'):  # PU proposal numbers of history

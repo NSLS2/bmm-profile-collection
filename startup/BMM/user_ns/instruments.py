@@ -2,7 +2,7 @@ import time, json, os
 
 from bmm_tools.tools.messages import error_msg, whisper
 
-from BMM.functions import run_report, examine_fmbo_motor_group
+from BMM.functions import run_report, examine_fmbo_motor_group, examine_xafs_motor_group
 from BMM.workspace import rkvs
 from BMM.user_ns.base import profile_configuration
 
@@ -205,7 +205,6 @@ else:
     
 xafs_motors.extend([xafs_yu, xafs_ydo, xafs_ydi]) #, xafs_xu, xafs_xd])
 
-from BMM.functions           import examine_xafs_motor_group
 print(f'{TAB}Examine XAFS motor groups')
 examine_xafs_motor_group(xafs_motors)
 

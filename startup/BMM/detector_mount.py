@@ -55,7 +55,7 @@ class DetectorMount():
 
 import time
 from BMM.logging import BMM_msg_hook
-from BMM.functions import go_msg, whisper
+from bmm_tools.tools.messages import go_msg, whisper
 
 
 def predict_detector_position(datatable=None, target=20500):

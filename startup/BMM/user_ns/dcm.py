@@ -4,10 +4,10 @@ run_report(__file__, text='Monochromator definitions')
 from bmm_tools.tools.wait_for_connection import wait_for_connection
 from bmm_tools.devices.motors import FMBOEpicsMotor, VacuumEpicsMotor, XAFSEpicsMotor, DeadbandEpicsMotor, BMMDeadBandMotor
 
-from BMM.user_ns.motors       import mcs8_motors
-from BMM.functions            import examine_fmbo_motor_group
-from BMM.user_ns.base import startup_dir, profile_configuration
-from BMM.user_ns.bmm  import BMMuser
+from BMM.user_ns.motors import mcs8_motors
+from BMM.functions      import examine_fmbo_motor_group
+from BMM.user_ns.base   import startup_dir, profile_configuration
+from BMM.user_ns.bmm    import BMMuser
 
 # see comment at top of BMM/user_ns/instruments.py
 from ophyd.sim import SynAxis

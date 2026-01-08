@@ -21,7 +21,6 @@ user_ns = vars(user_ns_module)
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 
 from BMM.larch_interface import Pandrosus
-#from BMM.functions import plotting_mode
 from BMM.user_ns.base import WORKSPACE, bmm_catalog
 from BMM.user_ns.bmm  import BMMuser
 

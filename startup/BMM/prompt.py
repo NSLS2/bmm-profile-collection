@@ -71,7 +71,16 @@ class BMMPrompt(Prompts):
 #     return 'Token.%s' % tokens[i]
 
 
-## from Tom on Gitter: https://gitter.im/NSLS-II/DAMA?at=5cdf02ab7c363c75a7f983e1
+# This was suggested by Tom C on the old DAMA Gitter.
+# That seems to no longer be available online, but here is
+# the reference URL anyway:
+#   https://gitter.im/NSLS-II/DAMA?at=5cdf02ab7c363c75a7f983e1
+#
+# The point is to capture and rewrite the repl for a generator.  So
+# when someone type "mvr(xafs_x, 1)", forgetting to enclose it in "RE()",
+# a (hopefully) helpful hint is written to the screen.  This solution is
+# a bit overzealous, capturing /any/ generator, not just ones intended for
+# the run engine.  But still helpful, overall.
 import types
 get_ipython().display_formatter.formatters['text/plain'].for_type(types.GeneratorType, lambda x, y, z: print(f'{x}   Hint: enclose bsui commands in RE()'))
 

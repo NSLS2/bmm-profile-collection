@@ -20,7 +20,7 @@ from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
 from bmm_tools.tools.md import proposal_base
 
-from BMM.functions         import present_options, PROMPT
+from BMM.functions         import present_options
 from BMM.user_ns.bmm       import kafka
 from BMM.logging           import BMM_log_info, BMM_msg_hook, report
 from BMM.linescans         import linescan, prepare_alignment_scan, fetch_peak_position_via_redis
@@ -483,7 +483,6 @@ class GlancingAngle(Device):
         if is_re_worker_active() is True:
             user_ns['BMMuser'].prompt = False
         if user_ns['BMMuser'].prompt:
-            #action = input("\nIs the glancing angle stage currently flat? " + PROMPT)
             print()
             action = animated_prompt('Is the glancing angle stage currently flat? ' + PROMPTNC)
             if action != '':

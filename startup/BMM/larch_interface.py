@@ -26,7 +26,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-#from BMM.functions import etok, ktoe
 from larch.xray import atomic_symbol, xray_edge
 
 #from BMM import user_ns as user_ns_module
@@ -36,6 +35,7 @@ from larch.xray import atomic_symbol, xray_edge
 
 LARCH = Interpreter()
 
+## should import these from bmm_tools.toosl.physics
 KTOE = 3.8099819442818976
 def etok(ee):
     '''convert relative energy to wavenumber'''

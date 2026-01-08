@@ -2,8 +2,8 @@ import glob, os, shutil, time
 from ophyd import Component as Cpt, EpicsSignal, Device
 from bluesky.plan_stubs import null, sleep, mv, mvr
 
-from BMM.functions     import PROMPT
-from BMM.logging       import report
+from bmm_tools.tools.animated_prompt import PROMPTNC
+from BMM.logging import report
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
@@ -91,7 +91,7 @@ class USBVideo(Device):
             print(f'There is already a file called {name} in your video folder.  Abandoning video.')
             yield from null()
             return()
-        action = input(f'\nWrite a {time} second video to {os.path.join(folder, name)}? ' + PROMPT)
+        action = input(f'\nWrite a {time} second video to {os.path.join(folder, name)}? ' + PROMPTNC)
         if action != '':
             if action[0].lower() == 'n' or action[0].lower() == 'q':
                 print('Abandoning video...')

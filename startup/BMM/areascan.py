@@ -22,7 +22,6 @@ from BMM.user_ns.bmm       import kafka
 from BMM.linescans         import motor_nicknames
 from BMM.logging           import BMM_log_info, BMM_msg_hook, report
 from BMM.functions         import plotting_mode
-from BMM.attic.derivedplot import DerivedPlot, interpret_click, close_all_plots
 from BMM.workspace         import rkvs
 
 from BMM.user_ns.base      import bmm_catalog
@@ -162,7 +161,7 @@ def areascan(detector,
         npoints = nfast * nslow
         estimate = int(npoints*(dwell+0.43))
     
-        close_all_plots()
+        kafka.close_plots()
     
         thismd = dict()
         thismd['XDI'] = dict()
