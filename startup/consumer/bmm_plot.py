@@ -17,8 +17,6 @@ import redis
 bmm_redis = profile_configuration.get('services', 'bmm_redis')
 rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
 
-from BMM_common.xdi import xdi_xrf_header
-
 def finished(record):
     if 'num' in record.metadata['start']['plan_args']:  # 1D scan
         expected = record.metadata['start']['plan_args']['num']
@@ -318,6 +316,51 @@ def mono_calibration_plot(**kwargs):
     fig.canvas.manager.show()
     fig.canvas.flush_events() 
 
+
+
+def xdi_xrf_header(**kwargs):
+    text  = ''
+    text += f'# XDI/1.0 BlueSky/{bluesky_version}\n'
+    #text += '# Scan.uid: %s\n'          % dataframe['start']['uid']
+    #text += '# Scan.transient_id: %d\n' % dataframe['start']['scan_id']
+    text +=  '# Beamline.name: BMM (06BM) -- Beamline for Materials Measurement\n'
+    text +=  '# Beamline.xray_source: NSLS-II three-pole wiggler\n'
+    text +=  '# Beamline.collimation: paraboloid mirror, 5 nm Rh on 30 nm Pt\n'
+    text += f'# Beamline.focusing: {kwargs["m2state"]}\n'
+    text += f'# Beamline.harmonic_rejection: {kwargs["m3state"]}\n'
+    text += f'# Beamline.energy: {kwargs["energy"]} eV\n'
+    text +=  '# Detector.fluorescence: SII Vortex ME4 (4-element silicon drift)\n'
+    if kwargs["i0val"] is not None:
+        text += f'# Detector.i0value: {kwargs["i0val"]} nA\n'
+    if kwargs["sample_name"] is not None:
+        text += f'# Sample.name: {kwargs["sample_name"]}\n'
+    if kwargs["sample_prep"] is not None:
+        text += f'# Sample.prep: {kwargs["sample_prep"]}\n'
+    if kwargs["sample_x"] is not None:
+        text += f'# Sample.x: {kwargs["sample_x"]}\n'
+    if kwargs["sample_y"] is not None:
+        text += f'# Sample.y: {kwargs["sample_y"]}\n'
+    text += f'# Scan.end_time: {kwargs["scan_end"]}\n'
+    text += f'# Scan.dwell_time: {kwargs["dwell_time"]} seconds\n'
+    if kwargs["uid"] is not None:
+        text += f'# Scan.uid: {kwargs["uid"]}\n'
+    text +=  '# Facility.name: NSLS-II\n'
+    text += f'# Facility.current: {kwargs["current"]} mA\n'
+    text += f'# Facility.mode: {kwargs["ring_mode"]}\n'
+    text += f'# Facility.cycle: {kwargs["cycle"]}\n'
+    text += f'# Facility.GUP: {kwargs["gup"]}\n'
+    text += f'# Facility.SAF: {kwargs["saf"]}\n'
+    text +=  '# Column.1: energy (eV)\n'
+    for i in range(kwargs["ncol"]) :
+        text += f'# Column.{i+2}: MCA{i+1} (counts)\n'
+    text += '# ==========================================================\n'
+    text += '# energy '
+    for i in range(kwargs["ncol"]) :
+        text += f' MCA{i+1} '
+    text += '\n'
+    return text
+
+    
     
 def xrfat(**kwargs):
     '''Examine an XRF spectrum measured during a fluorescence XAFS scan.  

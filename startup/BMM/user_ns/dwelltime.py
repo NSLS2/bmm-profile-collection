@@ -23,7 +23,7 @@ with_ic2       = profile_configuration.getboolean('electrometers', 'ic2')    # T
 with_dualem    = profile_configuration.getboolean('electrometers', 'dualem') # False           # deprecated, prototype
 
 # fluorescence detectors and readout systems
-with_struck    = profile_configuration.getboolean('sdd', 'struck')   # False           # deprecated OG fluorescence read out
+with_struck    = False # profile_configuration.getboolean('sdd', 'struck')   # False           # deprecated OG fluorescence read out
 with_xspress3  = profile_configuration.getboolean('sdd', 'xspress3') # True
 use_4element   = profile_configuration.getboolean('sdd', '4element') # True
 use_1element   = profile_configuration.getboolean('sdd', '1element') # True

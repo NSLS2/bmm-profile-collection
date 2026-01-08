@@ -1,7 +1,7 @@
 
 import os, json, socket, uuid
 
-from bmm_tools.tools.messages import whisper
+from bmm_tools.tools.messages import whisper, error_msg
 
 from BMM.functions import run_report
 from BMM.user_ns.base import RE, profile_configuration
@@ -57,6 +57,19 @@ bicron.channels.chan26.name = 'APD'
 
 
 
+## need to do something like this:
+##    caput XF:06BM-BI{EM:1}EM180:Current3:MeanValue_RBV.PREC 7
+## to get a sensible reporting precision from the Ix channels
+def set_precision(pv, val):
+    '''Set the precision reported in a BEC LiveTable to a sensible value.
+
+    Note that this will likely take effect only when bsui is stopped
+    and restarted.
+
+    '''
+    EpicsSignal(pv.pvname + ".PREC", name='').put(val)
+
+
 #######################################################################################
 #  _____ _      _____ _____ ___________ ________  ___ _____ _____ ___________  _____  #
 # |  ___| |    |  ___/  __ \_   _| ___ \  _  |  \/  ||  ___|_   _|  ___| ___ \/  ___| #
@@ -81,69 +94,85 @@ ION_CHAMBERS = []               # list of ion chambers in use, will be populated
 
 # configure signal chains for I0/It/Ir, configuration flags from BMM.user_ns.dwelltime
 from BMM.user_ns.dwelltime import with_ic0, with_ic1, with_ic2, with_iy, with_pips
-        
-quadem1 = BMMQuadEM('XF:06BM-BI{EM:1}EM180:', name='quadem1')
-quadem1.enable_electrometer()
-whisper('\t\t\t'+'instantiated quadem1')
 
-## using quadem for I0 detector?
-if with_ic0 is False:
-    quadem1.I0.kind, quadem1.I0.name = 'hinted', 'I0'
-else:
-    quadem1.I0.kind, quadem1.I0.name = 'omitted', 'I0q'
+try:
+    quadem1 = BMMQuadEM('XF:06BM-BI{EM:1}EM180:', name='quadem1')
+    quadem1.enable_electrometer()
+    whisper('\t\t\t'+'instantiated quadem1')
 
-## using quadem for transmission detector?
-if with_ic1 is False:
-    quadem1.It.kind, quadem1.It.name = 'hinted', 'It'
-else:
-    quadem1.It.kind, quadem1.It.name = 'omitted', 'Itq'
+    ## using quadem for I0 detector?
+    if with_ic0 is False:
+        quadem1.I0.kind, quadem1.I0.name = 'hinted', 'I0'
+    else:
+        quadem1.I0.kind, quadem1.I0.name = 'omitted', 'I0q'
 
-## using quadem for reference detector?
-if with_ic2 is False:
-    quadem1.Ir.kind, quadem1.Ir.name = 'hinted', 'Ir'
-    rkvs.set('BMM:Ir', 'quadem')  # help cadashboard keep track of which signal chain is used for Ir
-else:
-    quadem1.Ir.kind, quadem1.Ir.name = 'omitted', 'Irq'
-    rkvs.set('BMM:Ir', 'ic2')
+    ## using quadem for transmission detector?
+    if with_ic1 is False:
+        quadem1.It.kind, quadem1.It.name = 'hinted', 'It'
+    else:
+        quadem1.It.kind, quadem1.It.name = 'omitted', 'Itq'
 
-## Electron yield detector: active/inactive
-## PIPS detector: active/inactive
-if with_iy is True:
-    quadem1.Iy.kind, quadem1.Iy.name = 'hinted', 'Iy'
-    rkvs.set('BMM:Iy', 1)
-elif with_pips is True:
-    quadem1.Iy.kind, quadem1.Iy.name = 'hinted', 'Pips'
-    rkvs.set('BMM:pips', 1)
-else:
-    quadem1.Iy.kind, quadem1.Iy.name = 'omitted', 'Iy'
-    rkvs.set('BMM:Iy', 0)
-    rkvs.set('BMM:pips', 0)
+    ## using quadem for reference detector?
+    if with_ic2 is False:
+        quadem1.Ir.kind, quadem1.Ir.name = 'hinted', 'Ir'
+        rkvs.set('BMM:Ir', 'quadem')  # help cadashboard keep track of which signal chain is used for Ir
+    else:
+        quadem1.Ir.kind, quadem1.Ir.name = 'omitted', 'Irq'
+        rkvs.set('BMM:Ir', 'ic2')
+
+    ## Electron yield detector: active/inactive
+    ## PIPS detector: active/inactive
+    if with_iy is True:
+        quadem1.Iy.kind, quadem1.Iy.name = 'hinted', 'Iy'
+        rkvs.set('BMM:Iy', 1)
+    elif with_pips is True:
+        quadem1.Iy.kind, quadem1.Iy.name = 'hinted', 'Pips'
+        rkvs.set('BMM:pips', 1)
+    else:
+        quadem1.Iy.kind, quadem1.Iy.name = 'omitted', 'Iy'
+        rkvs.set('BMM:Iy', 0)
+        rkvs.set('BMM:pips', 0)
+
+
+    if with_iy is True or with_pips is True or with_ic0 is False or with_ic1 is False or with_ic2 is False:
+        ION_CHAMBERS.append(quadem1)
+
+    set_precision(quadem1.current1.mean_value, 3)
+    toss = quadem1.I0.describe()    # this seems to be necessary for the BEC to use the correct precision
+    set_precision(quadem1.current2.mean_value, 3)
+    toss = quadem1.It.describe()
+    set_precision(quadem1.current3.mean_value, 3)
+    toss = quadem1.Ir.describe()
+    set_precision(quadem1.current4.mean_value, 3)
+    toss = quadem1.Iy.describe()
+
+except:
+    quadem1 = None
+    whisper('\t\t\t'+'quadem is not available, carrying on anyway....')
+
+
+
+# this test was written during a time in January 2026 when firewall
+# rules were temporarily blocking access to black box quadems.  This
+# test + the try-except block above keep things operating correctly
+# even if the quadem is completely absent.
+from BMM.workspace import wa, TAB
+freakout = 0
+if profile_configuration.getboolean('electrometers', 'quadem') is True and quadem1 is None:
+    freakout = 1
+if freakout == 1:
+    error_msg(f'{TAB}*** Uh oh!  You have configured the quadem incorrectly.')
+    print(f'{TAB}    You currently have electrometers.quadem set to True in')
+    print(f'{TAB}    the BMM_configuration.ini file, but the QuadEM')
+    print(f'{TAB}    could not be instatiated.')
+    print('')
+    print(f'{TAB}    You need to either diagnose the problem with the QuadEM or')
+    print(f'{TAB}    set electrometers.quadem to False ... then restart bsui\n')
+    whisper(f'{TAB}    (Now issuing a command that will fail and return to the command line.)\n')
+    ## the next line is intended to trigger an immediate error and return to the IPython command line
+    wa.put(1)
 
     
-if with_iy is True or with_pips is True or with_ic0 is False or with_ic1 is False or with_ic2 is False:
-    ION_CHAMBERS.append(quadem1)
-
-    
-## need to do something like this:
-##    caput XF:06BM-BI{EM:1}EM180:Current3:MeanValue_RBV.PREC 7
-## to get a sensible reporting precision from the Ix channels
-def set_precision(pv, val):
-    '''Set the precision reported in a BEC LiveTable to a sensible value.
-
-    Note that this will likely take effect only when bsui is stopped
-    and restarted.
-
-    '''
-    EpicsSignal(pv.pvname + ".PREC", name='').put(val)
-
-set_precision(quadem1.current1.mean_value, 3)
-toss = quadem1.I0.describe()    # this seems to be necessary for the BEC to use the correct precision
-set_precision(quadem1.current2.mean_value, 3)
-toss = quadem1.It.describe()
-set_precision(quadem1.current3.mean_value, 3)
-toss = quadem1.Ir.describe()
-set_precision(quadem1.current4.mean_value, 3)
-toss = quadem1.Iy.describe()
 
 
 # try:                            # might not be in use
