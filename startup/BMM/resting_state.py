@@ -15,7 +15,6 @@ user_ns = vars(user_ns_module)
 from bmm_tools.tools.misc   import now
 
 from BMM.logging        import BMM_msg_hook
-#from BMM.suspenders     import BMM_suspenders, BMM_clear_suspenders
 from BMM.workspace      import rkvs
 
 from BMM.user_ns.base        import profile_configuration
@@ -25,6 +24,7 @@ from BMM.user_ns.dwelltime   import _locked_dwell_time, with_quadem, with_iy, wi
 from BMM.user_ns.detectors   import quadem1, ION_CHAMBERS, pilatus
 from BMM.user_ns.instruments import xafs_wheel
 from BMM.user_ns.dcm         import *
+from BMM.user_ns.suspenders  import suspenders
 
 def resting_redis():
     user_ns['rkvs'].set('BMM:scan:type', 'idle')

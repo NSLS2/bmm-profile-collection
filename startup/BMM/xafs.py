@@ -30,7 +30,6 @@ from BMM.metadata        import bmm_metadata, display_XDI_metadata, metadata_at_
 from BMM.modes           import get_mode, describe_mode
 from BMM.motor_status    import motor_status
 from BMM.resting_state   import resting_state_plan
-#from BMM.suspenders      import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.xafs_functions  import conventional_grid, sanitize_step_scan_parameters
 
 from bmm_tools.tools.periodictable import edge_energy, Z_number, element_name

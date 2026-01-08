@@ -18,7 +18,6 @@ from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 
 from BMM.user_ns.dwelltime import use_1element, use_4element, use_7element
 from BMM.resting_state     import resting_state_plan
-#from BMM.suspenders        import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.user_ns.bmm       import kafka
 from BMM.linescans         import motor_nicknames
 from BMM.logging           import BMM_log_info, BMM_msg_hook, report

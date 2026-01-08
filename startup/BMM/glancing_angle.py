@@ -27,7 +27,6 @@ from BMM.linescans         import linescan, prepare_alignment_scan, fetch_peak_p
 from BMM.macrobuilder      import BMMMacroBuilder
 from BMM.modes             import get_mode
 from BMM.resting_state     import resting_state_plan
-#from BMM.suspenders        import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.xafs_functions    import conventional_grid
 from BMM.user_ns.dwelltime import _locked_dwell_time
 

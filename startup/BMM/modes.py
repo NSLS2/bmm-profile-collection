@@ -14,7 +14,6 @@ from BMM.linescans     import rocking_curve, slit_height, mirror_pitch, wiggle_b
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
 from BMM.motor_status  import motor_status
 from BMM.resting_state import resting_state_plan
-#from BMM.suspenders    import BMM_clear_to_start
 
 
 from BMM import user_ns as user_ns_module

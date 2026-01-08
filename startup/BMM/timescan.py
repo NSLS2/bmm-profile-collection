@@ -28,7 +28,6 @@ from BMM.functions     import PROMPT
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
 from BMM.metadata      import bmm_metadata, display_XDI_metadata, metadata_at_this_moment
 from BMM.resting_state import resting_state, resting_state_plan
-#from BMM.suspenders    import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.xafs          import scan_metadata
 
 from BMM.user_ns.base       import bmm_catalog

@@ -29,7 +29,6 @@ from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
 
 from BMM.resting_state import resting_state_plan
-#from BMM.suspenders    import BMM_clear_to_start, BMM_clear_suspenders
 from BMM.logging       import BMM_log_info, BMM_msg_hook
 from BMM.functions     import clean_img, PROMPT
 from BMM.workspace     import rkvs

@@ -18,7 +18,6 @@ from bmm_tools.optics.dcm_parameters import approximate_pitch
 from BMM.exceptions    import FailedDCMParaException, ArrivedInModeException
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
 from BMM.functions     import PROMPT
-#from BMM.suspenders    import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
 from BMM.user_ns.bmm   import kafka
 from BMM.wheel         import show_reference_wheel
 from BMM.modes         import change_mode, get_mode, pds_motors_ready, MODEDATA

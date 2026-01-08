@@ -18,7 +18,6 @@ from BMM.edge           import change_edge
 from BMM.logging        import BMM_log_info, BMM_msg_hook, report
 from BMM.xafs           import xafs
 from BMM.resting_state  import resting_state_plan
-#from BMM.suspenders     import BMM_clear_to_start
 
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 from bmm_tools.tools.periodictable  import Z_number

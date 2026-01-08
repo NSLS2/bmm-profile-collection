@@ -36,11 +36,6 @@ if profile_configuration.getboolean('miscellaneous', 'set_desc_strings'):
     run_report('\t'+'setting motor description strings')
     set_desc_strings()
 
-###### deprecating #####
-#run_report('\t'+'suspenders (old version)')
-#from BMM.suspenders import BMM_suspenders, BMM_clear_to_start, BMM_clear_suspenders
-###### deprecating #####
-
 run_report('\t'+'linescan, rocking curve, slit_height, mirror_pitch, find_slot, pluck')
 from BMM.linescans import linescan, pluck, rocking_curve, slit_height, mirror_pitch, ls2dat, find_slot, rectangle_scan, hcenter
 
