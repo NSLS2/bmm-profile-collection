@@ -2,6 +2,13 @@
 import numpy, os, sys, pandas, pathlib, datetime, re
 from bluesky import __version__ as bluesky_version
 
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.dml.color import ColorFormat, RGBColor
+from pptx.enum.text import PP_ALIGN
+from pptx.enum.shapes import MSO_SHAPE
+import datetime
+
 from tools import echo_slack, experiment_folder, file_resource, profile_configuration
 
 def log_entry(logger, message):
@@ -250,3 +257,131 @@ class XRRFile():
 
 
         
+    def mythen_calibration(self, catalog=None, uid=None, path=None, now=None, stamp=None, setup=None, gap=None,
+                           energy=8600, pixel0=None, angle_per_pixel=None, stub=None, dw=0.12,
+                           rw=0.2, slits_b=0.3, slits_i=0.5, slits_o=0.5, slits_t=0.3, logger=None):  # fixme! fitA, fitB, fitC
+        '''Write a PowerPoint summary of the calibration using the established
+        layout of the report in use by the IBM folks.
+
+        '''
+
+        ## fixme!
+        fitA = fitB = fitC = 0
+
+        ## make a pptx with a single blank slide and no placeholders
+        prs = Presentation()
+        blank_slide_layout = prs.slide_layouts[6]
+        slide = prs.slides.add_slide(blank_slide_layout)
+
+
+        ## make a Text box at the top with the path to the proposal
+        ## folder and the UID of the calibration scan
+        top = Inches(0.2)
+        left = Inches(1.5)
+        width = Inches(1)
+        height = Inches(1)
+        txBox1 = slide.shapes.add_textbox(left, top, width, height)
+        tf1 = txBox1.text_frame
+        p = tf1.paragraphs[0]
+        run = p.add_run()
+        run.text = f'{path}\n{uid}'
+        run.font.size = Pt(10)
+
+        ## make a Text box for the all the header information, date,
+        ## measurement type, gap, energy, calibration fit result,
+        ## center pixel position, detector distance calculation
+        top = Inches(0.75)
+        left = Inches(4)
+        width = Inches(1)
+        height = Inches(1)
+        txBox2 = slide.shapes.add_textbox(left, top, width, height)
+        tf2 = txBox2.text_frame
+
+        #p = tf.add_paragraph()
+        tf2.text = f"{now} calibration"
+
+        p = tf2.add_paragraph()
+        p.text = f'(for {setup})'
+
+        p = tf2.add_paragraph()
+        p.text = f'Gap={gap} mm, E= {energy} keV'
+
+        p = tf2.add_paragraph()
+        p.text = f'FIT: arctan((channel - {pixel0})/{angle_per_pixel})'
+
+        p = tf2.add_paragraph()
+        p.text = f'PIXEL 0 = {pixel0}; D=0.05 x {angle_per_pixel} = {angle_per_pixel/0.05} mm'
+
+        ## justify the first two text boxes
+        for para in tf1.paragraphs:
+            para.alignment = PP_ALIGN.LEFT
+        for para in tf2.paragraphs:
+            para.alignment = PP_ALIGN.CENTER
+
+
+        ## make a box for the picture of the fit
+        left=Inches(4)
+        top=Inches(2.5)
+        width=Inches(6)
+        height=Inches(4)
+        pic = slide.shapes.add_picture(os.path.join(path, 'snapshots', stub+'.png'),
+                                       left, top, width=width, height=height)
+
+        
+        ## make a box for the mythen ROI settings
+        left=Inches(0.9)
+        top=Inches(3)
+        width=Inches(3)
+        height=Inches(2)
+
+        ROIBox = slide.shapes.add_textbox(left, top, width, height)
+        roitext = ROIBox.text_frame
+        roitext.clear()
+        p = roitext.paragraphs[0]
+        run = p.add_run()
+        run.text = '''ROIs:
+        dir = +/-{dw}, pixels {pixel0-dw}-{pixel0+dw}, {0.05*(2*dw+1)}mm
+        refl = +/-{rw}, pixels {pixel0-rw}-{pixel0+rw}, {0.05*(2*rw+1)}mm
+        '''
+        run.font.size = Pt(10)
+
+
+        ## make a box for the slit settings
+        left=Inches(0.6)
+        top=Inches(4.5)
+        width=Inches(3)
+        height=Inches(2)
+
+        SlitsBox = slide.shapes.add_textbox(left, top, width, height)
+        slitstext = SlitsBox.text_frame
+        slitstext.clear()
+        p = slitstext.paragraphs[0]
+        run = p.add_run()
+        run.text = '''Incident slits:
+        s1t, s1b = {slits_biot[0]}, V={2*slits_biot[0]}
+        s1o, s1i = {slits_biot[1]}, H={2*slits_biot[1]}
+        '''
+        run.font.size = Pt(14)
+
+
+
+        if 'pole' in setup.lower():
+            left=Inches(3)
+            top=Inches(6.5)
+            width=Inches(6)
+            height=Inches(1)
+
+            CalBox = slide.shapes.add_textbox(left, top, width, height)
+            caltext = CalBox.text_frame
+            caltext.clear()
+            p = caltext.paragraphs[0]
+            run = p.add_run()
+            run.text = 'CHESS calibration: 2θ = ({fitA}*pixel² + {fitB}*pixel + {fitC}) + del'
+            run.font.size = Pt(14)
+
+
+        run.font.size = Pt(10)
+
+        fname = os.path.join(path, f'{stub}_{stamp}.pptx')
+        prs.save(fname)
+        log_entry(logger, f'wrote Mythen calibration report to {fname}')

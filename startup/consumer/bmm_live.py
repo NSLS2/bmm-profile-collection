@@ -1481,7 +1481,7 @@ peak value = {peak:.1f} at {peakpos:.3f}'''
 
         
         
-    def calibration_plot(self, catalog=None, uid=None, stub=None, motor=None, detector=None):
+    def calibration_plot(self, catalog=None, uid=None, stub=None, motor=None, detector=None, filename=None):
         '''Swiped from an IBM supplied python file written by Koen deKeyser .
         '''
         
@@ -1523,3 +1523,11 @@ peak value = {peak:.1f} at {peakpos:.3f}'''
             
         results = {'pixelz': p2[1], 'angle_per_pixel': 1/p2[0], 'distance': d}
         rkvs.set('BMM:xrd:mythen_calibration', str(results))
+
+        if get_backend().lower() == 'agg':
+            if 'filename' in kwargs and kwargs['filename'] is not None and kwargs['filename'] != '':
+                fname = os.path.join(experiment_folder(catalog, kwargs["uid"]), 'snapshots', kwargs["filename"])
+                fig.savefig(fname)
+                self.logger.info(f'saved Mythen calibration figure {fname}')
+                img_to_slack(fname, title='Mythen calibration', measurement='mythen calibration')
+        

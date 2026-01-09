@@ -266,6 +266,28 @@ def manage_files_from_kafka_messages(beamline_acronym):
             elif 'xrr_calibration_file' in message:
                 xrr.calibration_file(catalog=bmm_catalog, uid=message['uid'], stub=message['stub'],
                                      motor=message['motor'], detector=['detector'], logger=logger)
+
+            elif 'mythen_calibration' in message:
+                xrr.mythen_calibration(catalog=bmm_catalog,
+                                       uid=message['uid'],
+                                       path=message['path'],
+                                       now=message['now'],
+                                       stamp=message['stamp'],
+                                       setup=message['setup'],
+                                       gap=message['gap'],
+                                       energy=message['energy'],
+                                       pixel0=message['pixel0'],
+                                       angle_per_pixel=message['angle_per_pixel'],
+                                       stub=message['stub'],
+                                       dw=message['dw'],
+                                       rw=message['rw'],
+                                       slits_b=message['slits_b'],
+                                       slits_i=message['slits_i'],
+                                       slits_o=message['slits_o'],
+                                       slits_t=message['slits_t'],
+                                       logger=logger)
+                                       
+                                       
                 
     kafka_config = nslsii.kafka_utils._read_bluesky_kafka_config_file(config_file_path="/etc/bluesky/kafka.yml")
 
