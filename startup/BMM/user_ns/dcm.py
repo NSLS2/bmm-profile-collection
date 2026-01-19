@@ -16,7 +16,8 @@ from ophyd.sim import SynAxis
 TAB = '\t\t\t'
 
 dcm = False
-from BMM.dcm import DCM
+#from BMM.dcm import DCM
+from bmm_tools.devices.dcm import DCM
 #from BMM.user_ns.motors import dcm_x
 
 dcm = DCM('XF:06BMA-OP{Mono:DCM1-Ax:', name='dcm', crystal='111')

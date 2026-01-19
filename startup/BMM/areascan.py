@@ -62,7 +62,7 @@ def areascan(detector,
        log:       True=plot log of signal in color scale
        md:        composable dictionary of metadata
 
-    slow and fast are the BlueSky name for a motor (e.g. xafs_linx)
+    slow and fast are the BlueSky name for a motor (e.g. xafs_x)
 
     Plotting and file output are handled by kafka clients.
     '''

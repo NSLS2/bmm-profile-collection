@@ -330,7 +330,7 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
           no_ref = False
           reference = None
      if reference is not None:
-          #base.extend([xafs_linxs, foils.position(reference.capitalize())])
+          #base.extend([xafs_refy, foils.position(reference.capitalize())])
           #base.extend([xafs_ref, xafs_ref.position_of_slot(reference.capitalize())])
           if reference.capitalize() in xafs_ref.mapping:
                slot = xafs_ref.mapping[reference.capitalize()][1]

@@ -76,35 +76,37 @@ from bmm_tools.devices.motors import XAFSEpicsMotor, Mirrors, XAFSTable, GonioTa
 from BMM.user_ns.bmm import BMMuser
 from BMM.user_ns.motors import mcs8_motors, xafs_motors
 
-
 ## collimating mirror
-print(f'{TAB}FMBO motor group: m1')
-m1 = Mirrors('XF:06BM-OP{Mir:M1-Ax:',  name='m1', mirror_length=556,  mirror_width=240)
-m1.vertical._limits = (-5.0, 5.0)
-m1.lateral._limits  = (-5.0, 5.0)
-m1.pitch._limits    = (-5.0, 5.0)
-m1.roll._limits     = (-5.0, 5.0)
-m1.yaw._limits      = (-5.0, 5.0)
+WITH_M1    = profile_configuration.getboolean('miscellaneous', 'with_m1') # False
 
-wait_for_connection(m1)
+if WITH_M1:
+    print(f'{TAB}FMBO motor group: m1')
+    m1 = Mirrors('XF:06BM-OP{Mir:M1-Ax:',  name='m1', mirror_length=556,  mirror_width=240)
+    m1.vertical._limits = (-5.0, 5.0)
+    m1.lateral._limits  = (-5.0, 5.0)
+    m1.pitch._limits    = (-5.0, 5.0)
+    m1.roll._limits     = (-5.0, 5.0)
+    m1.yaw._limits      = (-5.0, 5.0)
+
+    wait_for_connection(m1)
 
 
 
-if m1.connected is True:
-    m1_yu     = XAFSEpicsMotor('XF:06BM-OP{Mir:M1-Ax:YU}Mtr',   name='m1_yu')
-    m1_ydo    = XAFSEpicsMotor('XF:06BM-OP{Mir:M1-Ax:YDO}Mtr',  name='m1_ydo')
-    m1_ydi    = XAFSEpicsMotor('XF:06BM-OP{Mir:M1-Ax:YDI}Mtr',  name='m1_ydi')
-    m1_xu     = XAFSEpicsMotor('XF:06BM-OP{Mir:M1-Ax:XU}Mtr',   name='m1_xu')
-    m1_xd     = XAFSEpicsMotor('XF:06BM-OP{Mir:M1-Ax:XD}Mtr',   name='m1_xd')
-else:
-    m1_yu     = SynAxis(name='m1_yu')
-    m1_ydo    = SynAxis(name='m1_ydo')
-    m1_ydi    = SynAxis(name='m1_ydi')
-    m1_xu     = SynAxis(name='m1_xu')
-    m1_xd     = SynAxis(name='m1_xd')
-    
-m1list = [m1_yu, m1_ydo, m1_ydi, m1_xu, m1_xd]
-mcs8_motors.extend(m1list)
+    if m1.connected is True:
+        m1_yu     = XAFSEpicsMotor('XF:06BM-OP{Mir:M1-Ax:YU}Mtr',   name='m1_yu')
+        m1_ydo    = XAFSEpicsMotor('XF:06BM-OP{Mir:M1-Ax:YDO}Mtr',  name='m1_ydo')
+        m1_ydi    = XAFSEpicsMotor('XF:06BM-OP{Mir:M1-Ax:YDI}Mtr',  name='m1_ydi')
+        m1_xu     = XAFSEpicsMotor('XF:06BM-OP{Mir:M1-Ax:XU}Mtr',   name='m1_xu')
+        m1_xd     = XAFSEpicsMotor('XF:06BM-OP{Mir:M1-Ax:XD}Mtr',   name='m1_xd')
+    else:
+        m1_yu     = SynAxis(name='m1_yu')
+        m1_ydo    = SynAxis(name='m1_ydo')
+        m1_ydi    = SynAxis(name='m1_ydi')
+        m1_xu     = SynAxis(name='m1_xu')
+        m1_xd     = SynAxis(name='m1_xd')
+
+    m1list = [m1_yu, m1_ydo, m1_ydi, m1_xu, m1_xd]
+    mcs8_motors.extend(m1list)
 
 
 ## focusing mirror
@@ -311,7 +313,7 @@ from BMM.wheel import WheelMotor, WheelMacroBuilder, reference, show_reference_w
 from BMM.user_ns.motors import xafs_x, xafs_refx
 
 xafs_wheel = xafs_rotb  = WheelMotor('XF:06BMA-BI{XAFS-Ax:RotB}Mtr',  name='xafs_wheel')
-xafs_wheel.slotone = -30        # the angular position of slot #1
+xafs_wheel.slotone = 0 # -30        # the angular position of slot #1,  this changed Jan 2026
 #xafs_wheel.user_offset.put(-0.7821145500000031)
 slot = xafs_wheel.set_slot
 xafs_wheel.x_motor = xafs_x
@@ -330,7 +332,7 @@ xafs_ref.x_motor = xafs_refx
 #                          ring, slot, elem, material, on wheel (ring: 0=outer, 1=inner)
 xafs_ref.mapping = {'empty0': [0,  1, 'empty0', 'empty', True],
                     'Ti':     [0,  2, 'Ti', 'Ti foil', True],
-                    'V' :     [0,  3, 'V',  'V foil', True],
+                    'V' :     [0,  3, 'V',  'V foil',  True],
                     'Cr':     [0,  4, 'Cr', 'Cr foil', True],
                     'Mn':     [0,  5, 'Mn', 'Mn metal powder', True],
                     'Fe':     [0,  6, 'Fe', 'Fe foil', True],
@@ -338,9 +340,9 @@ xafs_ref.mapping = {'empty0': [0,  1, 'empty0', 'empty', True],
                     'Ni':     [0,  8, 'Ni', 'Ni foil', True],
                     'Cu':     [0,  9, 'Cu', 'Cu foil', True],
                     'Zn':     [0, 10, 'Zn', 'Zn foil', True],
-                    'Ga':     [0, 11, 'Ga', 'Ga2O3', True],
-                    'Ge':     [0, 12, 'Ge', 'GeO2', True],
-                    'As':     [0, 13, 'As', 'As2O3', True],
+                    'Ga':     [0, 11, 'Ga', 'Ga2O3',   True],
+                    'Ge':     [0, 12, 'Ge', 'GeO2',    True],
+                    'As':     [0, 13, 'As', 'As2O3',   True],
                     'Se':     [0, 14, 'Se', 'Se metal powder', True],
                     'Br':     [0, 15, 'Br', 'bromophenol blue', True],
                     'Zr':     [0, 16, 'Zr', 'Zr foil', True],
@@ -349,37 +351,37 @@ xafs_ref.mapping = {'empty0': [0,  1, 'empty0', 'empty', True],
                     'Pt':     [0, 19, 'Pt', 'Pt foil', True],
                     'Au':     [0, 20, 'Au', 'Au foil', True],
                     'Pb':     [0, 21, 'Pb', 'Pb foil', True],
-                    'Bi':     [0, 22, 'Bi', 'BiO2', True],
-                    'Sr':     [0, 23, 'Sr', 'SrTiO3', True],
-                    'Y' :     [0, 24, 'Y',  'Y foil', True],
-                    'Cs':     [1,  1, 'Cs', 'CsNO3', True],
+                    'Bi':     [0, 22, 'Bi', 'BiO2',    True],
+                    'Sr':     [0, 23, 'Sr', 'SrTiO3',  True],
+                    'Y' :     [0, 24, 'Y',  'Y foil',  True],
+                    'Cs':     [1,  1, 'Cs', 'CsNO3',   True],
                     'La':     [1,  2, 'La', 'La(OH)3', True],
-                    'Ce':     [1,  3, 'Ce', 'CeO2', True],
-                    'Pr':     [1,  4, 'Pr', 'Pr6O11', True],
-                    'Nd':     [1,  5, 'Nd', 'Nd2O3', True],
-                    'Sm':     [1,  6, 'Sm', 'Sm2O3', True],
-                    'Eu':     [1,  7, 'Eu', 'Eu2O3', True],
-                    'Gd':     [1,  8, 'Gd', 'Gd2O3', True],
-                    'Tb':     [1,  9, 'Tb', 'Tb4O9', True],
-                    'Dy':     [1, 10, 'Dy', 'Dy2O3', True],
-                    'Ho':     [1, 11, 'Ho', 'Ho2O3', True],
-                    'Er':     [1, 12, 'Er', 'Er2O3', True],
-                    'Tm':     [1, 13, 'Tm', 'Tm2O3', True],
-                    'Yb':     [1, 14, 'Yb', 'Yb2O3', True],
-                    'Lu':     [1, 15, 'Lu', 'Lu2O3', True],
-                    'Rb':     [1, 16, 'Rb', 'RbCO3', True],
-                    'Ba':     [1, 17, 'Ba', 'None', True],     # missing standard
-                    'Hf':     [1, 18, 'Hf', 'HfO2', True],
-                    'Ta':     [1, 19, 'Ta', 'Ta2O5', True],
-                    'W' :     [1, 20, 'W',  'WO3', True],
-                    'Re':     [1, 21, 'Re', 'ReO2', True], 
-                    'Os':     [1, 22, 'Os', 'None', True],     # missing standard
+                    'Ce':     [1,  3, 'Ce', 'CeO2',    True],
+                    'Pr':     [1,  4, 'Pr', 'Pr6O11',  True],
+                    'Nd':     [1,  5, 'Nd', 'Nd2O3',   True],
+                    'Sm':     [1,  6, 'Sm', 'Sm2O3',   True],
+                    'Eu':     [1,  7, 'Eu', 'Eu2O3',   True],
+                    'Gd':     [1,  8, 'Gd', 'Gd2O3',   True],
+                    'Tb':     [1,  9, 'Tb', 'Tb4O9',   True],
+                    'Dy':     [1, 10, 'Dy', 'Dy2O3',   True],
+                    'Ho':     [1, 11, 'Ho', 'Ho2O3',   True],
+                    'Er':     [1, 12, 'Er', 'Er2O3',   True],
+                    'Tm':     [1, 13, 'Tm', 'Tm2O3',   True],
+                    'Yb':     [1, 14, 'Yb', 'Yb2O3',   True],
+                    'Lu':     [1, 15, 'Lu', 'Lu2O3',   True],
+                    'Rb':     [1, 16, 'Rb', 'RbCO3',   True],
+                    'Ba':     [1, 17, 'Ba', 'None',    True],     # missing standard
+                    'Hf':     [1, 18, 'Hf', 'HfO2',    True],
+                    'Ta':     [1, 19, 'Ta', 'Ta2O5',   True],
+                    'W' :     [1, 20, 'W',  'WO3',     True],
+                    'Re':     [1, 21, 'Re', 'ReO2',    True], 
+                    'Os':     [1, 22, 'Os', 'None',    True],     # missing standard
                     'Sc' :    [1, 23, 'Sc', 'Sc metal powder', True],
                     'Ru':     [1, 24, 'Ru', 'Ru metal powder', True],
 
                     ## commonly measured radionuclides 
-                    'Th':     [0, 22, 'Bi', 'BiO2', False],     # use Bi L1 for Th L3
-                    'U' :     [0, 24, 'Y',  'Y foil', False],   # use Y K for U L3
+                    'Th':     [0, 22, 'Bi', 'BiO2',    False],     # use Bi L1 for Th L3
+                    'U' :     [0, 24, 'Y',  'Y foil',  False],   # use Y K for U L3
                     'Pu':     [0, 16, 'Zr', 'Zr foil', False],  # use Zr K for Pu L3
                     'Am':     [0, 16, 'Zr', 'Zr foil', False],  # use Nb K for Am L3
 
@@ -412,7 +414,7 @@ if WITH_RADIOLOGICAL:
         xafs_ref.mapping['U'] = uranium
         whisper('Set U standard location')
     except Exception as E:
-        print(E)
+        #print(E)
         error_msg('Unable to read U reference configuration from INI file')
         pass
     try:
@@ -423,7 +425,7 @@ if WITH_RADIOLOGICAL:
         xafs_ref.mapping['Tc'] = technicium
         whisper('Set Tc standard location')
     except Exception as E:
-        print(E)
+        #print(E)
         error_msg('Unable to read Tc reference configuration from INI file')
         pass
     try:
@@ -434,7 +436,7 @@ if WITH_RADIOLOGICAL:
         xafs_ref.mapping['Th'] = thorium
         whisper('Set Th standard location')
     except Exception as E:
-        print(E)
+        #print(E)
         error_msg('Unable to read Th reference configuration from INI file')
         pass
 

@@ -153,10 +153,10 @@ def bmm_metadata(measurement   = 'transmission',
     md['Facility']['cycle']          = BMMuser.cycle
     md['Sample']['name']             = sample
     md['Sample']['prep']             = prep
-    #md['XDI']['Sample']['x_position']       = xafs_linx.user_readback.get()
-    #md['XDI']['Sample']['y_position']       = xafs_liny.user_readback.get()
+    #md['XDI']['Sample']['x_position']       = xafs_x.user_readback.get()
+    #md['XDI']['Sample']['y_position']       = xafs_y.user_readback.get()
     #md['XDI']['Sample']['roll_position']    = xafs_roll.user_readback.get()
-    ## what about pitch, linxs, rotX ???
+    ## what about pitch, adx/ady, bsx/bsy ???
     if stoichiometry is not None:
         md['Sample']['stoichiometry'] = stoichiometry
 

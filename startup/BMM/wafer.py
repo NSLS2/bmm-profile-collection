@@ -83,9 +83,9 @@ class Wafer():
         '''Fit an error function to the linear scan against It. Plot the
         result. Move to the centroid of the error function.'''
         if motor == 'x':
-            motor = user_ns['xafs_linx']
+            motor = user_ns['xafs_x']
         else:
-            motor = user_ns['xafs_liny']
+            motor = user_ns['xafs_y']
         yield from prepare_alignment_scan()
         uid = yield from linescan(motor, 'it', -2, 2, 41, dopluck=False)
         kafka.message({'close': 'last'})

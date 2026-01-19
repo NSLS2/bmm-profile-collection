@@ -1,5 +1,5 @@
 from ophyd import EpicsSignal
-from BMM.user_ns.motors import xafs_mtr8, xafs_linxs, xafs_linx, xafs_liny, xafs_pitch, xafs_roll
+from BMM.user_ns.motors import xafs_mtr8, xafs_refy, xafs_x, xafs_y, xafs_pitch, xafs_roll
 from BMM.user_ns.instruments import xafs_rotb
 
 def set_desc_strings():
@@ -84,6 +84,16 @@ def set_desc_strings():
     toss.put('xafs_detz')       # was Axis #2
     toss = EpicsSignal('XF:06BM-ES{MC:09-Ax:3}Mtr.DESC', name='toss')
     toss.put('xafs_spare')      # was Axis #3
+
+    toss = EpicsSignal('XF:06BMA-BI{XAFS-Ax:LinX}Mtr.DESC', name='toss')
+    toss.put('xafs_adx')     # old sample stage, now area detector stage
+    toss = EpicsSignal('XF:06BMA-BI{XAFS-Ax:LinY}Mtr.DESC', name='toss')
+    toss.put('xafs_ady')     # old sample stage, now area detector stage
+    toss = EpicsSignal('XF:06BM-ES{MC:09-Ax:6}Mtr.DESC', name='toss')
+    toss.put('xafs_x')          # new sample stage
+    toss = EpicsSignal('XF:06BM-ES{MC:09-Ax:7}Mtr.DESC', name='toss')
+    toss.put('xafs_y')          # new sample stage
+
     
 
     
@@ -91,6 +101,6 @@ def set_desc_strings():
     ## pitch and roll are confusing.  those two were defined in the wrong orientation way back when,
     ## so they got swapped in bsui.  that means that XF:06BMA-BI{XAFS-Ax:Roll}Mtr is used for the pitch
     ## direction and same for the other direction.  just awful and should be fixed in the IOC
-    for s in (xafs_mtr8, xafs_linxs, xafs_rotb, xafs_linx, xafs_liny, xafs_pitch, xafs_roll): # xafs_lins
+    for s in (xafs_mtr8, xafs_refy, xafs_rotb, xafs_x, xafs_y, xafs_pitch, xafs_roll): # xafs_lins
         toss = EpicsSignal(f'{s.prefix}.DESC', name = 'toss')
         toss.put(s.name)

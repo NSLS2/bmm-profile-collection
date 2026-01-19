@@ -18,10 +18,10 @@ from BMM.user_ns.dcm import dcm
 from BMM.user_ns.motors import *
 from BMM.user_ns.instruments import * #xafs_wheel, xafs_ref, slits2, slits3, m2, m3, xafs_table, m2_bender
 
-user_ns['sd'].baseline = [xafs_linx, xafs_liny, xafs_pitch, xafs_roll, xafs_wheel, xafs_rots, xafs_garot,
+user_ns['sd'].baseline = [xafs_x, xafs_y, xafs_pitch, xafs_roll, xafs_wheel, xafs_rots, xafs_garot,
                           xafs_detx, xafs_dety, xafs_detz,
                           xafs_ref, xafs_refx, xafs_refy,
-                          xafs_bsx, xafs_bsy,
+                          xafs_bsx, xafs_bsy, xafs_adx, xafs_ady,
                           dm3_bct, dm3_foils, dm2_fs,
                           dcm.x, dcm.pitch, dcm.roll, # dcm.bragg, dcm.para, dcm.pitch,
                           slits3.top, slits3.bottom, slits3.outboard, slits3.inboard, slits3.vsize, slits3.vcenter, slits3.hsize, slits3.hcenter, 

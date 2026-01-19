@@ -5,8 +5,8 @@ user_ns = vars(user_ns_module)
 from bmm_tools.tools.messages import boxedtext
 
 def motor_metadata(uid=None):
-    biglist = (user_ns['xafs_linx'], user_ns['xafs_liny'], user_ns['xafs_pitch'], user_ns['xafs_roll'],
-               user_ns['xafs_linxs'], user_ns['xafs_wheel'], user_ns['xafs_rots'], user_ns['xafs_ref'],
+    biglist = (user_ns['xafs_x'], user_ns['xafs_y'], user_ns['xafs_pitch'], user_ns['xafs_roll'],
+               user_ns['xafs_refy'], user_ns['xafs_wheel'], user_ns['xafs_rots'], user_ns['xafs_ref'],
                #user_ns['xafs_lins'],
                user_ns['xafs_mtr8'], user_ns['xafs_refx'],
                
@@ -98,8 +98,8 @@ def motor_status():
     text += ' XAFS stages (motor names are xafs_<name>, units mm or deg):\n'
     text += '     name =     x        y     pitch    wheel (slot)   ref\n'
     text += '           %8.3f %8.3f %7.3f %8.3f   %d   %8.3f\n' % \
-            (md[user_ns['xafs_linx'].name],
-             md[user_ns['xafs_liny'].name],
+            (md[user_ns['xafs_x'].name],
+             md[user_ns['xafs_y'].name],
              md[user_ns['xafs_pitch'].name],
              md[user_ns['xafs_rotb'].name], user_ns['xafs_rotb'].current_slot(user_ns['xafs_rotb'].position),
              md[user_ns['xafs_ref'].name]

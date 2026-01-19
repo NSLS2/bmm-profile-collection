@@ -207,7 +207,7 @@ def report(text, level=None, slack=False, rid=None):
 # here is an example of what a message tuple looks like when moving a motor          #
 # (each item in the tuple is on it's own line):                                      #
 #     set:                                                                           #
-#     (XAFSEpicsMotor(prefix='XF:06BMA-BI{XAFS-Ax:LinX}Mtr', name='xafs_linx', ... ) #
+#     (XAFSEpicsMotor(prefix='XF:06BMA-BI{XAFS-Ax:LinX}Mtr', name='xafs_x', ... ) #
 #     (-91.5999475,),                                                                #
 #     {'group': '8c8df020-23aa-451e-b411-c427bc80b375'}                              #
 ######################################################################################

@@ -899,9 +899,8 @@ def peak_scan(motor=None, start=-20, stop=20, nsteps=41, detector='It', find='ma
 ##                     linear stages        tilt stage           rotation stages
 motor_nicknames = {'x'    : xafs_x,     'roll' : xafs_roll,
                    'y'    : xafs_y,     'pitch': xafs_pitch, 'wh' : xafs_wheel,
-                   #'s'    : xafs_lins,
                    'p'    : xafs_pitch, 'rs' : xafs_rots,
-                   'xs'   : xafs_linxs, 'r'    : xafs_roll,
+                   'r'    : xafs_roll,
                }
 
 ## before 29 August 2018, the order of arguments for linescan() was
@@ -954,8 +953,8 @@ def linescan(detector, axis, start, stop, nsteps, dopluck=True, force=False, sta
     inttime : float, optional
         integration time in seconds (default: 0.1)
 
-    The motor is either the BlueSky name for a motor (e.g. xafs_linx)
-    or a nickname for an XAFS sample motor (e.g. 'x' for xafs_linx).
+    The motor is either the BlueSky name for a motor (e.g. xafs_x)
+    or a nickname for an XAFS sample motor (e.g. 'x' for xafs_x).
 
     This does not write an ASCII data file, but it does make a log entry.
 

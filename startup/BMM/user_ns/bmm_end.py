@@ -282,13 +282,12 @@ from BMM.mono_calibration import calibrate, calibrate_high_end, calibrate_low_en
 ###############################################################
 
 
-XDI_record = {'xafs_linx'                        : (True,  'Sample.x'),
-              'xafs_x'                           : (True,  'Sample.x'),
-              'xafs_liny'                        : (True,  'Sample.y'),
+XDI_record = {'xafs_x'                           : (True,  'Sample.x'),
               'xafs_y'                           : (True,  'Sample.y'),
               'xafs_lins'                        : (True,  'Sample.SDD_position'),
               'xafs_det'                         : (True,  'Sample.SDD_position'),
-              'xafs_linxs'                       : (False, 'BMM.sample_ref_position'),
+              'xafs_refx'                        : (False, 'BMM.sample_refx_position'),
+              'xafs_refy'                        : (False, 'BMM.sample_refy_position'),
               'xafs_pitch'                       : (False, 'Sample.pitch'),
               'xafs_roll'                        : (False, 'BMM.sample_roll_position'),
               'xafs_wheel'                       : (False, 'BMM.sample_wheel_position'),

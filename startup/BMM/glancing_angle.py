@@ -247,9 +247,9 @@ class GlancingAngle(Device):
         result. Move to the centroid of the error function.'''
         kafka.message({'close': 'last'})
         if self.orientation == 'parallel':
-            motor = user_ns['xafs_liny']
+            motor = user_ns['xafs_y']
         else:
-            motor = user_ns['xafs_linx']
+            motor = user_ns['xafs_x']
         yield from prepare_alignment_scan()
         uid = yield from linescan(motor, 'it', -2.3, 2.3, 51, dopluck=False)
         kafka.message({'close': 'last'})
@@ -299,9 +299,9 @@ class GlancingAngle(Device):
         BMMuser = user_ns['BMMuser']
         yield from prepare_alignment_scan()
         if self.orientation == 'parallel':
-            motor = user_ns['xafs_liny']
+            motor = user_ns['xafs_y']
         else:
-            motor = user_ns['xafs_linx']
+            motor = user_ns['xafs_x']
         uid = yield from linescan(motor, 'xs', -1.8, 1.8, 51, dopluck=False, force=force, stack=False)
         kafka.message({'close': 'last'})
         kafka.message({'peakfit'    : True,

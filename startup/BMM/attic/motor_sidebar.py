@@ -24,8 +24,8 @@ def motor_sidebar(md=None):
 
     motors +=  '<span class="motorheading">XAFS stages:</span>\n'
     motors +=  '            <div id="motorgrid">\n'
-    motors += f'              <div>xafs_x, {md[user_ns["xafs_linx"].name]:.3f}</div>\n'
-    motors += f'              <div>xafs_y, {md[user_ns["xafs_liny"].name]:.3f}</div>\n'
+    motors += f'              <div>xafs_x, {md[user_ns["xafs_x"].name]:.3f}</div>\n'
+    motors += f'              <div>xafs_y, {md[user_ns["xafs_y"].name]:.3f}</div>\n'
     motors += f'              <div>xafs_pitch, {md[user_ns["xafs_pitch"].name]:.3f}</div>\n'
     motors += f'              <div>xafs_roll, {md[user_ns["xafs_roll"].name]:.3f}</div>\n'
     motors += f'              <div>xafs_wheel, {md[user_ns["xafs_wheel"].name]:.3f}</div>\n'
@@ -119,9 +119,9 @@ def motor_sidebar(md=None):
     
     # mlist = []
     # mlist.append('XAFS stages:')
-    # mlist.append('xafs_x, %.3f, xafs_y, %.3f'         % (md[user_ns['xafs_linx'].name],  md[user_ns['xafs_liny'].name]))
+    # mlist.append('xafs_x, %.3f, xafs_y, %.3f'         % (md[user_ns['xafs_x'].name],  md[user_ns['xafs_y'].name]))
     # mlist.append('xafs_pitch, %.3f, xafs_roll, %.3f'  % (md[user_ns['xafs_pitch'].name], md[user_ns['xafs_roll'].name]))
-    # mlist.append('xafs_ref, %.3f, xafs_wheel, %.3f'   % (md[user_ns['xafs_linxs'].name], md[user_ns['xafs_wheel'].name]))
+    # mlist.append('xafs_ref, %.3f, xafs_wheel, %.3f'   % (md[user_ns['xafs_refy'].name], md[user_ns['xafs_wheel'].name]))
     # mlist.append('xafs_garot, %.3f, xafs_det, %.3f'   % (md[user_ns['xafs_mtr8'].name],  md[user_ns['xafs_lins'].name]))
     # mlist.append('wheel slot = %2d'                   % user_ns['xafs_wheel'].current_slot())
     # mlist.append('glancing angle spinner = %2d'       % user_ns['ga'].current())

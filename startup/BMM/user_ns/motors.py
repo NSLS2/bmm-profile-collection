@@ -1,11 +1,15 @@
 from ophyd.sim import SynAxis
-from ophyd import EpicsMotor, EpicsSignalRO
+from ophyd import EpicsMotor, EpicsSignalRO, EpicsSignal
 
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.reset_offset import reset_offset
 from bmm_tools.devices.motors import FMBOEpicsMotor, XAFSEpicsMotor, VacuumEpicsMotor, EndStationEpicsMotor, EncodedEndStationEpicsMotor, EpicsMotorWithDial
 from bmm_tools.devices.motors import define_XAFSEpicsMotor, define_EndStationEpicsMotor, define_EncodedEndStationEpicsMotor
 
 from BMM.functions import run_report, examine_fmbo_motor_group
+
+from BMM.user_ns.base import profile_configuration
+
 import time
 
 run_report(__file__, text='individual motor definitions')
@@ -104,43 +108,35 @@ if 'XAFSEpicsMotor' in str(type(dm3_foils)):
     
 ## XAFS stages
 print(f'{TAB}XAFS stages motor group')
-#xafs_wheel = xafs_rotb  = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:RotB}Mtr',  name='xafs_wheel')
-#xafs_roth  = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:RotH}Mtr',  name='xafs_roth')
-xafs_rots  = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:RotS}Mtr',  name='xafs_rots')
-#xafs_det   = xafs_lins  = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:LinS}Mtr',  name='xafs_det')
-xafs_detx  = xafs_det   = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_XD}Mtr',  name='xafs_detx')
-xafs_linxs = xafs_refy  = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:LinXS}Mtr', name='xafs_refy')
-xafs_refx  = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:RefX}Mtr', name='xafs_refx') 
-xafs_x     = xafs_linx  = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:LinX}Mtr',  name='xafs_x')
-xafs_y     = xafs_liny  = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:LinY}Mtr',  name='xafs_y')
-xafs_roll  = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Pitch}Mtr', name='xafs_roll') # note: the way this stage gets mounted, the
-xafs_pitch = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Roll}Mtr',  name='xafs_pitch') # EPICS names are swapped.  sigh....
+#xafs_wheel  = xafs_rotb  = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:RotB}Mtr',  name='xafs_wheel')
+#xafs_roth   = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:RotH}Mtr',  name='xafs_roth')
+xafs_rots   = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:RotS}Mtr',  name='xafs_rots')
+#xafs_det    = xafs_lins  = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:LinS}Mtr',  name='xafs_det')
+xafs_detx   = xafs_det   = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_XD}Mtr',  name='xafs_detx')
+xafs_refy   = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:LinXS}Mtr', name='xafs_refy')
+xafs_refx   = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:RefX}Mtr', name='xafs_refx') 
+xafs_adx = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:LinX}Mtr',  name='xafs_adx')
+xafs_ady = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:LinY}Mtr',  name='xafs_ady')
+xafs_roll   = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Pitch}Mtr', name='xafs_roll')  # note: the way this stage gets mounted, the
+xafs_pitch  = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Roll}Mtr',  name='xafs_pitch') # EPICS names are swapped.  sigh....
 
 xafs_garot = xafs_mtr8  = define_EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Mtr8}Mtr',  name='xafs_garot') # EPICS names are swapped.
 
-#xafs_linxs.hlm.put(30)
-#xafs_linxs.llm.put(10)
-#xafs_linx.kill_cmd.kind = 'config'
-
-# RE(scan(dets, m3.pitch, -4, -3, num=10))
-
-xafs_x.default_llm = 2
-xafs_x.default_hlm = 126
-xafs_y.default_llm = 10
-xafs_y.default_hlm = 200
 
 
 ## MC09 stages -- stages with encoders and limit/home indicators
 print(f'{TAB}XAFS stages motor group, encoded')
 xafs_dety  = define_EncodedEndStationEpicsMotor('XF:06BM-ES{MC:09-Ax:1}Mtr',  name='xafs_dety')
 xafs_detz  = define_EncodedEndStationEpicsMotor('XF:06BM-ES{MC:09-Ax:2}Mtr',  name='xafs_detz')
-xafs_spare  = define_EncodedEndStationEpicsMotor('XF:06BM-ES{MC:09-Ax:3}Mtr',  name='xafs_spare')
+xafs_spare = define_EncodedEndStationEpicsMotor('XF:06BM-ES{MC:09-Ax:3}Mtr',  name='xafs_spare')
 xafs_bsy   = define_EncodedEndStationEpicsMotor('XF:06BM-ES{MC:09-Ax:4}Mtr',  name='xafs_bsy')
 xafs_bsx   = define_EncodedEndStationEpicsMotor('XF:06BM-ES{MC:09-Ax:5}Mtr',  name='xafs_bsx')
+xafs_x     = define_EncodedEndStationEpicsMotor('XF:06BM-ES{MC:09-Ax:6}Mtr',  name='xafs_x')
+xafs_y     = define_EncodedEndStationEpicsMotor('XF:06BM-ES{MC:09-Ax:7}Mtr',  name='xafs_y')
 
-xafs_motors = [xafs_rots, xafs_refy, xafs_refx, xafs_x, xafs_y, xafs_rots,
-               xafs_roll, xafs_pitch, xafs_garot, xafs_detx]
-homeable_xafs_motors = [xafs_dety, xafs_detz, xafs_spare, xafs_bsy, xafs_bsx]
+xafs_motors = [xafs_rots, xafs_refy, xafs_refx, xafs_rots,
+               xafs_roll, xafs_pitch, xafs_garot, xafs_detx, xafs_adx, xafs_ady] 
+homeable_xafs_motors = [xafs_dety, xafs_detz, xafs_spare, xafs_bsy, xafs_bsx, xafs_x, xafs_y]
 
 xafs_motors.extend(homeable_xafs_motors)
 
@@ -187,12 +183,42 @@ def amfe():
 faults = amfe
             
 
+def configure_xafs_y(load='light'):
+    '''Configure speeds and accelerations for heavy and light load.
+
+    argument is either 'light' or 'heavy'.  Default is 'light'.
+    '''
+    if load == 'light':
+        print('\t\t\tConfiguring xafs_y for light load')
+        settings = {'VMAX': 4,
+                    'VELO': 3,
+                    'JVEL': 3,
+                    'ACCL': 0.1,
+                    'JAR' : 10
+        }
+    else:
+        print('\t\t\tConfiguring xafs_y for heavy load')
+        settings = {'VMAX': 1,
+                    'VELO': 1,
+                    'JVEL': 1,
+                    'ACCL': 0.1,
+                    'JAR' : 10
+        }
+        
+    for k, v in settings.items():
+        toss = EpicsSignal(f'XF:06BM-ES{{MC:09-Ax:7}}Mtr.{k}', name='toss')
+        toss.put(v)
+
+WITH_DISPLEX = profile_configuration.getboolean('experiments', 'displex') # False
+if WITH_DISPLEX is True:
+    configure_xafs_y('heavy')
+else:
+    configure_xafs_y('heavy')
 
 
-
-def reset_offset(motor=None, newpos=0):
-    current_offset  = motor.user_offset.get()
-    current_position = motor.position
-    new_offset = -1 * current_position + current_offset + newpos
-    motor.user_offset.put(new_offset)
+# def reset_offset(motor=None, newpos=0):
+#     current_offset  = motor.user_offset.get()
+#     current_position = motor.position
+#     new_offset = -1 * current_position + current_offset + newpos
+#     motor.user_offset.put(new_offset)
     
