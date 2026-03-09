@@ -1,4 +1,4 @@
-import json, time, os
+import json, time, os, pprint
 
 from openpyxl import load_workbook
 
@@ -67,12 +67,12 @@ MODEDATA = read_mode_data();
 #     MODEDATA = read_mode_data()
 
 def motors_in_position(mode=None):
-    motors = ['dm3_bct',
-              'xafs_yu', 'xafs_ydo', 'xafs_ydi',
-              'm2_yu', 'm2_ydo', 'm2_ydi', #'m2_xu', 'm2_xd',
-              'm3_yu', 'm3_ydo', 'm3_ydi', 'm3_xu', 'm3_xd',]
+    all_of_them = ['dm3_bct',
+                   'xafs_yu', 'xafs_ydo', 'xafs_ydi',
+                   'm2_yu', 'm2_ydo', 'm2_ydi', #'m2_xu', 'm2_xd',
+                   'm3_yu', 'm3_ydo', 'm3_ydi', 'm3_xu', 'm3_xd',]
     ok = True
-    for m in motors:
+    for m in all_of_them:
         target = float(MODEDATA[user_ns[m].name][mode])
         achieved = user_ns[m].position
         diff = abs(target - achieved)
@@ -84,9 +84,8 @@ def motors_in_position(mode=None):
 
 def pds_motors_ready():
     m3, m2, m2_bender, dm3_bct = user_ns['m3'], user_ns['m2'], user_ns['m2_bender'], user_ns['dm3_bct']
-    #dcm_pitch, dcm_roll, dcm_perp, dcm_roll, dcm_bragg = user_ns["dcm_pitch"], user_ns["dcm_roll"], user_ns["dcm_perp"], user_ns["dcm_roll"], user_ns["dcm_bragg"]
     mcs8_motors = [m3.xu, m3.xd, m3.yu, m3.ydo, m3.ydi, m2.xu, m2.xd, m2.yu, m2.ydo, m2.ydi, m2_bender,
-                   dcm.pitch, dcm.roll, dcm.perp, dcm.roll, dcm.bragg, dm3.bct]
+                   dcm.pitch, dcm.roll, dcm.perp, dcm.roll, dcm.bragg, dm3_bct]
 
     count = 0
     for m in mcs8_motors:
@@ -100,43 +99,6 @@ def pds_motors_ready():
     else:
         return(True)
 
-# def pds_mirrors_cycle():
-#    ready_count = 0
-#    while pds_motors_ready() is False:
-#        ready_count += 1
-#        report('\nOne or more motors are showing amplifier faults. Attempting to correct the problem.', level='error', slack=True)
-#        problem_is_m2 = False
-#        m2_yu, m2_ydo, m2_ydi = user_ns['m2_yu'], user_ns['m2_ydo'], user_ns['m2_ydi']
-#        m2_xu, m2_xd, m2_bender = user_ns['m2_xu'], user_ns['m2_xd'], user_ns['m2_bender']
-#        for m in (m2.xu, m2.xd, m2.yu, m2.ydo, m2.ydi, m2_bender):
-#            if m.amfe.get() or m.amfae.get():
-#                problem_is_m2 = True
-#        if problem_is_m2 is True:
-#            user_ns['ks'].cycle('m2')
-
-#        problem_is_m3 = False
-#        m3_yu, m3_ydo, m3_ydi = user_ns['m2_yu'], user_ns['m2_ydo'], user_ns['m2_ydi']
-#        m3_xu, m3_xd = user_ns['m2_xu'], user_ns['m2_xd']
-#        for m in (m3.xu, m3.xd, m3.yu, m3.ydo, m3.ydi):
-#            if m.amfe.get() or m.amfae.get():
-#                problem_is_m3 = True
-#        if problem_is_m3 is True:
-#            user_ns['ks'].cycle('m3')
-
-#        # problem_is_dcm = False
-#        # dcm.pitch, dcm.roll, dcm.perp = user_ns['dcm_pitch'], user_ns['dcm_roll'], user_ns['dcm_perp']
-#        # dcm.para, dcm.bragg = user_ns['dcm_para'], user_ns['dcm_bragg']
-#        # for m in (dcm.pitch, dcm.roll, dcm.perp, dcm.para, dcm.bragg):
-#        #     if m.amfe.get() or m.amfae.get():
-#        #         problem_is_dcm = True
-#        # if problem_is_dcm is True:
-#        #     user_ns['ks'].cycle('dcm')
-
-#        if ready_count > 5:
-#            report('Failed to fix an amplifier fault while changing mode.', level='error', slack=True)
-#            yield from null()
-#            return
-     
 
 def table_height(mode=None, by=None, pitch=None):
      '''Move the XAS table to the correct height and inclination for the
@@ -234,7 +196,7 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
      BMMuser, RE, dcm, dm3_bct, slits3 = user_ns['BMMuser'], user_ns['RE'], user_ns['dcm'], user_ns['dm3_bct'], user_ns['slits3']
      xafs_table, m3, m2, m2_bender = user_ns['xafs_table'], user_ns['m3'], user_ns['m2'], user_ns['m2_bender']
      m2_xu, m2_xd = user_ns['m2_xu'], user_ns['m2_xd']
-     #dcm_bragg, dcm_roll, xafs_ref, xafs_refx = user_ns['dcm_bragg'], user_ns['dcm_roll'], user_ns['xafs_ref'], user_ns['xafs_refx']
+     xafs_ref, xafs_refx = user_ns['xafs_ref'], user_ns['xafs_refx']
      if mode is None:
           print('No mode specified')
           return(yield from null())
@@ -318,13 +280,13 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
 
              xafs_table.yu,   float(MODEDATA['xafs_yu'][mode]),
              xafs_table.ydo,  float(MODEDATA['xafs_ydo'][mode]),
-             xafs_table.ydi,  float(MODEDATA['xafs_ydi'][mode]),
+             xafs_table.ydi,  float(MODEDATA['xafs_ydi'][mode]),]
 
-             m3.yu,           float(MODEDATA['m3_yu'][mode]),
-             m3.ydo,          float(MODEDATA['m3_ydo'][mode]),
-             m3.ydi,          float(MODEDATA['m3_ydi'][mode]),
-             m3.xu,           float(MODEDATA['m3_xu'][mode]),
-             m3.xd,           float(MODEDATA['m3_xd'][mode]), ]
+     mirror3 = [m3.yu,           float(MODEDATA['m3_yu'][mode]),
+                m3.ydo,          float(MODEDATA['m3_ydo'][mode]),
+                m3.ydi,          float(MODEDATA['m3_ydi'][mode]),
+                m3.xu,           float(MODEDATA['m3_xu'][mode]),
+                m3.xd,           float(MODEDATA['m3_xd'][mode]), ]
 
      if profile_configuration.getboolean('experiments', 'use_reference') is False:
           no_ref = False
@@ -389,10 +351,10 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
      report(f'Moving from mode {current_mode} to mode {mode}', slack=True)
 
      if mode == 'XRD':
-          print('For XRD mode, move to old (pre 4/2025) position for dcm.roll.')
-          yield from mv(dcm.roll, -4.5608)
+          print('For XRD mode, move to post 2/2026 position for dcm.roll.')
+          yield from mv(dcm.roll, 4.532) # profile_configuration.getfloat('dcm', f'roll_{dcm._crystal}')) # 
      else:
-          print('For all XAS modes, move to new (post 4/2025) position for dcm.roll.')
+          print('For all XAS modes, move to post 2/2026 position for dcm.roll.')
           yield from  mv(dcm.roll, profile_configuration.getfloat('dcm', f'roll_{dcm._crystal}'))
           
      if mode in ('D', 'E', 'F') and user_ns['slits3'].vsize.position < 0.4:
@@ -401,7 +363,11 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
      elif mode in ('A', 'B', 'C') and user_ns['slits3'].vsize.position > 0.5:
           print('Slit height appears to be set for collimated beam.  Narrowing slits.')
           yield from mv(user_ns['slits3'].vsize, 0.3)
-     
+
+     ## only poke at M3 is mode is changing
+     if mode != current_mode:
+          base.extend(mirror3)
+          
      if mode in ('D', 'E', 'F') and current_mode in ('D', 'E', 'F') and insist is False:
           if verify_limits(base) is False:
                bold_msg('Cannot change mode. Some target values are outside motor limits.')
@@ -410,7 +376,7 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
                report('M2 remaining collimated', slack=True)
                yield from mv(*base)
           except Exception as E:
-               verbosebold_msg(f"\nThis is the problem:\n\t{E}\n")
+               verbosebold_msg(f"\nThis is the problem (collimated to collimated):\n\t{E}\n")
                count = 0
                while motors_in_position(mode) is False:
                     count += 1
@@ -440,7 +406,7 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
                report('M2 remaining focused', slack=True)
                yield from mv(*base)
           except Exception as E:
-               verbosebold_msg(f"\nThis is the problem:\n\t{E}\n")
+               verbosebold_msg(f"\nThis is the problem (focused to focused):\n\t{E}\n")
                count = 0
                while motors_in_position(mode) is False:
                     count += 1
@@ -478,6 +444,9 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
           base.extend([m2.yu,  float(MODEDATA['m2_yu'][mode])])
           base.extend([m2.ydo, float(MODEDATA['m2_ydo'][mode])])
           base.extend([m2.ydi, float(MODEDATA['m2_ydi'][mode])])
+
+          #pprint.pprint(base)
+          
           if verify_limits(base) is False:
                bold_msg('Cannot change mode. Some target values are outside motor limits.')
                raise ValueError
@@ -485,7 +454,8 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
                report('Changing M2 setup', slack=True)
                yield from mv(*base)
           except Exception as E:
-               verbosebold_msg(f"\nThis is the problem:\n\t{E}\n")
+               verbosebold_msg(f"\nThis is the problem (general):\n\t{E}\n")
+               return(yield from null())
                count = 0
                while motors_in_position(mode) is False:
                     count += 1
@@ -610,7 +580,6 @@ def change_xtals(xtal=None):
           return
 
      BMMuser, RE, dcm, dm3_bct = user_ns['BMMuser'], user_ns['RE'], user_ns['dcm'], user_ns['dm3_bct']
-     #dcm_pitch, dcm_roll, dcm_x = user_ns['dcm_pitch'], user_ns['dcm_roll'], user_ns['dcm_x']
      
      if '111' in xtal:
           xtal = 'Si(111)'
@@ -662,13 +631,13 @@ def change_xtals(xtal=None):
      yield from dcm.kill_plan()
      yield from sleep(1.0) 
      if xtal == 'Si(111)':
-          yield from mv(dcm.pitch, 4.3,
+          yield from mv(dcm.pitch, 1.137,
                         dcm.roll,  profile_configuration.getfloat('dcm', 'roll_111'),
                         dcm.x,     0.5    )
           #dcm._crystal = '111'
           dcm.set_crystal('111')  # set d-spacing and bragg offset
      elif xtal == 'Si(311)':
-          yield from mv(dcm.pitch, 2.28,
+          yield from mv(dcm.pitch, 3.9195,
                         dcm.roll,  profile_configuration.getfloat('dcm', 'roll_311'),
                         dcm.x,     65.3    )
           #dcm._crystal = '311'

@@ -13,7 +13,7 @@ from pygments import highlight
 from pygments.lexers import PythonLexer, IniLexer
 from pygments.formatters import HtmlFormatter
 
-from BMMCommon.tools.periodictable import edge_energy, Z_number, element_symbol, element_name
+from bmm_tools.tools.periodictable import edge_energy, Z_number, element_symbol, element_name
 from tools import echo_slack, experiment_folder, file_resource, profile_configuration
 from slack import img_to_slack, post_to_slack
 
@@ -379,9 +379,9 @@ class BMMDossier():
             with open(htmlfilename, 'w') as o:
                 o.write(thiscontent)
 
-            log_entry(logger, f'wrote XAFS dossier: {htmlfilename}')
+            log_entry(logger, f':ledger: wrote XAFS dossier: {htmlfilename}')
         except Exception as E:
-            log_entry(logger, f'failed to write dossier file {htmlfilename}\n' + str(E))
+            log_entry(logger, f':warning: failed to write dossier file {htmlfilename}\n' + str(E))
             traceback.print_exc()
 
         self.manifest_file = os.path.join(folder, 'dossier', 'MANIFEST')            

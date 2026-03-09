@@ -36,7 +36,7 @@ from BMM.workspace     import rkvs
 from BMM.user_ns.base        import WORKSPACE
 from BMM.user_ns.bmm         import BMMuser, kafka
 from BMM.user_ns.dcm         import dcm
-from BMM.user_ns.detectors   import quadem1, ic0, ic1, ic2, xs, xs1, xs4, xs7, pilatus, eiger, dante, ION_CHAMBERS
+from BMM.user_ns.detectors   import quadem1, ic0, ic1, ic2, xs, xs1, xs4, xs7, pilatus, eiger, dante, ION_CHAMBERS, bicron
 from BMM.user_ns.dwelltime   import _locked_dwell_time, with_xspress3, with_quadem, with_struck, use_7element, use_4element, use_1element
 from BMM.user_ns.dwelltime   import with_ic0, with_ic1, with_ic2
 from BMM.user_ns.instruments import m2, m3, slits3, xafs_wheel
@@ -911,7 +911,7 @@ motor_nicknames = {'x'    : xafs_x,     'roll' : xafs_roll,
 ## argument order is being used and swaps them if need be
 def ls_backwards_compatibility(detin, axin):
     if type(axin) is str and axin.capitalize() in ('It', 'If', 'I0', 'Iy', 'Pips', 'Ir', 'Both',
-                                                   'I0a', 'I0b', 'Ic0', 'Ic1',
+                                                   'I0a', 'I0b', 'Ic0', 'Ic1', 'Bicron',
                                                    'Xs', 'Xs1', 'Xs4', 'Xs7', 'Pilatus', 'Eiger', 'Dante'):
         return(axin, detin)
     else:

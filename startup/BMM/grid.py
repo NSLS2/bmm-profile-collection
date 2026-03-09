@@ -197,7 +197,7 @@ class GridMacroBuilder(BMMMacroBuilder):
                         command += ', %s=\'%s\'' % (k, m[k])
             command += ', copy=False)\n'
             self.content += command
-            self.content += self.tab + 'close_plots()\n\n'
+            self.content += self.tab + 'kafka.close_plots()\n\n'
 
             ########################################
             # approximate time cost of this sample #

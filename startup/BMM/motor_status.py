@@ -17,8 +17,8 @@ def motor_metadata(uid=None):
                user_ns['slits2'].top, user_ns['slits2'].bottom, user_ns['slits2'].outboard, user_ns['slits2'].inboard,
                user_ns['slits2'].vsize, user_ns['slits2'].vcenter, user_ns['slits2'].hsize, user_ns['slits2'].hcenter,
                
-               user_ns['m1'].yu, user_ns['m1'].ydo, user_ns['m1'].ydi, user_ns['m1'].xu, user_ns['m1'].xd,
-               user_ns['m1'].vertical, user_ns['m1'].lateral, user_ns['m1'].pitch, user_ns['m1'].roll, user_ns['m1'].yaw,
+               #user_ns['m1'].yu, user_ns['m1'].ydo, user_ns['m1'].ydi, user_ns['m1'].xu, user_ns['m1'].xd,
+               #user_ns['m1'].vertical, user_ns['m1'].lateral, user_ns['m1'].pitch, user_ns['m1'].roll, user_ns['m1'].yaw,
                
                user_ns['m2'].yu, user_ns['m2'].ydo, user_ns['m2'].ydi, user_ns['m2'].xu, user_ns['m2'].xd,
                user_ns['m2'].vertical, user_ns['m2'].lateral, user_ns['m2'].pitch, user_ns['m2'].roll, user_ns['m2'].yaw, user_ns['m2_bender'],

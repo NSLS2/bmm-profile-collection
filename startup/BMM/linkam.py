@@ -69,6 +69,8 @@ class Linkam(PVPositioner):
     lnp_mode_set = Cpt(EpicsSignal, 'LNP_MODE:SET')
     lnp_speed_set = Cpt(EpicsSignal, 'LNP_SPEED:SET')
 
+    deadband = 1.0
+    
             
     def on(self):
         self.startheat.put(1)
@@ -216,11 +218,12 @@ class LinkamMacroBuilder(BMMMacroBuilder):
             ################################
             if m['temperature'] != temperature:
                 if self.check_temp(user_ns['linkam'], m['temperature']) is False: return(False)
-                self.content += self.tab + f"report('== Moving to temperature {m['temperature']:.1f}C', slack=True)\n"
-                self.content += self.tab +  'linkam.settle_time = 10\n'
-                self.content += self.tab + f'yield from mv(linkam, {m["temperature"]:.1f})\n'
-                self.content += self.tab + f"report('== Holding at temperature {m['temperature']:.1f}C for {m['settle']} seconds', slack=True)\n"
-                self.content += self.tab + f'yield from mv(busy, {m["settle"]:.1f})\n'
+                self.content += self.tab + f"if abs(linkam.temperature() - {m['temperature']:.1f}) > linkam.deadband:\n"
+                self.content += self.tab + self.tab + f"report('== Moving to temperature {m['temperature']:.1f}C', slack=True)\n"
+                self.content += self.tab + self.tab +  "linkam.settle_time = 10\n"
+                self.content += self.tab + self.tab + f"yield from mv(linkam, {m['temperature']:.1f})\n"
+                self.content += self.tab + self.tab + f"report(':thermometer: Holding at temperature {m['temperature']:.1f}C for {m['settle']} seconds :thermometer:', slack=True)\n"
+                self.content += self.tab + self.tab + f'yield from mv(busy, {m["settle"]:.1f})\n'
                 temperature = m['temperature']
                 settle_time += m["settle"]
                 ramp_time += (temperature - previous) / user_ns['linkam'].RR.get()
@@ -301,7 +304,7 @@ class LinkamMacroBuilder(BMMMacroBuilder):
                         command += ', %s=\'%s\'' % (k, m[k])
             command += ', copy=False)\n'
             self.content += command
-            self.content += self.tab + 'close_plots()\n\n'
+            self.content += self.tab + 'kafka.close_plots()\n\n'
             #self.content += self.tab + 'yield from linkam.off_plan()\n\n'
 
             ########################################

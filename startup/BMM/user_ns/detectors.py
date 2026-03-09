@@ -322,6 +322,7 @@ if with_cam2 is True:
 else:
     usb2 = None
 
+cam8 = BMMUVCSingleTrigger('XF:06BMB-BI{Cam:08}', name="cam-8", read_attrs=["jpeg"])
 
 
 def display_last_image_usb_cam(catalog, camera=usb1):

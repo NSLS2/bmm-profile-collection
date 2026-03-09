@@ -7,7 +7,7 @@ from tools import echo_slack, profile_configuration
 use_nsls2_slack = profile_configuration.getboolean('slack', 'use_nsls2')
 use_bmm_slack = profile_configuration.getboolean('slack', 'use_bmm')
 
-from BMMCommon.slack.bmmbot import BMMbot
+from bmm_tools.slack.bmmbot import BMMbot
 bmmbot = BMMbot()
 bmmbot._bmmbot_secret = profile_configuration.get('slack', 'bmmbot_secret')
 bmmbot._redis_client = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'))

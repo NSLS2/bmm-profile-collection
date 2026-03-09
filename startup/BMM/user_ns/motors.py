@@ -11,6 +11,7 @@ from BMM.functions import run_report, examine_fmbo_motor_group
 from BMM.user_ns.base import profile_configuration
 
 import time
+from rich import print as cprint
 
 run_report(__file__, text='individual motor definitions')
 
@@ -149,14 +150,14 @@ def homed():
         if m.hocpl.get():
             print("%-12s : %s" % (m.name, m.hocpl.enum_strs[m.hocpl.get()]))
         elif m.name in normally_not_homed:
-            print("%-12s : %s" % (m.name, warning_msg('normally ' + m.hocpl.enum_strs[m.hocpl.get()].lower())))
+            cprint("[yellow]%-12s : %s[/yellow]" % (m.name, 'normally ' + m.hocpl.enum_strs[m.hocpl.get()].lower()))
         else:
-            print("%-12s : %s" % (m.name, error_msg(m.hocpl.enum_strs[m.hocpl.get()])))
+            cprint("[red1]%-12s : %s[/red1]" % (m.name, m.hocpl.enum_strs[m.hocpl.get()]))
     for m in homeable_xafs_motors:
         if m.homed() == 'Homed':
             print("%-12s : %s" % (m.name, m.homed()))
         else:
-            print("%-12s : %s" % (m.name, error_msg(m.homed())))
+            cprint("[red1]%-12s : %s[\red1]" % (m.name, m.homed()))
 
 def ampen():
     for m in mcs8_motors:

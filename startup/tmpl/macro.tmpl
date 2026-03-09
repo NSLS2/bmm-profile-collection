@@ -16,15 +16,16 @@
 #             /  Note that you are defining a command
 #            /   that gets run in BlueSky
 #           V
-from BMM.suspenders import BMM_suspenders, BMM_clear_suspenders
+from BMM.user_ns.suspenders import suspenders
 from BMM.functions import not_at_edge
 def {base}_macro(dryrun=False, ref=False):
     '''User-defined macro for running a sequence of XAFS measurements
     using {description}
     '''
-    (ok, text) = BMM_clear_to_start()
+    (ok, text) = suspenders.clear_to_start()
     if ok is False:
-        print(error_msg('\n'+text) + bold_msg('Quitting macro....\n'))
+        error_msg('\n'+text)
+        bold_msg('Quitting macro....\n')
         return(yield from null())
 
     BMMuser.macro_dryrun = dryrun
@@ -53,7 +54,7 @@ def {base}_macro(dryrun=False, ref=False):
 
     start = time.time()
     {initialize}
-    BMM_suspenders()
+    suspenders.set_suspenders()
     yield from finalize_wrapper(main_plan(ref), cleanup_plan())    
     yield from end_of_macro()
     BMM_log_info('{base}_macro finished!')

@@ -12,6 +12,7 @@ from bmm_tools.tools.messages import disconnected_msg, error_msg, whisper, verbo
 from bmm_tools.tools.md import proposal_base
 from BMM.functions import run_report, bounds, present_options
 from BMM.workspace import rkvs
+from BMM.user_ns.bmm   import kafka
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
@@ -284,7 +285,6 @@ from BMM.mono_calibration import calibrate, calibrate_high_end, calibrate_low_en
 
 XDI_record = {'xafs_x'                           : (True,  'Sample.x'),
               'xafs_y'                           : (True,  'Sample.y'),
-              'xafs_lins'                        : (True,  'Sample.SDD_position'),
               'xafs_det'                         : (True,  'Sample.SDD_position'),
               'xafs_refx'                        : (False, 'BMM.sample_refx_position'),
               'xafs_refy'                        : (False, 'BMM.sample_refy_position'),
@@ -566,6 +566,7 @@ from BMM.workspace import check_instruments
 check_instruments(user_ns['linkam'], user_ns['lakeshore'], user_ns['xs'])
 run_report('\t  '+'calling resting_state')
 resting_state()
+user_ns['RE'].clear_suspenders()
 
 if not is_re_worker_active():
     run_report('\t  '+'establishing local logger')

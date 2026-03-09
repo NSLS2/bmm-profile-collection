@@ -17,7 +17,7 @@ from bluesky import __version__ as bluesky_version
 from slack import img_to_slack
 from tools import experiment_folder, echo_slack, file_resource, profile_configuration
 
-from BMMCommon.tools.periodictable import Z_number, edge_number
+from bmm_tools.tools.periodictable import Z_number, edge_number
 
 #from nslsii.kafka_utils import _read_bluesky_kafka_config_file
 #from bluesky_kafka.produce import BasicProducer
@@ -126,6 +126,7 @@ class LineScan():
     plots       = []
     initial     = 0
     detector    = 7
+    add_refl    = False
 
     transmission_like = ('It', 'Transmission', 'Trans')
     fluorescence_like = ('If', 'Xs', 'Xs1', 'Fluorescence', 'Flourescence', 'Fluo', 'Flou', 'Dante', 'Pips')
@@ -141,6 +142,8 @@ class LineScan():
         self.y3data = []
         self.trdata = []
         if 'motor' in kwargs: self.motor = kwargs['motor']
+        self.add_refl = False
+        if 'add_refl' in kwargs: self.add_refl = kwargs['add_refl']
         self.numerator = kwargs['detector'].capitalize()
         self.denominator = None
         self.figure = plt.figure()
@@ -155,7 +158,12 @@ class LineScan():
         if self.numerator not in self.fluorescence_like or self.stack is False:
             self.axes = self.figure.add_subplot(111)
             self.axes.set_facecolor((0.95, 0.95, 0.95))
-            self.line, = self.axes.plot([],[])
+            if self.add_refl is False:
+                self.line, = self.axes.plot([],[])
+            else:
+                self.line,  = self.axes.plot([],[], label='dir', marker='^')
+                self.line2, = self.axes.plot([],[], label='refl', marker='v')
+                
         self.initial = 0
         self.fluo_detector = ''
         if 'fluo_detector' in kwargs:
@@ -202,6 +210,12 @@ class LineScan():
             self.denominator = 'I0'
             self.axes.set_ylabel(f'{self.numerator}/{self.denominator}')
 
+        ## Bicron
+        elif self.numerator == 'Bicron':
+            self.description = 'Bicron'
+            self.denominator = None
+            self.axes.set_ylabel(self.numerator)
+
         # ## pips: plot pips/I0
         # elif self.numerator == 'Pips':
         #     self.description = 'PIPS'
@@ -230,6 +244,7 @@ class LineScan():
             self.description = 'reflectivity'
             self.denominator = None
             self.axes.set_ylabel(f'{self.numerator}')
+            self.axes.legend(loc='best', shadow=True)
             
 
         elif self.stack is False and self.numerator in self.fluorescence_like:
@@ -364,6 +379,7 @@ class LineScan():
         self.description = None
         self.xs1, self.xs2, self.xs3, self.xs4, self.xs8 = None, None, None, None, None
         self.initial     = 0
+        self.add_refl    = False
 
     # this helped: https://techoverflow.net/2021/08/20/how-to-autoscale-matplotlib-xy-axis-after-set_data-call/
     def add(self, **kwargs):
@@ -425,9 +441,20 @@ class LineScan():
         elif self.numerator in kwargs['data']:  # numerator will not be in baseline document
             signal = kwargs['data'][self.numerator]
         elif self.numerator == 'Mythen':
-            signal = kwargs['data']['mca_full']
+            if self.add_refl is False:
+                signal = kwargs['data']['mca_full'] / kwargs['data']['dwti_dwell_time']
+            else:
+                signal  = kwargs['data']['dir'] / kwargs['data']['dwti_dwell_time']
+                signal2 = kwargs['data']['refl'] / kwargs['data']['dwti_dwell_time']
+        elif self.numerator == 'Dir':
+            signal  = kwargs['data']['dir'] / kwargs['data']['dwti_dwell_time']
+        elif self.numerator == 'Refl':
+            signal  = kwargs['data']['dir'] / kwargs['data']['dwti_dwell_time']
         elif self.numerator in ('Struck', 'Bicron', 'Apd'):
-            signal = kwargs['data']['monitor']
+            if self.numerator in kwargs['data']:
+                signal = kwargs['data'][self.numerator]
+            else:
+                signal = kwargs['data']['monitor']
         else:
             print(f'could not determine signal, self.numerator is {self.numerator}')
             return
@@ -449,7 +476,10 @@ class LineScan():
                 self.y3data.append(signal3)
             if self.numerator == 'Eiger':
                 self.y2data.append(signal2)
-
+            if self.add_refl == True:
+                self.y2data.append(signal2)
+                
+                
             # self.ydata.append(signal)
             # #if self.numerator == 'Ic0' or self.numerator == 'Xs1':
             # if self.numerator in ('Xs1', 'Xs', 'If'):  # 'Ic0q', 'Ic1'
@@ -466,6 +496,8 @@ class LineScan():
                 self.y3data.append(signal3/kwargs['data'][self.denominator])
         self.line.set_data(self.xdata, self.ydata)
         if self.numerator == 'Eiger':
+            self.line2.set_data(self.xdata, self.y2data)
+        if self.numerator == 'Mythen':
             self.line2.set_data(self.xdata, self.y2data)
         if self.fluo_detector == '1-element SDD':
             self.line2.set_data(self.xdata, self.y2data)
@@ -1337,7 +1369,6 @@ class XRR():
 
         self.lineraw, = self.raw.plot([],[], 'o', label='raw Mythen data', markersize=3)
         self.linexrr, = self.xrr.plot([],[], label='')
-        
     
     def interpret_click(self, ev):
         '''Grab location of mouse click.  Identify motor by grabbing the
@@ -1368,6 +1399,7 @@ class XRR():
         self.xdata    = []
         self.rawdata  = []
         self.xrrdata  = []
+        self.y2data   = []
         self.motor    = 'eta'
         self.detector = 'mythen'
         self.title    = 'eta/delta v. Mythen'
@@ -1375,6 +1407,7 @@ class XRR():
         self.axes     = None
         self.lineraw  = None
         self.linexrr  = None
+        self.line2    = None
         
     def add(self, **kwargs):
 
@@ -1382,12 +1415,11 @@ class XRR():
             return              # this is a baseline event document, wheel1 is not part of an XRR scan
 
         self.xdata.append(kwargs['data'][self.motor])
-        
         self.rawdata.append(kwargs['data']['mca_full'])
 
         i = int(kwargs['data']['attenuator_attenuation'])
         factor = self.measured_attenuation[i]
-        rando = 5000 * numpy.random.rand()
+        rando = 0 # 5000 * numpy.random.rand()
         self.xrrdata.append(rando + factor * kwargs['data']['mca_full'] / kwargs['data']['dwti_dwell_time'])
         
         self.lineraw.set_data(self.xdata, self.rawdata)
@@ -1402,7 +1434,7 @@ class XRR():
         self.figure.canvas.draw()
         self.figure.canvas.flush_events()
         
-    def alignment(self, catalog=None, uid=None, motor=None, detector=None):
+    def alignment(self, catalog=None, uid=None, motor=None, detector=None, delta=False):
         if catalog is None:
             print('xrr.alignment: No catalog provided')
             return
@@ -1415,20 +1447,25 @@ class XRR():
         if detector is None:
             print('xrr.alignment: No detector provided')
             return
+        if detector.lower() in ('bicron', 'apd', 'struck'):
+            detector = 'monitor'
         data = catalog[uid].primary['data']
 
         x = numpy.array(data[motor])
 
         det = detector
         if detector.lower() == 'mythen':
-            det = 'mca_full'
+            if delta is False:
+                det = 'mca_full'
+            else:
+                det = 'dir'
         if det not in data:
             print(f'xrr.alignment: detector {det} not in data table')
             return
             
         y = numpy.array(data[det])
 
-        plt.close('all')
+        #plt.close('all')
         fig = plt.figure()
         cid = fig.canvas.mpl_connect('button_press_event', self.interpret_click)
         
@@ -1473,9 +1510,9 @@ class XRR():
         print(results)
         rkvs.set('BMM:xrd:peak_stats', str(results))
         
-        report = f'''FWHM = {fwhm:.3f}, center = {fwhm_center:.3f}
-center of mass = {com:.3f}
-peak value = {peak:.1f} at {peakpos:.3f}'''
+        report = f'''FWHM = {fwhm:.4f}, center = {fwhm_center:.4f}
+center of mass = {com:.4f}
+peak value = {peak:.1f} at {peakpos:.4f}'''
         ax.set_title(report)
         print(report)
 
@@ -1525,8 +1562,8 @@ peak value = {peak:.1f} at {peakpos:.3f}'''
         rkvs.set('BMM:xrd:mythen_calibration', str(results))
 
         if get_backend().lower() == 'agg':
-            if 'filename' in kwargs and kwargs['filename'] is not None and kwargs['filename'] != '':
-                fname = os.path.join(experiment_folder(catalog, kwargs["uid"]), 'snapshots', kwargs["filename"])
+            if stub is not None and stub != '':
+                fname = os.path.join(experiment_folder(catalog, uid), 'snapshots', stub+'.png')
                 fig.savefig(fname)
                 self.logger.info(f'saved Mythen calibration figure {fname}')
                 img_to_slack(fname, title='Mythen calibration', measurement='mythen calibration')

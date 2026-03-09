@@ -286,7 +286,7 @@ class BMM_User(Borg):
         self.shutter       = False
         
         ## mono acceleration control
-        self.acc_fast      = 0.2   ###########################################################################
+        self.acc_fast      = 0.4   ###########################################################################
         self.acc_slow      = 0.5   # after decreasing Bragg acceleration time, Bragg axis would occasionally #
                                    # freeze. these are used to try to mitigate this problem                  #
                                    ###########################################################################

@@ -352,7 +352,7 @@ def channelcut_energy(e0, bounds, ththth):
         amin = dcm.e2a((e0+bounds[0])/3.0)
         amax = dcm.e2a((e0+bounds[-1])/3.0)
     aave = amin + 1.0*(amax - amin) / 2.0
-    wavelength = dcm.wavelength(aave)
+    wavelength = dcm.get_wavelength(aave)
     eave = e2l(wavelength)
     if eave < e0 + 30:
         eave = e0 + 50
@@ -370,17 +370,27 @@ def attain_energy_position(value):
     Returns True for success, False for failure
     '''
     BMMuser = user_ns['BMMuser']
-    dcm.bragg.clear_encoder_loss()
+    print(f'Attaining target energy ({value}, starting at {dcm.energy.position:.3f}) ...')
+    if dcm.bragg.enc_lss.get() != 0:
+        dcm.bragg.clear_encoder_loss()
+    if value < dcm.energy.position:
+        dcm.bragg_small_move(verbose=True)
+    else:
+        dcm.bragg_small_move(direction=-1, verbose=True)
     yield from mv(dcm.energy, value)
     count = 0
-    while abs(dcm.energy.position - value) > 0.2 :
+    while abs(dcm.energy.position - value) > 1 :  # was 0.2
         if count > 4:
-            error_msg('Unresolved encoder loss on Bragg axis.  Stopping XAFS scan.')
-            BMMuser.final_log_entry = False
+            error_msg('Unresolved movement of Bragg axis.  Carrying on anyway....')
+            #BMMuser.final_log_entry = False
             yield from null()
             return False
-        print('Clearing encoder loss and re-trying movement to pseudo-channel-cut energy...')
-        dcm.bragg.clear_encoder_loss()
+        if dcm.bragg.enc_lss.get() != 0:
+            print(f'Clearing encoder loss and re-trying movement to target energy ({value}, current={dcm.energy.position:.3f}) ...')
+            dcm.bragg.clear_encoder_loss()
+        else:
+            print(f'Re-trying movement to target energy ({value}, current={dcm.energy.position:.3f}) ...')
+        dcm.bragg.kill()
         yield from sleep(2)
         yield from mv(dcm.energy, value)
         count = count + 1
@@ -672,6 +682,7 @@ def xafs(inifile=None, **kwargs):
             dcm.mode = 'channelcut'
         else:
             dcm.mode = 'fixed'
+        dcm.bragg_small_move(verbose=True)
 
 
         ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
@@ -1042,6 +1053,9 @@ def xafs(inifile=None, **kwargs):
                     BMM_log_info(f'energy scan finished, uid = {uid}, scan_id = {bmm_catalog[uid].metadata["start"]["scan_id"]}\ndata file written to {datafile}')
                 else:
                     BMM_log_info(f'energy scan finished, uid = {uid}\ndata file written to {datafile}')
+
+                dcm.bragg_small_move(verbose=True)
+
                     
                 ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
                 ## data evaluation + message to Slack
@@ -1113,8 +1127,8 @@ def xafs(inifile=None, **kwargs):
         dcm.mode = 'fixed'
         yield from resting_state_plan()
         yield from sleep(1.0)
-        yield from mv(dcm_pitch.kill_cmd, 1)
-        yield from mv(dcm_roll.kill_cmd, 1)
+        yield from mv(dcm.pitch.kill_cmd, 1)
+        yield from mv(dcm.roll.kill_cmd, 1)
 
     RE, BMMuser, dcm, dwell_time = user_ns['RE'], user_ns['BMMuser'], user_ns['dcm'], user_ns['dwell_time']
     ##dcm_bragg, dcm_pitch, dcm_roll, dcm_x = user_ns['dcm_bragg'], user_ns['dcm_pitch'], user_ns['dcm_roll'], user_ns['dcm_x']

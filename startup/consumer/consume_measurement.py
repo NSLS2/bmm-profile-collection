@@ -1,5 +1,5 @@
 import datetime, signal, pprint, uuid, sys, os, time
-sys.path.append('/home/xf06bm/.ipython/profile_common/')
+sys.path.append('/home/xf06bm/.ipython/bmm_tools/src/')
 sys.path.append('/home/xf06bm/.ipython/profile_collection/startup')
 
 #from bluesky_kafka import RemoteDispatcher
@@ -197,7 +197,9 @@ def plot_from_kafka_messages(beamline_acronym):
                     doing = None
 
             elif 'xrr_alignment' in message:
-                xrr.alignment(catalog=bmm_catalog, uid=message['uid'], motor=message['motor'], detector=message['detector'])
+                delta=False
+                if 'delta' in message: delta = message['delta']
+                xrr.alignment(catalog=bmm_catalog, uid=message['uid'], motor=message['motor'], detector=message['detector'], delta=delta)
 
             elif 'xrr_calibration_plot' in message:
                 xrr.calibration_plot(catalog=bmm_catalog, uid=message['uid'], motor=message['motor'],

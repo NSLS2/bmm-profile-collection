@@ -382,6 +382,8 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, ga=No
     backwards = False
     if float(positions[-1]) < float(positions[0]):
         backwards = True
+    if signal.lower() in ('bicron', 'apd', 'srtuck', 'monitor'):
+        signal = 'monitor'
 
     if signal == 'I0':
         sig = numpy.array(t[signal])
@@ -392,16 +394,19 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, ga=No
     elif signal == 'Ir':
         sig = numpy.array(t[signal]) / numpy.array(t['It'])
         thissig = 'Ir/It'
-    elif signal == 'bicron':
+    elif signal == 'monitor':
         sig = numpy.array(t[signal])
-        thissig = 'bicron'
+        thissig = 'monitor'
+    elif signal == 'mythen_dir':
+        sig = numpy.array(t['dir']) / numpy.array(t['dwti_dwell_time'])
+        thissig = 'monitor'
     else:
         sig = numpy.array(t[signal])
         thissig = signal
 
-    if signal == 'bicron' and backwards is True:
+    if signal == 'monitor' and backwards is True:
         fix = 0
-    elif signal == 'bicron' and backwards is False:
+    elif signal == 'monitor' and backwards is False:
         fix = 0
     else:
         fix = sig[2]

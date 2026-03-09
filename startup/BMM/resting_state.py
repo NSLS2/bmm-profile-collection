@@ -87,6 +87,7 @@ def resting_state():
         electrometer.acquire.put(1)
         electrometer.acquire_mode.put(0)
     dcm.kill()
+    dcm.bragg.kill()
     dcm.bragg.clear_encoder_loss()
     dcm.mode = 'fixed'
     user_ns['m2_bender'].kill()
@@ -137,6 +138,7 @@ def resting_state_plan():
     #     yield from user_ns['ga'].alloff_plan()
     yield from dcm.kill_plan()
     yield from mv(dcm.bragg.clear_enc_lss, 1)
+    yield from mv(dcm.bragg.kill_cmd, 1)
     user_ns['m2_bender'].kill()
     dcm.mode = 'fixed'
     kafka.message({'resting_state': True,})
@@ -185,6 +187,7 @@ def end_of_macro():
     #     yield from user_ns['ga'].alloff_plan()
     yield from dcm.kill_plan()
     yield from mv(dcm.bragg.clear_enc_lss, 1)
+    yield from mv(dcm.bragg.kill_cmd, 1)
     user_ns['m2_bender'].kill()
     yield from xafs_wheel.recenter()
     dcm.mode = 'fixed'

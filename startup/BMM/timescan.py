@@ -31,7 +31,7 @@ from BMM.xafs          import scan_metadata
 
 from BMM.user_ns.base       import bmm_catalog
 from BMM.user_ns.bmm        import kafka
-from BMM.user_ns.detectors  import quadem1, ic0, ic1, ic2, xs, xs1, xs4, xs7, ION_CHAMBERS
+from BMM.user_ns.detectors  import quadem1, ic0, ic1, ic2, xs, xs1, xs4, xs7, ION_CHAMBERS, bicron
 from BMM.user_ns.dwelltime  import _locked_dwell_time, use_7element, use_4element, use_1element
 from BMM.user_ns.suspenders import suspenders
 
@@ -96,14 +96,16 @@ def timescan(detector, readings, dwell, delay, outfile=None, force=False, md={})
     RE.msg_hook = None
     ## sanitize and sanity checks on detector
     detector = detector.capitalize()
-    if detector not in ('It', 'If', 'I0', 'Iy', 'Ir', 'Ic1', 'Test', 'Transmission', 'Fluorescence', 'Flourescence'):
-        error_msg(f'\n*** {detector} is not a timescan measurement (it, if, i0, iy, ir, ic1, transmission, fluorescence)\n')
+    if detector not in ('It', 'If', 'I0', 'Iy', 'Ir', 'Ic1', 'Test', 'Transmission', 'Fluorescence', 'Flourescence', 'Bicron'):
+        error_msg(f'\n*** {detector} is not a timescan measurement (it, if, i0, iy, ir, ic1, transmission, fluorescence, Bicron)\n')
         yield from null()
         return None
 
     yield from mv(_locked_dwell_time, dwell)
     dets  = ION_CHAMBERS.copy()
-
+    if detector == 'Bicron':
+        dets.append(bicron)
+    
     if detector == 'Fluorescence' or detector == 'Flourescence':
         yield from mv(xs.cam.acquire_time, dwell)
         yield from mv(xs.total_points, readings)

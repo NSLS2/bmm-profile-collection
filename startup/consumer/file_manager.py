@@ -7,7 +7,7 @@ import os
 import re
 import time
 import shutil
-sys.path.append('/home/xf06bm/.ipython/profile_common/')
+sys.path.append('/home/xf06bm/.ipython/bmm_tools/src/')
 sys.path.append('/home/xf06bm/.ipython/profile_collection/startup')
 
 from bluesky_kafka.consume import BasicConsumer

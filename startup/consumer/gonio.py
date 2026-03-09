@@ -177,26 +177,27 @@ class XRRFile():
         header = f'''% Description of the file: <name of detector> <columns>
 %                      or: <name of detector> <first column> <last column>
 %
-%D	{motor.capitalize()}	1
+%D	{motor.capitalize()}		1
 '''
         n = 2
-        if detector.lower() == 'mythen':
+        if detector in ('mythen', 'dir', 'refl', 'mythen_dir', 'mythen_refl'):
             header += '%D	mca_full	2\n'
-            header += '%D	mca_narrow	3\n'
-            column_list = [motor, 'mca_full', 'mca_narrow', 'monitor', 'dwti_dwell_time']
-            n = 3
+            header += '%D	dir		3\n'
+            header += '%D	refl		4\n'
+            header += '%D	max_counts	5\n'
+            column_list = [motor, 'mca_full', 'dir', 'refl', 'max_counts', 'monitor', 'dwti_dwell_time']
+            n = 5
         elif detector.lower() == 'mca_full':
             header += '%D	mca_full	2\n'
-            column_list = [motor, 'mca_full', 'monitor', 'dwti_dwell_time']
+            column_list = [motor, 'mca_full', 'dir', 'dwti_dwell_time']
             n = 2
         elif detector.lower() == 'mca_narrow':
             header += '%D	mca_narrow	2\n'
-            column_list = [motor, 'mca_narrow', 'monitor', 'dwti_dwell_time']
+            column_list = [motor, 'mca_full', 'dir', 'dwti_dwell_time']
             n = 2
 
         header += f'%D	Monitor	{n+1}\n'
         header += f'%D	Seconds	{n+2}\n'
-
         header += f'%D	LinearDetector	{n+3}	{n+1283}\n'
 
         xa = catalog[uid].primary.read(column_list)
@@ -258,8 +259,8 @@ class XRRFile():
 
         
     def mythen_calibration(self, catalog=None, uid=None, path=None, now=None, stamp=None, setup=None, gap=None,
-                           energy=8600, pixel0=None, angle_per_pixel=None, stub=None, dw=0.12,
-                           rw=0.2, slits_b=0.3, slits_i=0.5, slits_o=0.5, slits_t=0.3, logger=None):  # fixme! fitA, fitB, fitC
+                           energy=8600, pixel0=None, angle_per_pixel=None, stub=None, dw=3,
+                           rw=9, slits_b=0.3, slits_i=0.5, slits_o=0.5, slits_t=0.3, logger=None):  # fixme! fitA, fitB, fitC
         '''Write a PowerPoint summary of the calibration using the established
         layout of the report in use by the IBM folks.
 
@@ -339,9 +340,9 @@ class XRRFile():
         roitext.clear()
         p = roitext.paragraphs[0]
         run = p.add_run()
-        run.text = '''ROIs:
-        dir = +/-{dw}, pixels {pixel0-dw}-{pixel0+dw}, {0.05*(2*dw+1)}mm
-        refl = +/-{rw}, pixels {pixel0-rw}-{pixel0+rw}, {0.05*(2*rw+1)}mm
+        run.text = f'''ROIs:
+        dir = +/-{dw}, pixels {pixel0-dw}-{pixel0+dw}, {0.05*(2*dw+1):.2f}mm
+        refl = +/-{rw}, pixels {pixel0-rw}-{pixel0+rw}, {0.05*(2*rw+1):.2f}mm
         '''
         run.font.size = Pt(10)
 
@@ -357,9 +358,9 @@ class XRRFile():
         slitstext.clear()
         p = slitstext.paragraphs[0]
         run = p.add_run()
-        run.text = '''Incident slits:
-        s1t, s1b = {slits_biot[0]}, V={2*slits_biot[0]}
-        s1o, s1i = {slits_biot[1]}, H={2*slits_biot[1]}
+        run.text = f'''Incident slits:
+        s1t, s1b = {slits_t:.2f}, V={2*slits_t:.2f}
+        s1o, s1i = {slits_o:.2f}, H={2*slits_o:.2f}
         '''
         run.font.size = Pt(14)
 

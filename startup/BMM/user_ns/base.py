@@ -137,7 +137,6 @@ ophyd.EpicsSignal.set_defaults(timeout=10, connection_timeout=10)
 from bluesky.utils import ts_msg_hook
 RE.msg_hook = ts_msg_hook
 
-
 bmm_catalog = None
 
 print()

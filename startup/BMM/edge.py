@@ -22,7 +22,7 @@ from BMM.wheel         import show_reference_wheel
 from BMM.modes         import change_mode, get_mode, pds_motors_ready, MODEDATA
 from BMM.linescans     import rocking_curve, slit_height, mirror_pitch, wiggle_bct, hcenter
 from BMM.resting_state import resting_state_plan
-from BMM.workspace     import rkvs
+from BMM.workspace     import rkvs, wa
 
 from bmm_tools.tools.periodictable import edge_energy, Z_number, element_symbol
 
@@ -96,7 +96,7 @@ def arrived_in_mode(mode=None):
         achieved = m.position
         diff = abs(target - achieved)
         if diff > 0.5:
-            print(f'{m} is out of position, target={target}, current position={achieved}')
+            print(f'{m.name} is out of position, target={target}, current position={achieved}')
             ok = False
     return ok
 
@@ -241,6 +241,7 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
         #yield from wiggle_mirrors()
         
         ready_count = 0
+        freakout = 0
         while pds_motors_ready() is False:
             whisper('Pausing 5 seconds before trying kill switches.')
             yield from mv(user_ns['busy'], 5)
@@ -276,26 +277,49 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
             if ready_count > 5:
                 report('Failed to fix an amplifier fault.')
                 yield from null()
-                return
+                freakout = 1
 
         if user_ns['ks'].checkall() is False:
             error_msg('One or more motor controllers is disabled.')
             bold_msg('Quitting change_edge() macro....\n')
             yield from null()
-            return
+            freakout = 1
+
             
         if xafs_table_ok is False:
             error_msg('XAFS table positions looks strange.  Check user_offset values for xafs_yu, xafs_ydi, and xafs_ydo.')
             bold_msg('Quitting change_edge() macro....\n')
             yield from null()
-            return
+            freakout = 1
+
 
             
-        (ok, text) = suspeders.clear_to_start()
+        (ok, text) = suspenders.clear_to_start()
         if ok is False:
             cprint(f'\n[red1]{text}[/red1]\n[yellow2]Quitting change_edge() plan....[/yellow2]\n')
             yield from null()
-            return
+            freakout = 1
+
+
+        ## something terrible has happened and may have happened during an automated scan sequence
+        ## crash out to the command line and scream loudly on Slack
+        if freakout != 0:
+            BMMuser.bmmbot.post(''':bangbang: :bangbang: :bangbang: :bangbang: :bangbang: 
+            
+Something has gone wrong while trying to change edge.  Scan sequence has been stopped.
+
+Maybe the beam has dumped, Maybe there is a motor controller problem.  Check screen at beamline for more information.            
+
+:bangbang: :bangbang: :bangbang: :bangbang: :bangbang: ''')
+
+            cprint('\n\n[red3]The next command will force a return to the ipython command line,[/red3]')
+            cprint('[yellow3]The intent is to fail somewhat gracefully during a failed[/yellow3]')
+            cprint('[yellow3]change_edge() happening during an automation scan sequence.[/yellow3]')
+            cprint('[grey58]Hopefully there are screen messages that give a clue for what happened....\n\n[/grey58]')
+            ## the next line is intended to trigger an immediate error and return to the IPython command line
+            wa.put(1)
+            
+            
 
         if energy is None:
             energy = edge_energy(el,edge)
@@ -408,9 +432,9 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
 
         start = time.time()
         if mode == 'XRD':
-            report(f'\nConfiguring beamline for XRD at {energy} eV', level='bold', slack=True)
+            report(f'\n:wrench: Configuring beamline for XRD at {energy} eV', level='bold', slack=True)
         else:
-            report(f'\nConfiguring beamline for {el.capitalize()} {edge.capitalize()} edge', level='bold', slack=True, rid=True)
+            report(f'\n:wrench: Configuring beamline for {el.capitalize()} {edge.capitalize()} edge', level='bold', slack=True, rid=True)
         yield from dcm.kill_plan()
 
         ################################################
@@ -435,6 +459,11 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
         if WITH_ENCLOSURE is True or WITH_SALTFURNACE is True:
             no_ref = True
 
+        cprint('[yellow2]bragg_small_move[/yellow2]')
+        if energy+target < dcm.energy.position:
+            dcm.bragg_small_move(verbose=True)
+        else:
+            dcm.bragg_small_move(direction=-1, verbose=True)
         yield from wiggle_bct()
         yield from mv(dcm.bragg.acceleration, BMMuser.acc_slow)
         yield from change_mode(mode=mode, prompt=False, edge=energy+target, reference=el, bender=bender, insist=insist, no_ref=no_ref)

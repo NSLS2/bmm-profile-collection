@@ -20,7 +20,7 @@ from BMM.xafs           import xafs
 from BMM.resting_state  import resting_state_plan
 
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
-from bmm_tools.tools.periodictable  import Z_number
+from bmm_tools.tools.periodictable  import Z_number, edge_energy
 
 from BMM.user_ns.base       import profile_configuration, reload_profile_configuration
 from BMM.user_ns.bmm        import kafka
@@ -54,10 +54,14 @@ def calibrate_low_end(mono='111', focus=False):
     def main_plan(focus):
         BMMuser.prompt = False
         reference_position = profile_configuration.get('dcm', 'calibration_position')
-        startwith = Z_number(profile_configuration.get('dcm', 'startwith'))
-        
+        startwith = profile_configuration.get('dcm', 'startwith')
+        edge = 'K'
+        if startwith in ('Pt', 'Au', 'Pb'):
+            edge = 'L3'
+        start_edge = edge_energy(startwith, edge)
+            
         datafile = os.path.join(BMMuser.workspace, 'edges%s.ini' % mono)
-        if startwith > 26:
+        if Z_number(startwith) > 26:
             handle = open(datafile, 'a')
         else:
             handle = open(datafile, 'w')
@@ -75,7 +79,7 @@ def calibrate_low_end(mono='111', focus=False):
             handle.flush()
 
 
-        if Z_number('Fe') >= startwith:
+        if edge_energy('Fe', 'K') >= start_edge:
             yield from change_edge('Fe', target=0, focus=focus)
             pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='fecal', mode=reference_position, element='Fe', sample='Fe foil', comment=f'calibrating Si{mono}', copy=False)
@@ -83,7 +87,7 @@ def calibrate_low_end(mono='111', focus=False):
             handle.write('fe = 11111.11,    7110.75,    22222.22,   %.5f\n' % pitch)
             handle.flush()
 
-        if Z_number('Co') >= startwith:
+        if edge_energy('Co', 'K') >= start_edge:
             yield from change_edge('Co', target=0, focus=focus)
             pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='cocal', mode=reference_position, element='Co', sample='Co foil', comment=f'calibrating Si{mono}', copy=False)
@@ -91,7 +95,7 @@ def calibrate_low_end(mono='111', focus=False):
             handle.write('co = 11111.11,    7708.78,    22222.22,   %.5f\n' % pitch)
             handle.flush()
 
-        if Z_number('Ni') >= startwith:
+        if edge_energy('Ni', 'K') >= start_edge:
             yield from change_edge('Ni', target=0, focus=focus)
             pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='nical', mode=reference_position, element='Ni', sample='Ni foil', comment=f'calibrating Si{mono}', copy=False)
@@ -99,7 +103,7 @@ def calibrate_low_end(mono='111', focus=False):
             handle.write('ni = 11111.11,    8331.49,    22222.22,   %.5f\n' % pitch)
             handle.flush()
 
-        if Z_number('Cu') >= startwith:
+        if edge_energy('Cu', 'K') >= start_edge:
             yield from change_edge('Cu', target=0, focus=focus)
             pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='cucal', mode=reference_position, element='Cu', sample='Cu foil', comment=f'calibrating Si{mono}', copy=False)
@@ -107,7 +111,7 @@ def calibrate_low_end(mono='111', focus=False):
             handle.write('cu = 11111.11,    8980.48,    22222.22,   %.5f\n' % pitch)
             handle.flush()
 
-        if Z_number('Zn') >= startwith:
+        if edge_energy('Zn', 'K') >= start_edge:
             yield from change_edge('Zn', target=0, focus=focus)
             pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='zncal', mode=reference_position, element='Zn', sample='Zn foil', comment=f'calibrating Si{mono}', copy=False)
@@ -126,7 +130,7 @@ def calibrate_low_end(mono='111', focus=False):
 
 def calibrate_high_end(mono='111', focus=False):
     '''Step through the upper 5 elements of the mono calibration procedure.'''
-    BMMuser, shb, dcm_pitch = user_ns['BMMuser'], user_ns['shb'], user_ns['dcm_pitch']
+    BMMuser, shb = user_ns['BMMuser'], user_ns['shb']
     (ok, text) = suspenders.clear_to_start()
     if ok is False:
         error_msg('\n'+text) + bold_msg('Quitting macro....\n')
@@ -138,11 +142,15 @@ def calibrate_high_end(mono='111', focus=False):
         datafile = os.path.join(BMMuser.workspace, 'edges%s.ini' % mono)
         handle = open(datafile, 'a')
         reference_position = profile_configuration.get('dcm', 'calibration_position')
-        startwith = Z_number(profile_configuration.get('dcm', 'startwith'))
-    
+        startwith = profile_configuration.get('dcm', 'startwith')
+        edge = 'K'
+        if startwith in ('Pt', 'Au', 'Pb'):
+            edge = 'L3'
+        start_edge = edge_energy(startwith, edge)
+        
         #yield from shb.open_plan()
 
-        if Z_number('Pt') >= startwith:
+        if edge_energy('Pt', 'L3') >= start_edge:
             yield from change_edge('Pt', target=0, focus=focus)
             pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='ptcal', mode=reference_position, element='Pt', edge='L3', sample='Pt foil', comment=f'calibrating Si{mono}', copy=False)
@@ -150,7 +158,7 @@ def calibrate_high_end(mono='111', focus=False):
             handle.write('pt = 11111.11,    11562.76,    22222.22,   %.5f\n' % pitch)
             handle.flush()
 
-        if Z_number('Au') >= startwith:
+        if edge_energy('Au', 'L3') >= start_edge:
             yield from change_edge('Au', target=0, focus=focus)
             pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='aucal', mode=reference_position, element='Au', edge='L3', sample='Au foil', comment=f'calibrating Si{mono}', copy=False)
@@ -158,7 +166,7 @@ def calibrate_high_end(mono='111', focus=False):
             handle.write('au = 11111.11,    11919.70,    22222.22,   %.5f\n' % pitch)
             handle.flush()
 
-        if Z_number('Pb') >= startwith:
+        if edge_energy('Pb', 'L3') >= start_edge:
             yield from change_edge('Pb', target=0, focus=focus)
             pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='pbcal', mode=reference_position, element='Pb', edge='L3', sample='Pb foil', comment=f'calibrating Si{mono}', copy=False)
@@ -166,7 +174,7 @@ def calibrate_high_end(mono='111', focus=False):
             handle.write('pb = 11111.11,    13035.07,    22222.22,   %.5f\n' % pitch)
             handle.flush()
 
-        if Z_number('Nb') >= startwith:
+        if edge_energy('Nb', 'K') >= start_edge:
             yield from change_edge('Nb', target=0, focus=focus)
             pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='nbcal', mode=reference_position, element='Nb', sample='Nb foil', comment=f'calibrating Si{mono}', copy=False)
@@ -174,7 +182,7 @@ def calibrate_high_end(mono='111', focus=False):
             handle.write('nb = 11111.11,     18982.97,   22222.22,   %.5f\n' % pitch)
             handle.flush()
 
-        if Z_number('Mo') >= startwith:
+        if edge_energy('Mo', 'K') >= start_edge:
             yield from change_edge('Mo', target=0, focus=focus)
             pitch = dcm.pitch.user_readback.get()
             yield from xafs(f'{workspace}/mono_calibration/cal.ini', folder=BMMuser.folder, filename='mocal', mode=reference_position, element='Mo', sample='Mo foil', comment=f'calibrating Si{mono}', copy=False)
