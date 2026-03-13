@@ -2,7 +2,6 @@
 import os, datetime, configparser, redis
 from tools import echo_slack, profile_configuration
 
-
 #-------- fetch Slack configuration --------------------------------
 use_nsls2_slack = profile_configuration.getboolean('slack', 'use_nsls2')
 use_bmm_slack = profile_configuration.getboolean('slack', 'use_bmm')

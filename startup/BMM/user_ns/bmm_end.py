@@ -568,6 +568,7 @@ run_report('\t  '+'calling resting_state')
 resting_state()
 user_ns['RE'].clear_suspenders()
 
+
 if not is_re_worker_active():
     run_report('\t  '+'establishing local logger')
     from bluesky.log import config_bluesky_logging

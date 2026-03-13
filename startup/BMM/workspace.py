@@ -97,7 +97,7 @@ Verifying workspace on this computer ...''')
     check_profile_branch()
     initialize_data_directories()
     #initialize_lustre()
-    initialize_secrets()
+    #initialize_secrets()
     initialize_redis()
 
     ## deprecated steps

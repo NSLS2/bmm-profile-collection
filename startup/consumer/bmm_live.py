@@ -145,6 +145,10 @@ class LineScan():
         self.add_refl = False
         if 'add_refl' in kwargs: self.add_refl = kwargs['add_refl']
         self.numerator = kwargs['detector'].capitalize()
+        if self.numerator == 'Mythen':
+            self.add_refl = True
+        if self.numerator == 'Mca_full':
+            self.add_refl = False
         self.denominator = None
         self.figure = plt.figure()
         if self.motor is not None:
@@ -240,10 +244,16 @@ class LineScan():
             self.axes.legend(loc='best', shadow=True)
 
         elif self.numerator == 'Mythen':
-            self.numerator = 'Mythen'
             self.description = 'reflectivity'
             self.denominator = None
             self.axes.set_ylabel(f'{self.numerator}')
+            self.axes.legend(loc='best', shadow=True)
+            
+        elif self.numerator == 'Mca_full':
+            self.numerator = 'mca_full'
+            self.description = 'MCA full'
+            self.denominator = None
+            self.axes.set_ylabel('MCA full')
             self.axes.legend(loc='best', shadow=True)
             
 
@@ -440,6 +450,8 @@ class LineScan():
 
         elif self.numerator in kwargs['data']:  # numerator will not be in baseline document
             signal = kwargs['data'][self.numerator]
+        elif self.numerator == 'mca_full':
+            signal = kwargs['data']['mca_full'] / kwargs['data']['dwti_dwell_time']
         elif self.numerator == 'Mythen':
             if self.add_refl is False:
                 signal = kwargs['data']['mca_full'] / kwargs['data']['dwti_dwell_time']
@@ -497,7 +509,7 @@ class LineScan():
         self.line.set_data(self.xdata, self.ydata)
         if self.numerator == 'Eiger':
             self.line2.set_data(self.xdata, self.y2data)
-        if self.numerator == 'Mythen':
+        if self.numerator == 'Mythen' and self.add_refl is True:
             self.line2.set_data(self.xdata, self.y2data)
         if self.fluo_detector == '1-element SDD':
             self.line2.set_data(self.xdata, self.y2data)

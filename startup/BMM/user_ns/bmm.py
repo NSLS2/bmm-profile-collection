@@ -36,13 +36,25 @@ from bluesky.preprocessors   import finalize_wrapper
 run_report('\t'+'user')
 from BMM.user import BMM_User
 
+try:
+    from bluesky_queueserver import is_re_worker_active
+except ImportError:
+    # TODO: delete this when 'bluesky_queueserver' is distributed as part of collection environment
+    def is_re_worker_active():
+        return False
+
+
 
 run_report('\t'+'recovering user configuration')
 BMMuser = BMM_User()
 BMMuser.start_experiment_from_serialization()
 run_report('\t'+'configuring Slack bmmbot')
 BMMuser.bmmbot = BMMbot()
-BMMuser.bmmbot._bmmbot_secret = profile_configuration.get('slack', 'bmmbot_secret')
+
+if is_re_worker_active:
+    BMMuser.bmmbot._bmmbot_secret = profile_configuration.get('slack_qs', 'bmmbot_secret')
+else:
+    BMMuser.bmmbot._bmmbot_secret = profile_configuration.get('slack', 'bmmbot_secret')
 BMMuser.bmmbot._redis_client = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'))
 BMMuser.bmmbot._pass_api = profile_configuration.get('services', 'pass_api') + "/{pass_id}/slack-channels"
 BMMuser.bmmbot.refresh_channel()
