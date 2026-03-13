@@ -138,7 +138,11 @@ def check_lan():
 def check_profile_branch():
     here = os.getcwd()
     #os.chdir(os.path.dirname(startup_dir))
-    os.chdir(profile_configuration.get('services', 'startup'))
+    try:
+        os.chdir(profile_configuration.get('services', 'startup'))
+    except:
+        # apparently on queueserver VM
+        os.chdir('/opt/bluesky/profile_collection/startup')
     try:
         branch = subprocess.check_output(['git', 'branch', '--show-current']).decode("utf-8")[:-1]
     except subprocess.CalledProcessError:
