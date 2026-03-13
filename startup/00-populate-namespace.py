@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '/home/xf06bm/.ipython/bmm_tools/src/')
+#sys.path.insert(0, '/home/xf06bm/.ipython/bmm_tools/src/')
 #sys.path.append('/home/xf06bm/.local/lib/python3.11/site-packages/')
 
 from BMM.user_ns import *
