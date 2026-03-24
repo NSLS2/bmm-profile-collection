@@ -214,7 +214,7 @@ WITH_DISPLEX = profile_configuration.getboolean('experiments', 'displex') # Fals
 if WITH_DISPLEX is True:
     configure_xafs_y('heavy')
 else:
-    configure_xafs_y('heavy')
+    configure_xafs_y('light')
 
 
 # def reset_offset(motor=None, newpos=0):

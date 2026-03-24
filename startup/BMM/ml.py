@@ -20,10 +20,15 @@ user_ns = vars(user_ns_module)
 
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 
-from BMM.larch_interface import Pandrosus
 from BMM.user_ns.base import WORKSPACE, bmm_catalog
 from BMM.user_ns.bmm  import BMMuser
 
+from BMM.user_ns.base import profile_configuration
+try:
+    from BMM.larch_interface import Pandrosus
+except:
+    Pandrosus = None
+    
 # when pickle changes version number, this error message will happen twice:
 # /opt/conda_envs/collection-2021-1.2/lib/python3.7/site-packages/sklearn/base.py:315:
 #   UserWarning: Trying to unpickle estimator DecisionTreeClassifier
@@ -346,6 +351,10 @@ class BMMDataEvaluation:
         '''Examine and process data that failed the current iteration of the data evaluator. 
         '''
 
+        if Pandrosus is None:
+            print('bsui has not been started with access to Larch, so cannot examine failed data')
+            return
+        
         fig, ax = plt.subplots(1,1)
         plt.show()
         plt.draw()

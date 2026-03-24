@@ -338,27 +338,28 @@ from BMM.raster import raster #, difference_data
 ################################################################################################################
                                                                                                            
 
+if profile_configuration.getboolean('experiments', 'use_larch') is True:
+    run_report('\t'+'Larch')
+    from BMM.larch_interface import Pandrosus, Kekropidai
+    ## examples that only work at BMM...
+    # se = Pandrosus()
+    # se.fetch('8e293af3-811c-4e96-a4e5-733d0dc77dad', name\='Se metal', mode='transmission')
 
-run_report('\t'+'Larch')
-from BMM.larch_interface import Pandrosus, Kekropidai
-## examples that only work at BMM...
-# se = Pandrosus()
-# se.fetch('8e293af3-811c-4e96-a4e5-733d0dc77dad', name\='Se metal', mode='transmission')
+    # seo = Pandrosus()
+    # seo.fetch('69c35332-6c8a-4f43-9eb2-e5e9cbe7f798', name='SeO2', mode='transmission')
 
-# seo = Pandrosus()
-# seo.fetch('69c35332-6c8a-4f43-9eb2-e5e9cbe7f798', name='SeO2', mode='transmission')
-
-# bunch = Kekropidai(name='Selenium standards')
-# bunch.add(se)
-# bunch.add(seo)
-
-run_report('\t'+'Demeter')
-from BMM.demeter import run_hephaestus
+    # bunch = Kekropidai(name='Selenium standards')
+    # bunch.add(se)
+    # bunch.add(seo)
 
 run_report('\t'+'machine learning and data evaluation')
 from BMM.ml import BMMDataEvaluation
 clf = BMMDataEvaluation()
     
+    
+run_report('\t'+'Demeter')
+from BMM.demeter import run_hephaestus
+
     
 run_report('\t'+'telemetry')
 from BMM.telemetry import BMMTelemetry

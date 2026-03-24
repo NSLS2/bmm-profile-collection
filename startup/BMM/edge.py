@@ -26,6 +26,8 @@ from BMM.workspace     import rkvs, wa
 
 from bmm_tools.tools.periodictable import edge_energy, Z_number, element_symbol
 
+from BMM.user_ns.base import profile_configuration
+
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
@@ -469,6 +471,8 @@ Maybe the beam has dumped, Maybe there is a motor controller problem.  Check scr
         yield from change_mode(mode=mode, prompt=False, edge=energy+target, reference=el, bender=bender, insist=insist, no_ref=no_ref)
         yield from mv(dcm.bragg.acceleration, BMMuser.acc_fast)
 
+        ## RIGHT HERE: set Pilatus threshold to energy - 2000 eV
+        
         ## verify that dcm.para has arrived in place.  if not, presume
         ## that it has stalled.  back off and try again to move
         dcm_axes = (dcm.pitch, dcm.roll, dcm.perp, dcm.roll, dcm.bragg)
