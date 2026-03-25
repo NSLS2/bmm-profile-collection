@@ -293,11 +293,12 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
         time = int(time)
         
         if str(scantype) == 'xanes':
-            with open('/nsls2/data3/bmm/legacy/overnight.txt', 'a', encoding='utf-8') as f:
+            with open('/opt/bluesky/things/overnight.txt', 'a', encoding='utf-8') as f:
                 f.write(f"{now()}  {composition}  {distance} {time}\n")
 
         ga.spin = False
         ga.orientation = 'perpendicular'
+        nscans = config['nscans']
         primary_element = config['primary_element']
         durations = list((config['origins'][primary_element][x]['duration'] for x in config['origins'][primary_element].keys()))
         this_time = min(durations, key=lambda x:abs(x-time))  # find sample duration closest to requested time
@@ -364,9 +365,9 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
                     yield from mvr(xafs_x, -10)
                     yield from xafs(filename=f"{el}foil_{filename}", element=el, sample=composition, prep=prep, comment=comment, **reference_kwargs)
                     yield from mvr(xafs_x, 10)
-                yield from xafs(filename=filename, element=el, sample=composition, prep=prep, comment=comment, **kwargs)
+                yield from xafs(filename=filename, element=el, nscans=nscans, sample=composition, prep=prep, comment=comment, **kwargs)
             else:
-                print(f"\nxafs('/nsls2/data3/bmm/legacy/{el}_{scantype}', element = {el}, {filename=}, sample='{composition} {sample}', {prep =}, {comment=}, {kwargs})\n")
+                print(f"\nxafs('/opt/bluesky/things/cms.ini', element = {el}, {filename=}, nscans=nscans, sample='{composition} {sample}', {prep =}, {comment=}, {kwargs})\n")
                 yield from sleep(3)
 
 
@@ -393,7 +394,7 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
     xafs_detx = user_ns['xafs_detx']
     slits3 = user_ns['slits3']
     BMMuser.prompt = False
-    with open('/nsls2/data3/bmm/legacy/cms.json') as f:
+    with open('/opt/bluesky/things/cms.json') as f:
         config = json.load(f)
     # pprint.pprint(config)
     # print('\n')
@@ -427,7 +428,7 @@ def populate_overnight_CMS_driven_experiments():
     This is intended to be run from the bluesky command line at BMM.
 
     '''
-    with open('/nsls2/data3/bmm/legacy/overnight.txt', 'r') as f:
+    with open('/opt/bluesky/things/overnight.txt', 'r') as f:
         instructions = f.readlines()
 
     #beamline_tla  = "bmm"
