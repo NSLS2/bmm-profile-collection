@@ -242,10 +242,10 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
     configuration
     =============
 
-    Detector distances for the edges and nominal
-    xafs_x/xafs_pitch/xafs_y positions of each sample are stored in a
-    JSON file called `cms.json` in the users Workspace folder.  Can
-    also configure whether mesages specific to this plan are echoed to
+    Detector distances for the edges and nominal xafs_x, xafs_pitch,
+    xafs_roll, xafs_y positions of each sample are stored in a JSON
+    file called `cms.json` in an accessible folder.  Can also
+    configure whether mesages specific to this plan are echoed to
     Slack.
 
 
@@ -264,22 +264,23 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
       T5: 3600 s
       T6: 5400 s
 
-    There are three edges to be measured at each position on each samples:
-    Sc, V, Mn
+    There are N edges to be measured at each position on each
+    sample. (For example: Sc, V, Mn).
 
     Once the 6 samples are mounted on the sample holder at BMM, each
-    will be aligned in the beam with xafs_x and xafs_pitch positions
-    for the aligned sample recorded.  Also recorded will the xafs_y
-    value of the zero position on each sample.
+    will be aligned in the beam with xafs_x, xafs_pitch, and xafs_roll
+    positions for the aligned sample recorded.  Also recorded will the
+    xafs_y value of the zero position on each sample.
 
-    From that tuple of (xafs_x, xafs_pitch, xafs_y) positions, the
-    value of distance will be used to compute the measurement position.
+    From that tuple of (xafs_x, xafs_pitch, xafs_roll, xafs_y)
+    positions, the value of distance will be used to compute the
+    measurement position.
 
     So, the game plan is:
     1. Rotate xafs_garot to the correct sample computed from time
     2. Compute the xafs_y position from distance
-    3. Move to (xafs_x, xafs_pitch, xafs_y)
-    4. Measure XAS at (Sc, V, Mn) or (Mn, V, Sc) as appropriate
+    3. Move to (xafs_x, xafs_pitch, xafs_roll, xafs_y)
+    4. Measure XAS at elements or elements.reveres() as appropriate
 
     '''
 
@@ -311,9 +312,10 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
 
 
         ## put edges in ascending order by Z number
-        if scantype.lower() == 'xanes':
-            elements = [config['primary_element']]
-        elif element is not None:
+        # if scantype.lower() == 'xanes':
+        #     elements = [config['primary_element']]
+        # el
+        if element is not None:
             elements = [element]
         else:
             znums = list(Z_number(x) for x in config['detector_distances'].keys())
@@ -342,20 +344,18 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
                 if config['dryrun'] is False:
                     yield from change_edge(el, focus=True)
                 else:
-                    print(f"change_edge('{el}', focus=True)")
+                    print(f"\nchange_edge('{el}', focus=True)\n")
                     yield from sleep(3)
 
             ## also need reference XANES measurement
 
-            if scantype == 'xanes':
-                filename = f"{el}_{composition}_{distance:.3f}_{time}"
-            else:
-                filename = f"{el}_{composition}_{distance:.3f}_{time}_exafs"
             comment = f"sample = {sample}, distance = {distance:.3f}, {time = }"
             prep = f"{composition}, film deposited on glass, heated for {this_time} seconds"
             if scantype == 'xanes':
+                filename = f"{el}_{composition}_{distance:.3f}_{time}"
                 kwargs = config['xanes']
             else:
+                filename = f"{el}_{composition}_{distance:.3f}_{time}_exafs"
                 reference_kwargs = config['reference']
                 kwargs = config['exafs']
                 
@@ -366,7 +366,7 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
                     yield from mvr(xafs_x, 10)
                 yield from xafs(filename=filename, element=el, sample=composition, prep=prep, comment=comment, **kwargs)
             else:
-                print(f"xafs('/nsls2/data3/bmm/legacy/{el}_{scantype}', element = {el}, {filename=}, sample='{composition} {sample}', {prep =}, {comment=}, {kwargs})")
+                print(f"\nxafs('/nsls2/data3/bmm/legacy/{el}_{scantype}', element = {el}, {filename=}, sample='{composition} {sample}', {prep =}, {comment=}, {kwargs})\n")
                 yield from sleep(3)
 
 
