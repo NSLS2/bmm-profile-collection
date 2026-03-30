@@ -465,3 +465,71 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, ga=No
         ga.linear_data      = list(ss)
         ga.linear_best_fit  = list(out.best_fit)
         ga.inverted         = inverted
+
+
+
+def flatten_message(message):
+    '''In the context of live plotting at BMM, we use a client subscribed
+    to a kafka (or redis-queue or whatever) message bus. This
+    subscribes to the channel that is sending documents from the
+    bluesky process to Tiled, parsing these intercepted documents, and
+    making live plots suitable for the experiment.
+
+    In the olden days, before ophyd-async and the other new tools in
+    the newer ecosystem, the event page contained a dictionary
+    carrying the various scalars measured at each point in a scan.
+    The relevant part of that dictionary looked something like this:
+
+       {'data': {'4-element SDD_channel01_xrf': '50a7e60c-86cb-4cca-a6ec-4f02179f8936/32',
+                 '4-element SDD_channel02_xrf': '50a7e60c-86cb-4cca-a6ec-4f02179f8936/33',
+                 '4-element SDD_channel03_xrf': '50a7e60c-86cb-4cca-a6ec-4f02179f8936/34',
+                 '4-element SDD_channel04_xrf': '50a7e60c-86cb-4cca-a6ec-4f02179f8936/35',
+                 'Cu1': 515.8938686551099,
+                 'Cu2': 618.4181279567646,
+                 'Cu3': 546.3841773831881,
+                 'Cu4': 550.379763033371,
+                 'I0': 22.285218594551086,
+                 'Ir': 0.050800561904907254,
+                 'It': 0.2420261135101318,
+                 'xafs_x': 176.499,
+                 'xafs_x_user_setpoint': 176.49900000000002},
+         
+    That is, the scalars were represented as floats.
+
+    With the newer documents, now named "event_page" rather than
+    "event", the same part of the dictionary looks like this:
+
+       {'data': {'4-element SDD_channel01_xrf': ['2ed9b28f-a5ad-4f71-8904-a6805c9990cf/56'],
+                 '4-element SDD_channel02_xrf': ['2ed9b28f-a5ad-4f71-8904-a6805c9990cf/57'],
+                 '4-element SDD_channel03_xrf': ['2ed9b28f-a5ad-4f71-8904-a6805c9990cf/58'],
+                 '4-element SDD_channel04_xrf': ['2ed9b28f-a5ad-4f71-8904-a6805c9990cf/59'],
+                 'Cu1': [687.4539025312253],
+                 'Cu2': [694.5866652621469],
+                 'Cu3': [718.6267339855536],
+                 'Cu4': [755.6538311937474],
+                 'I0': [22.276790831565854],
+                 'Ir': [0.0002650260925293119],
+                 'It': [0.0017896404266357488],
+                 'xafs_x': [177.098],
+                 'xafs_x_user_setpoint': [177.098]},
+
+    That is, the scalars are now ones-element lists.
+
+    At the time of this writing (March 2026), bsui produces documents
+    with floats, while queueserver produces documents with one-element lists.
+
+    The purpose of this utility function is to flatten the newer
+    documents so that those dictionaries can be consumed by existing code.
+
+    In the long haul, code should be rewritten to use the newer
+    documents and a utility function might be written to accommodate
+    the older messages.
+
+    '''
+
+    datablock = message['data']
+    for k in datablock.keys():
+        if type(datablock[k]) is list:
+            datablock[k] = datablock[k][0]
+    message['data'] = datablock
+    return message

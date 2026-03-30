@@ -1278,7 +1278,7 @@ def howlong(inifile=None, interactive=True, **kwargs):
     ## try inifile as given then workspace + inifile
     ## this allows something like RE(xafs('myscan.ini')) -- short 'n' sweet
     if is_re_worker_active():
-        inifile = '/nsls2/data3/bmm/shared/config/xafs/scan.ini'
+        inifile = '/opt/bluesky/things/scan.ini'
     BMMuser = user_ns['BMMuser']
     if inifile is None:
         inifile = present_options('ini')

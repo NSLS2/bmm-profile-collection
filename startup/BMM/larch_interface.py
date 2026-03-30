@@ -169,9 +169,11 @@ class Pandrosus():
             print('The V1 interface to databroker is deprecated.')
             return
         else:                               # tiled catalog
-            header = self.db[uid].metadata
+            self.uid = uid
+            record = self.db[self.uid]
+            header = record.metadata
             start = header['start']
-            table  = self.db[uid].primary.read()
+            table  = record.primary['data']
             
         self.group.energy = numpy.array(table['dcm_energy'])
         self.group.i0 = numpy.array(table['I0'])

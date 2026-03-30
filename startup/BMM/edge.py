@@ -139,6 +139,42 @@ def xafs_table_ok():
         return False
     return True
 
+def correct_table_yu(energy=None, mode='A'):
+    '''Correct the small change in height as a function of energy in mode
+    A (high energy, focused)
+
+    Measuring optimal xafs_table_yu position over several energies:
+
+        e=numpy.array([9280.2, 11404.5, 13773.8, 16404.6, 18300.4, 20298.3])
+        y=numpy.array([120.122, 120.122, 120.142, 120.172, 120.183, 120.215])
+
+    then
+
+        from lmfit.models import LinearModel
+        mod=LinearModel()
+        pars=mod.guess(y, x=e)
+        out=mod.fit(y, pars, x=e)
+    
+    yields a roughly linear relation with increasing energy.  Apply
+    this correction to the tabulated value.  (mode A: 120.122; mode C:
+    54.068; March 2026)
+
+    '''
+
+    if mode == 'A':
+        m = 8.6312e-06
+        b = 120.030639
+    # elif mode == 'C':
+    #     m = 2.8054e-05
+    #     b = 53.8535146
+    else:
+        return None
+        
+    if energy is None:
+        energy = float(dcm.energy.position)
+    return(energy*m + b)
+
+        
 def xrd_mode(energy=8600):
      '''Thin wrapper around change_edge() to prepare for XRD measurements.
      '''
@@ -562,11 +598,26 @@ Maybe the beam has dumped, Maybe there is a motor controller problem.  Check scr
             kafka.message({'close': 'last'})
 
 
+        ################################################
+        # run a slit horizontal center scan if focused #
+        ################################################
         if mode in ('A', 'B', 'C'):
             if no_hslits is False:
                 yield from hcenter(move=True)
                 kafka.message({'close': 'last'})
-            
+
+        ########################################
+        # correct xafs_table_yu in mode A or C #
+        ########################################
+        if mode == 'A' and dcm._crystal == '111':
+            yu = correct_table_yu(energy=energy+target)
+            if yu is not None:
+                yield from mv(xafs_table.yu, yu)
+        # if mode == 'C' and dcm._crystal == '111':
+        #     yu = correct_table_yu(energy=energy+target, mode='C')
+        #     if yu is not None:
+        #         yield from mv(xafs_table.yu, yu)
+        
         ##################################
         # set reference and roi channels #
         ##################################

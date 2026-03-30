@@ -843,6 +843,8 @@ class XAFSScan():
     def add(self, **kwargs):
         '''Add the most recent event to the current XAFS live plot.
         '''
+        #print(f'{kwargs=}')
+
         if 'dcm_energy' not in kwargs['data']:
             return              # this is a baseline event document
 

@@ -44,7 +44,7 @@ from align_wheel import AlignWheel
 aw = AlignWheel()
 aw.logger = logger
 
-be_verbose = True
+be_verbose = False
 doing = None
 
 from bmm_live import LineScan, XAFSScan, XRF, AreaScan, XRR
@@ -85,7 +85,7 @@ def plot_from_kafka_messages(beamline_acronym):
         #     f"contents: {pprint.pformat(doc)}\n"
         # )
         name, message = doc
-        #print('========', name)
+        # print('========', name)
         # if be_verbose is True:
         #     print('\n\nVerbose mode is on:')
         #     pprint.pprint(message)
@@ -299,7 +299,9 @@ def plot_from_kafka_messages(beamline_acronym):
         # for live plotting, need to capture and parse event
         # documents. use the global state variable "doing"
         # to keep track of which plotting chore needs to be done.
-        elif name == 'event':
+        elif 'event' in name:
+            if name == 'event_page':
+                message = flatten_message(message)
             if doing is None:
                 pass
             elif doing == 'linescan':

@@ -365,9 +365,9 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
                     yield from mvr(xafs_x, -10)
                     yield from xafs(filename=f"{el}foil_{filename}", element=el, sample=composition, prep=prep, comment=comment, **reference_kwargs)
                     yield from mvr(xafs_x, 10)
-                yield from xafs(filename=filename, element=el, nscans=nscans, sample=composition, prep=prep, comment=comment, **kwargs)
+                yield from xafs(filename=filename, element=el, sample=composition, prep=prep, comment=comment, **kwargs)
             else:
-                print(f"\nxafs('/opt/bluesky/things/cms.ini', element = {el}, {filename=}, nscans=nscans, sample='{composition} {sample}', {prep =}, {comment=}, {kwargs})\n")
+                print(f"\nxafs('/opt/bluesky/things/cms.ini', element = {el}, {filename=}, sample='{composition} {sample}', {prep =}, {comment=}, {kwargs})\n")
                 yield from sleep(3)
 
 

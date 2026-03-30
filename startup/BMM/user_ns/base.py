@@ -29,7 +29,6 @@ def reload_profile_configuration():
     profile_configuration.read_file(open(cfile))
 reload_profile_configuration()
     
-use_kafka = True
 os.environ['BLUESKY_KAFKA_BOOTSTRAP_SERVERS'] = profile_configuration.get('services', 'kafka')
 
 WORKSPACE = profile_configuration.get('services', 'workspace')
@@ -43,11 +42,14 @@ import redis
 uns_dict = dict()
 
 class dummy_broker:
+    name = 'bmm'
+    
     def insert(self, *args):
         pass
 
 dummy = dummy_broker()
 
+use_kafka = True
 if not is_re_worker_active():
     ip = get_ipython()
     nslsii.configure_base(ip.user_ns, 'bmm', configure_logging=True, publish_documents_with_kafka=use_kafka)
@@ -56,7 +58,7 @@ if not is_re_worker_active():
     sd  = ip.user_ns['sd']
     bec = ip.user_ns['bec']
 else:
-    nslsii.configure_base(uns_dict, dummy, configure_logging=True, publish_documents_with_kafka=False)
+    nslsii.configure_base(uns_dict, dummy, configure_logging=True, publish_documents_with_kafka=True)
     RE  = uns_dict['RE']
     nslsii.configure_kafka_publisher(RE, "bmm")
     sd  = uns_dict['sd']
