@@ -25,7 +25,7 @@ from bmm_tools.tools.misc import now
 from bmm_tools.tools.periodictable import edge_energy, Z_number, element_name
 
 from BMM.user_ns.base      import bmm_catalog
-from BMM.user_ns.detectors import with_cam1, with_cam2, with_webcam, with_anacam
+from BMM.user_ns.detectors import with_cam1, with_cam2, with_cam8, with_cam9, with_webcam, with_anacam
 from BMM.user_ns.dwelltime import use_7element, use_4element, use_1element
 
 from BMM import user_ns as user_ns_module
@@ -166,8 +166,8 @@ class DossierTools():
         
         BMMuser, xs, xs1, dcm = user_ns['BMMuser'], user_ns['xs'], user_ns['xs1'], user_ns['dcm']
 
-        thisagg = matplotlib.get_backend()
-        matplotlib.use('Agg') # produce a plot without screen display
+        #thisagg = matplotlib.get_backend()
+        #matplotlib.use('Agg') # produce a plot without screen display
         ahora = now()
         self.xrffile = "%s_%s.xrf" % (stub, ahora)
         self.xrfsnap = "%s_XRF_%s.png" % (stub, ahora)
@@ -218,6 +218,7 @@ class DossierTools():
         image_ana, image_web, image_usb1, image_usb2 = '','','',''
         anauid, webuid, usb1uid, usb2uid = '','','',''
         anasnap, websnap, usb1snap, usb2snap = '','','',''
+        cam8snap, cam9snap, cam8uid, cam9uid = "", "", "", ""
         
         ### --- XAS webcam ---------------------------------------------------------------
         annotation = stub
@@ -297,8 +298,41 @@ class DossierTools():
                 kafka.message({'echoslack': True,
                                'img': os.path.join(proposal_base(), 'snapshots', usb2snap)})
        
+        ### --- Mako camera 8 --------------------------------------------------------------
+        if with_cam8 is True:
+            cam8snap = "%s_cam8_%s.jpg" % (stub, ahora)
+            image_cam8 = os.path.join(folder, 'snapshots', cam8snap)
+            md['_filename'] = image_cam8
+            bold_msg('GigE cam8 snapshot')
+            cam8uid = yield from count([cam8], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
+            self.cam8snap, self.cam8uid = cam8snap, cam8uid
+            kafka.message({'copy': True,
+                           'uuid': cam8uid,
+                           'target': os.path.join(proposal_base(), 'snapshots', cam8snap), })
+            if BMMuser.post_cam8:
+                kafka.message({'echoslack': True,
+                               'img': os.path.join(proposal_base(), 'snapshots', cam8snap)})
+       
+        ### --- Mako camera 9 --------------------------------------------------------------
+        if with_cam9 is True:
+            cam9snap = "%s_cam9_%s.jpg" % (stub, ahora)
+            image_cam9 = os.path.join(folder, 'snapshots', cam9snap)
+            md['_filename'] = image_cam9
+            bold_msg('GigE cam9 snapshot')
+            cam9uid = yield from count([cam9], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
+            self.cam9snap, self.cam9uid = cam9snap, cam9uid
+            kafka.message({'copy': True,
+                           'uuid': cam9uid,
+                           'target': os.path.join(proposal_base(), 'snapshots', cam9snap), })
+            if BMMuser.post_cam9:
+                kafka.message({'echoslack': True,
+                               'img': os.path.join(proposal_base(), 'snapshots', cam9snap)})
+       
         ### --- capture metadata for dossier -----------------------------------------------
         self.cameras_md = {'webcam_file': websnap,  'webcam_uid': webuid,
                            'analog_file': anasnap,  'anacam_uid': anauid,
                            'usb1_file':   usb1snap, 'usbcam1_uid': usb1uid,
-                           'usb2_file':   usb2snap, 'usbcam2_uid': usb2uid, }
+                           'usb2_file':   usb2snap, 'usbcam2_uid': usb2uid,
+                           'cam8_file':   cam8snap, 'usbcam1_uid': cam8uid,
+                           'cam9_file':   cam9snap, 'usbcam2_uid': cam9uid,
+        }

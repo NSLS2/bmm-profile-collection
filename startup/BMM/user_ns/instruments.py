@@ -380,10 +380,11 @@ xafs_ref.mapping = {'empty0': [0,  1, 'empty0', 'empty', True],
                     'Ru':     [1, 24, 'Ru', 'Ru metal powder', True],
 
                     ## commonly measured radionuclides 
-                    'Th':     [0, 22, 'Bi', 'BiO2',    False],     # use Bi L1 for Th L3
-                    'U' :     [0, 24, 'Y',  'Y foil',  False],   # use Y K for U L3
+                    'Th':     [0, 22, 'Bi', 'BiO2',    False],  # use Bi L1 for Th L3
+                    'U' :     [0, 24, 'Y',  'Y foil',  False],  # use Y K for U L3
                     'Pu':     [0, 16, 'Zr', 'Zr foil', False],  # use Zr K for Pu L3
                     'Am':     [0, 16, 'Zr', 'Zr foil', False],  # use Nb K for Am L3
+                    'Pm':     [0,  5, 'Mn', 'Mn metal powder', True],   # use Mn K for Pm L3
 
                     'Ca':     [0,  1, '--', 'None', False],     # missing standard, no reserved slot
                     'Ir':     [0,  1, '--', 'None', False],     # missing standard, no reserved slot
@@ -410,7 +411,7 @@ if WITH_RADIOLOGICAL:
         uranium = profile_configuration.get('experiments', 'u_ref').split()
         uranium[0] = int(uranium[0])
         uranium[1] = int(uranium[1])
-        uranium[3] = bool(uranium[3])
+        uranium[4] = bool(uranium[3])
         xafs_ref.mapping['U'] = uranium
         whisper('Set U standard location')
     except Exception as E:
@@ -421,7 +422,7 @@ if WITH_RADIOLOGICAL:
         technicium = profile_configuration.get('experiments', 'tc_ref').split()
         technicium[0] = int(technicium[0])
         technicium[1] = int(technicium[1])
-        technicium[3] = bool(technicium[3])
+        technicium[4] = bool(technicium[3])
         xafs_ref.mapping['Tc'] = technicium
         whisper('Set Tc standard location')
     except Exception as E:
@@ -432,7 +433,7 @@ if WITH_RADIOLOGICAL:
         thorium = profile_configuration.get('experiments', 'th_ref').split()
         thorium[0] = int(thorium[0])
         thorium[1] = int(thorium[1])
-        thorium[3] = bool(thorium[3])
+        thorium[4] = bool(thorium[3])
         xafs_ref.mapping['Th'] = thorium
         whisper('Set Th standard location')
     except Exception as E:

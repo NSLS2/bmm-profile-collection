@@ -26,6 +26,8 @@ with_anacam = profile_configuration.getboolean('cameras', 'anacam') # True
 with_cam1   = profile_configuration.getboolean('cameras', 'usb1')   # True
 with_cam2   = profile_configuration.getboolean('cameras', 'usb2')   # True
 with_webcam = profile_configuration.getboolean('cameras', 'webcam') # True
+with_cam8   = profile_configuration.getboolean('cameras', 'cam8')   # True
+with_cam9   = profile_configuration.getboolean('cameras', 'cam9')   # True
 
 
 from ophyd.scaler import EpicsScaler
@@ -322,7 +324,15 @@ if with_cam2 is True:
 else:
     usb2 = None
 
-cam8 = BMMUVCSingleTrigger('XF:06BMB-BI{Cam:08}', name="cam-8", read_attrs=["jpeg"])
+if with_cam8 is True:
+    cam8 = BMMUVCSingleTrigger('XF:06BMB-BI{Cam:08}', name="cam-8", read_attrs=["jpeg"])
+else:
+    cam8 = None
+
+if with_cam9 is True:
+    cam9 = BMMUVCSingleTrigger('XF:06BMB-BI{Cam:09}', name="cam-9", read_attrs=["jpeg"])
+else:
+    cam9 = None
 
 
 def display_last_image_usb_cam(catalog, camera=usb1):

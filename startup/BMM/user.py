@@ -303,6 +303,8 @@ class BMM_User(Borg):
         self.post_webcam    = False  ########################################################
         self.post_usbcam1   = False  # parameters for controlling what gets posted to Slack #
         self.post_usbcam2   = False  ########################################################
+        self.post_cam8      = False
+        self.post_cam9      = False
         self.post_anacam    = False
         self.post_xrf       = False
 
@@ -324,7 +326,7 @@ class BMM_User(Borg):
                              "macro_dryrun", "snapshots", "usbstick", "rockingcurve",
                              "htmlpage", "bothways", "channelcut", "ththth", "lims", "url",
                              "doi", "cif", "syns", "enable_live_plots",
-                             "post_webcam", "post_anacam", "post_usbcam1", "post_usbcam2", "post_xrf")
+                             "post_webcam", "post_anacam", "post_usbcam1", "post_usbcam2", "post_xrf", "post_cam8", "post_cam9")
         self.bmm_none     = ("slack_channel", "extra_metadata")
         self.bmm_ignore   = ("motor_fault", "bounds", "steps", "times", "motor", "motor2",
                              "fig", "ax", "x", "y", "prev_fig", "prev_ax", 'display_img')
@@ -843,15 +845,8 @@ class BMM_User(Borg):
             pass
 
         if kafka.file_exists(folder=proposal_base(), filename='.introduction_made', number=False) is False:
-            text = f'''Welcome to the Slack channel for your beamtime at BMM!
- 
-:speech_balloon: Use this channel for chat.
-:atom_symbol: Beamline messages will be posted on #pass-{gup}-bmm.
-
-BMM data access: https://nsls2.github.io/bmm-beamline-manual/data.html
-Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{gup}`'''
-            #self.bmmbot.chat_and_pin(text)
-            #kafka.message({'touch': os.path.join(proposal_base(), '.introduction_made')})
+            self.welcome_experimenters()
+            kafka.message({'touch': os.path.join(proposal_base(), '.introduction_made')})
 
         # preserve BMMuser state to a json string #
         self.prev_fig = None
@@ -879,7 +874,18 @@ Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{g
 
         ## update detectors, etc. that rely upon bmm_tools.tools.md to know the current value of RE.md
         bmm_tools.tools.md.common_md = user_ns['RE'].md
+
+    def welcome_experimenters(self):
+        text = f'''Welcome to the Slack channel for your beamtime at BMM!
  
+:speech_balloon: Use this channel for chat.
+:atom_symbol: Beamline messages will be posted on #pass-{self.gup}-bmm.
+
+BMM data access: https://nsls2.github.io/bmm-beamline-manual/data.html
+Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{self.gup}`'''
+        #self.bmmbot.chat_and_pin(text)
+        
+        
     def start_experiment_from_serialization(self):
         '''In the situation where bsui needs to be stopped (or crashes) before
         an experiment is properly ended using the end_experiment()

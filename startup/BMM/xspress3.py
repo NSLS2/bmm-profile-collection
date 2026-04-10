@@ -595,7 +595,7 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
             plt.ylabel('counts')
             plt.grid(which='major', axis='both')
             plt.xlim(2500, round(dcm.energy.position, -2)+500)
-            plt.title(f'XRF Spectrum {BMMuser.element} {BMMuser.edge}')
+            plt.title(f'XRF Spectrum {BMMuser.element} {BMMuser.edge}, incident energy={dcm.en:.1f}')
             s = list()
             for channel in self.iterate_channels():
                 s.append(channel.mca.array_data.get())

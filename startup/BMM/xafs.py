@@ -636,7 +636,7 @@ def xafs(inifile=None, **kwargs):
                     continue
                 addition = '      %-13s : %-50s\n' % (k,v)
                 text = text + addition.rstrip() + '\n'
-            for k in ('post_webcam', 'post_anacam', 'post_usbcam1', 'post_usbcam2', 'post_xrf'):
+            for k in ('post_webcam', 'post_anacam', 'post_usbcam1', 'post_usbcam2', 'post_xrf', 'post_cam8', 'post_cam9'):
                 addition = '      %-13s : %-50s\n' % (k,getattr(user_ns['BMMuser'], k))
                 text = text + addition.rstrip() + '\n'
             boxedtext(text, title='How does this look?', color='green')
@@ -840,6 +840,7 @@ def xafs(inifile=None, **kwargs):
             ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
             ## loop over scan count
             kafka.close_plots()
+            plt.close('all')
             rid = str(uuid.uuid4())[:8]
             kafka.message({'dossier': 'start', 'stub': p['filename']})
             kafka.message({'dossier': 'set',
@@ -1322,7 +1323,7 @@ def howlong(inifile=None, interactive=True, **kwargs):
                 continue
             addition = '      %-13s : %-50s\n' % (k,v)
             bt = bt + addition.rstrip() + '\n'
-        for k in ('post_webcam', 'post_anacam', 'post_usbcam1', 'post_usbcam2', 'post_xrf'):
+        for k in ('post_webcam', 'post_anacam', 'post_usbcam1', 'post_usbcam2', 'post_xrf', 'post_cam8', 'post_cam9'):
             addition = '      %-13s : %-50s\n' % (k,getattr(user_ns['BMMuser'], k))
             bt = bt + addition.rstrip() + '\n'
             

@@ -631,7 +631,7 @@ def change_xtals(xtal=None):
      yield from dcm.kill_plan()
      yield from sleep(1.0) 
      if xtal == 'Si(111)':
-          yield from mv(dcm.pitch, 1.137,
+          yield from mv(dcm.pitch, 1.3,
                         dcm.roll,  profile_configuration.getfloat('dcm', 'roll_111'),
                         dcm.x,     0.5    )
           #dcm._crystal = '111'

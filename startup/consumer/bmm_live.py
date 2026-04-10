@@ -981,7 +981,9 @@ class XRF():
         title = 'counts'
         if 'XDI' in catalog[uid].metadata['start']:
             if 'Sample' in catalog[uid].metadata['start']['XDI'] and 'name' in catalog[uid].metadata['start']['XDI']['Sample']:
-                self.title = catalog[uid].metadata['start']['XDI']['Sample']['name']
+                title = catalog[uid].metadata['start']['XDI']['Sample']['name']
+        this_energy = catalog[uid].metadata['start']['XDI']['_pccenergy']
+        self.title = f"{title}, incident energy={this_energy}"
         self.axes.set_title(self.title)
         self.axes.grid(which='major', axis='both')
 
