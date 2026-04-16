@@ -294,11 +294,11 @@ show_snapshot = bmm_tools.tools.db.show_snapshot
 # of the camera device will be reset when the user configuration
 # happens, so this initial configuration is harmless and transitory
 run_report('\t\t'+'caproto IOCs for webcams')
-temp_root = '/nsls2/data3/bmm/XAS/bucket'
+temp_root = '/nsls2/data/bmm/XAS/bucket'
 xascam = AxisCaprotoCam("XF:06BM-ES{AxisCaproto:6}:", name="webcam-1",
-                        root_dir=f"/nsls2/data3/bmm/proposals/{RE.md['cycle']}/{RE.md['data_session']}/assets")
+                        root_dir=f"/nsls2/data/bmm/proposals/{RE.md['cycle']}/{RE.md['data_session']}/assets")
 xrdcam = AxisCaprotoCam("XF:06BM-ES{AxisCaproto:5}:", name="webcam-2",
-                        root_dir=f"/nsls2/data3/bmm/proposals/{RE.md['cycle']}/{RE.md['data_session']}/assets")
+                        root_dir=f"/nsls2/data/bmm/proposals/{RE.md['cycle']}/{RE.md['data_session']}/assets")
 
 thishost = socket.gethostname()
 anacam = None

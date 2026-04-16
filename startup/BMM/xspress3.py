@@ -80,7 +80,7 @@ class BMMXspress3HDF5Plugin(Xspress3HDF5Plugin):
 
     @property
     def root_path_str(self):
-        root_path = f"/nsls2/data3/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/xspress3-1/"
+        root_path = f"/nsls2/data/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/xspress3-1/"
         return root_path
 
     @property

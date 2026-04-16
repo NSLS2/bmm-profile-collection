@@ -333,6 +333,6 @@ class DossierTools():
                            'analog_file': anasnap,  'anacam_uid': anauid,
                            'usb1_file':   usb1snap, 'usbcam1_uid': usb1uid,
                            'usb2_file':   usb2snap, 'usbcam2_uid': usb2uid,
-                           'cam8_file':   cam8snap, 'usbcam1_uid': cam8uid,
-                           'cam9_file':   cam9snap, 'usbcam2_uid': cam9uid,
+                           'cam8_file':   cam8snap, 'cam8_uid': cam8uid,
+                           'cam9_file':   cam9snap, 'cam9_uid': cam9uid,
         }

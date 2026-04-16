@@ -32,7 +32,7 @@ reload_profile_configuration()
 os.environ['BLUESKY_KAFKA_BOOTSTRAP_SERVERS'] = profile_configuration.get('services', 'kafka')
 
 WORKSPACE = profile_configuration.get('services', 'workspace')
-
+PROPOSALS = profile_configuration.get('services', 'proposals')
     
 
 

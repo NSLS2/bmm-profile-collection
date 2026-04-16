@@ -8,7 +8,7 @@
 . /opt/conda/etc/profile.d/conda.sh
 . /etc/profile.d/bluesky.sh 
 cd /home/xf06bm/.ipython/profile_collection/startup/consumer
-#export BS_ENV=2024-2.0-py310-tiled
+export BS_ENV=/nsls2/conda/envs/2025-3.0-py311-tiled
 conda activate $BS_ENV
 
 . bin/set-konsole-tab-title.sh

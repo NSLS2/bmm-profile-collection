@@ -122,6 +122,8 @@ class BMMQuadEM(QuadEM):
         yield from mv(self.compute_current_offset4,1)
         BMM_log_info('Measured dark current on quadem1')
 
+    def get_current_offsets(self):
+        return(self.current_offsets.ch1.get(), self.current_offsets.ch2.get(), self.current_offsets.ch3.get(), self.current_offsets.ch4.get())
         
 
 class BMMDualEM(QuadEM):
@@ -252,6 +254,10 @@ class IntegratedIC(BMMDualEM):
         yield from mv(self.compute_current_offset1,1)
         yield from mv(self.compute_current_offset2,1)
         BMM_log_info(f'Measured dark current on {self.name}')
+
+    def get_current_offsets(self):
+        return(self.current_offsets.ch1.get(), self.current_offsets.ch2.get())
+
         
 def dark_current():
     reopen = shb.state.get() == shb.openval 

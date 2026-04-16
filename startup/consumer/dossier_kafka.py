@@ -296,6 +296,20 @@ class BMMDossier():
                                                        uid         = snapshots['usbcam2_uid'],
                                                        camera      = 'usb2cam',
                                                        description = 'USB camera #2', )
+            if 'cam8_uid' in snapshots and snapshots['cam8_uid'] != '':
+                with open(os.path.join(startup_dir, 'consumer', 'tmpl', 'dossier_img.tmpl')) as f:
+                    content = f.readlines()
+                thiscontent += ''.join(content).format(snap        = quote('../snapshots/'+snapshots['cam8_file']),
+                                                       uid         = snapshots['cam8_uid'],
+                                                       camera      = 'cam8',
+                                                       description = 'GigE camera #8', )
+            if 'cam9_uid' in snapshots and snapshots['cam9_uid'] != '':
+                with open(os.path.join(startup_dir, 'consumer', 'tmpl', 'dossier_img.tmpl')) as f:
+                    content = f.readlines()
+                thiscontent += ''.join(content).format(snap        = quote('../snapshots/'+snapshots['cam9_file']),
+                                                       uid         = snapshots['cam9_uid'],
+                                                       camera      = 'cam9',
+                                                       description = 'GigE camera #9', )
             
             # middle part, XRF and glancing angle alignment images
             if thismode in ('xs', 'xs1', 'fluorescence'):
@@ -928,6 +942,10 @@ class BMMDossier():
                                               usb1uid       = snapshots['usbcam1_uid'],
                                               usb2snap      = quote('../snapshots/'+snapshots['usb2_file']),
                                               usb2uid       = snapshots['usbcam2_uid'],
+                                              cam8snap      = quote('../snapshots/'+snapshots['cam8_file']),
+                                              cam8uid       = snapshots['cam8_uid'],
+                                              cam9snap      = quote('../snapshots/'+snapshots['cam9_file']),
+                                              cam9uid       = snapshots['cam9_uid'],
                                               mode          = XDI['_user']['mode'],
                                               motors        = self.motor_sidebar(catalog),
                                               seqstart      = datetime.datetime.fromtimestamp(catalog[self.uidlist[0]].metadata['start']['time']).strftime('%A, %B %d, %Y %I:%M %p'),
@@ -1039,6 +1057,10 @@ class BMMDossier():
                                               usb1uid       = snapshots['usbcam1_uid'],
                                               usb2snap      = quote('../snapshots/'+snapshots['usb2_file']),
                                               usb2uid       = snapshots['usbcam2_uid'],
+                                              cam8snap      = quote('../snapshots/'+snapshots['cam8_file']),
+                                              cam8uid       = snapshots['cam8_uid'],
+                                              cam9snap      = quote('../snapshots/'+snapshots['cam9_file']),
+                                              cam9uid       = snapshots['cam9_uid'],
                                               xlsxout       = XDI['_snapshots']['xlsxout'],
                                               matout        = XDI['_snapshots']['matout'],
                                               mode          = XDI['_user']['mode'],
@@ -1073,6 +1095,26 @@ class BMMDossier():
 
 class XASFile():
 
+    units = {
+        'Detector': {'I0_dark'           : ('A', 5),
+                     'It_dark'           : ('A', 5),
+                     'Ir_dark'           : ('A', 5),
+        },
+        'Facility': {'energy'            : ('geV', None),
+                     'current'           : ('mA', 1),
+        },
+        'Mono':     {'d_spacing'         : ('Å', 7),
+                     'encoder_resolution': ('degrees per step', None),
+                     'angle_offset'      : ('degrees', 7),
+        },
+        'Sample':   {'x'                 : ('mm', 3),
+                     'y'                 : ('mm', 3),
+                     'pitch'             : ('mm', 3),
+                     'roll'              : ('mm', 3),
+                     'SDD_position'      : ('mm', 1),
+        },
+    }
+    
     def plot_hint(self, catalog=None, uid=None):
         text = 'ln(I0/It)  --  ln($5/$6)'
         el = catalog[uid].metadata['start']['XDI']['Element']['symbol']
@@ -1116,14 +1158,20 @@ class XASFile():
         handle = open(fname, 'w')
         handle.write(f'# XDI/1.0 BlueSky/{bluesky_version} BMM/{pathlib.Path(sys.executable).parts[-3]}\n')
 
-        ## header lines with metadata from the XDi dictionary
+        ## header lines with metadata from the XDI dictionary
         for family in ('Beamline', 'Detector', 'Element', 'Facility', 'Mono', 'Sample', 'Scan'):
             for k in xdi[family].keys():
+                unit, precision = '', None
+                if family in self.units and k in self.units[family]:
+                    unit, precision = units[family][k][0]  # add units if needed
                 if family == 'Sample' and k == 'comment':
                     continue
                 if family == 'Sample' and k == 'extra_metadata':
                     continue
-                handle.write(f'# {family}.{k}: {xdi[family][k]}\n')
+                value = xdi[family][k] 
+                if precision is not None:  # add precision if needed
+                    value = round(float(value), precision)
+                handle.write(f'# {family}.{k}: {value} {unit}\n')
         start = datetime.datetime.fromtimestamp(metadata['start']['time']).strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
         end   = datetime.datetime.fromtimestamp(metadata['stop']['time']).strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
         handle.write(f'# Scan.start_time: {start}\n')
@@ -1170,7 +1218,7 @@ class XASFile():
             nchan = 1
             column_list.append(f'{el}8')
             column_labels.append(f'{el}8')
-            handle.write(f'# Column.8: {el}8\n')
+            handle.write(f'# Column.8: {el}8 counts\n')
         elif '4-element SDD' in metadata['start']['detectors']:
             column_list.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4'])
             column_labels.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4'])
@@ -1190,13 +1238,13 @@ class XASFile():
         if nchan > 0:
             if 'yield' in metadata['start']['plan_name'] or include_yield is True:
                 for i in range(1, nchan+1):
-                    handle.write(f'# Column.{i+8}: {el}{i}\n')
+                    handle.write(f'# Column.{i+8}: {el}{i} counts\n')
             else:
                 for i in range(1, nchan+1):
-                    handle.write(f'# Column.{i+7}: {el}{i}\n')
+                    handle.write(f'# Column.{i+7}: {el}{i} counts\n')
         if 'pilatus100k-1' in metadata['start']['detectors']:
-            handle.write(f'# Column.{8+nchan}: diffuse\n')
-            handle.write(f'# Column.{9+nchan}: specular\n')
+            handle.write(f'# Column.{8+nchan}: diffuse counts\n')
+            handle.write(f'# Column.{9+nchan}: specular counts\n')
 
                     
         ## prepare data table and insert xmu column
@@ -1253,12 +1301,16 @@ class XASFile():
 
         ## figure out how to recognize the scans in a sequence
         if groupby is not None:
-            if groupby not in ('webcam', 'anacam', 'usbcam', 'usbcam1', 'usbcam2', 'xrf', 'ga'):
+            if groupby not in ('webcam', 'anacam', 'usbcam', 'usbcam1', 'usbcam2', 'cam8', 'cam9', 'xrf', 'ga'):
                 groupby = 'webcam'
+            elif groupby in ('cam8', 'cam9'):
+                groupby 'gige'
             if groupby == 'ga':
                 groupby = 'ga_yuid'
             elif groupby == 'usbcam':
                 groupby = 'usbcam2_uid'
+            elif groupby == 'gige':
+                groupby = 'cam8_uid'
             else:
                 groupby = groupby + '_uid'
             

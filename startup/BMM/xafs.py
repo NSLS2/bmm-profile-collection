@@ -21,6 +21,7 @@ from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
 from bmm_tools.tools.md import proposal_base
 
 from BMM.dossier         import DossierTools
+from BMM.electrometer    import dark_current
 from BMM.functions       import present_options, plotting_mode
 from BMM.functions       import DEFAULT_INI
 from BMM.user_ns.bmm     import kafka
@@ -37,6 +38,7 @@ from bmm_tools.tools.periodictable import edge_energy, Z_number, element_name
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
+from BMM.user_ns.base       import profile_configuration
 from BMM.user_ns.base       import bmm_catalog, WORKSPACE
 from BMM.user_ns.dcm        import dcm
 from BMM.user_ns.dwelltime  import _locked_dwell_time, use_7element, use_4element, use_1element
@@ -868,6 +870,21 @@ def xafs(inifile=None, **kwargs):
             if len(sample) > 50:
                 sample = sample[:45] + ' ...'
 
+            bold_msg('Measuring and recording dark current')            
+            yield from dark_current()
+            if profile_configuration.getboolean('electrometers', 'ic0'):
+                md['Detector']['I0_dark'] = ic0.get_current_offsets()[0]      # first ion chamber
+            else:
+                md['Detector']['I0_dark'] = quadem1.get_current_offsets()[0]  # first channel of black box QuadEM
+            if profile_configuration.getboolean('electrometers', 'ic1'):
+                md['Detector']['It_dark'] = ic1.get_current_offsets()[0]      # second ion chamber
+            else:
+                md['Detector']['It_dark'] = quadem1.get_current_offsets()[1]  # second channel of black box QuadEM
+            if profile_configuration.getboolean('electrometers', 'ic2'):
+                md['Detector']['Ir_dark'] = ic2.get_current_offsets()[0]      # third ion chamber 
+            else:
+                md['Detector']['Ir_dark'] = quadem1.get_current_offsets()[2]  # third channel of black box QuadEM
+                
             fluo_detector = None
             if plotting_mode(p['mode']) in ('fluorescence', 'pilatus'):
                 fluo_detector = xs.name
@@ -924,8 +941,6 @@ def xafs(inifile=None, **kwargs):
                     this_instrument = gmb.dossier_entry();
                 elif 'reflectivity' in BMMuser.instrument.lower():
                     this_iqnstrument = refl.dossier_entry();
-                    
-                    
                     
                 report(f'starting repetition {cnt} of {p["nscans"]} -- {fname} -- {len(energy_grid)} energy points{slotno}{ring}', level='bold', slack=True)
                 md['_filename'] = fname
