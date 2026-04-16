@@ -37,6 +37,7 @@ ophyd-async = ">=0.13.7,<0.14"
 emojis = "*"
 pvxslibs = ">=1.3.2, <2"
 bmm_tools = { git = "https://github.com/NSLS2/bmm_tools", branch = "main" }
+blop = { git = "https://github.com/bluesky/blop", branch = "main", extras = ["cpu"] }
 
 [feature.terminal.dependencies]
 ipython = ">=9.5.0"

@@ -17,7 +17,7 @@ from BMM.user_ns.detectors import ic0, cam8
 # ------------------------
 dcm_roll_dof = RangeDOF(
     actuator=dcm.roll,
-    bounds=(), # TODO:
+    bounds=(-0.365 - 0.5, -0.365 + 0.5), # TODO:
     parameter_type="float",
 )
 m2_yaw_dof = RangeDOF(
