@@ -29,6 +29,9 @@ profile_configuration = configparser.ConfigParser(interpolation=None)
 profile_configuration.read_file(open(cfile))
 
 
+BMM = profile_configuration.get('services', 'bmm')
+PROPOSALS = profile_configuration.get('services', 'proposals')
+
 import redis
 from redis_json_dict import RedisJSONDict
 nsls2_redis = profile_configuration.get('services', 'nsls2_redis')
@@ -58,11 +61,11 @@ def experiment_folder(catalog, uid):
             cycle = facility_dict['cycle']
 
     if DATA_SECURITY:
-        folder    = os.path.join('/nsls2', 'data3', 'bmm', 'proposals', cycle, f'{proposal}')
+        folder    = os.path.join(PROPOSALS, cycle, f'{proposal}')
     else:
         proposal  = catalog[uid].metadata['start']['XDI']['Facility']['SAF']
         startdate = catalog[uid].metadata['start']['XDI']['_user']['startdate']
-        folder = os.path.join('/nsls2', 'data3', 'bmm', 'XAS', cycle, str(proposal), startdate)
+        folder = os.path.join(BMM, 'XAS', cycle, str(proposal), startdate)
     #print(f'folder is {folder}')
     return folder
 
@@ -87,7 +90,7 @@ def file_resource(catalog, uid):
 
 def echo_slack(text='', img=None, icon='message', rid=None, measurement='xafs'):
     facility_dict = RedisJSONDict(redis_client=redis_client, prefix='xas-')
-    base   = os.path.join('/nsls2', 'data3', 'bmm', 'proposals', facility_dict['cycle'], facility_dict['data_session'])
+    base   = os.path.join(PROPOSALS, facility_dict['cycle'], facility_dict['data_session'])
     rawlogfile = os.path.join(base, 'dossier', '.rawlog')
     rawlog = open(rawlogfile, 'a')
     rawlog.write(message_div(text, img=img, icon=icon, rid=rid, measurement=measurement))

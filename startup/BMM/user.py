@@ -34,7 +34,7 @@ from BMM.workspace   import rkvs
 from BMM.user_ns.bmm import kafka
 from BMM.logging     import BMM_user_log, BMM_unset_user_log, report
 
-from BMM.user_ns.base import startup_dir, profile_configuration
+from BMM.user_ns.base import startup_dir, profile_configuration, PROPOSALS
 
 TEMPLATES_FOLDER = 'templates'
 
@@ -517,7 +517,7 @@ class BMM_User(Borg):
         return(verb)
 
     def kafka_establish_folder(self, i, text, folder):
-        base = os.path.join('/nsls2', 'data3', 'bmm', 'proposals', facility_dict['cycle'], facility_dict['data_session'])
+        base = os.path.join(PROPOSALS, facility_dict['cycle'], facility_dict['data_session'])
         kafka.message({'mkdir': os.path.join(base, folder)}) 
         self.print_verb_message(i, 'Verifed', text, '', folder)
         return('Verified')
@@ -525,7 +525,7 @@ class BMM_User(Borg):
 
     def find_or_copy_file(self, i, text, fname):
         src     = os.path.join(startup_dir, fname)
-        dst     = os.path.join('/nsls2', 'data3', 'bmm', 'proposals', facility_dict['cycle'], facility_dict['data_session'])
+        dst     = os.path.join(PROPOSALS, facility_dict['cycle'], facility_dict['data_session'])
         wsp     = self.workspace
         if 'xlsx' in fname:
             src = os.path.join(startup_dir, 'xlsx', fname)
@@ -586,7 +586,7 @@ class BMM_User(Borg):
             pass
 
 
-        base = os.path.join('/nsls2', 'data3', 'bmm', 'proposals', facility_dict['cycle'], facility_dict['data_session'])
+        base = os.path.join(PROPOSALS, facility_dict['cycle'], facility_dict['data_session'])
         
         imagefolder    = 'snapshots'
         prjfolder      = 'prj'

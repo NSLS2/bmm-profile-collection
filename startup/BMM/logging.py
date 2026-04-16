@@ -13,7 +13,7 @@ from BMM.user_ns.bmm import kafka
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
-from BMM.user_ns.base import startup_dir, profile_configuration
+from BMM.user_ns.base import startup_dir, profile_configuration, BMM, PROPOSALS
 
 
 #run_report(__file__, text='BMM-specific logging')
@@ -47,7 +47,7 @@ if os.path.isfile(BMM_log_master_file):
     chmod(BMM_log_master_file, 0o444)
 
 if is_re_worker_active is False:
-    LUSTRE_ROOT_BMM = '/nsls2/data3/bmm'
+    LUSTRE_ROOT_BMM = BMM
     BMM_lustre_log_file = os.path.join(LUSTRE_ROOT_BMM, 'XAS', 'BMM_master.log')
     if os.path.isdir(LUSTRE_ROOT_BMM):
         if not os.path.isfile(BMM_lustre_log_file):
@@ -124,9 +124,9 @@ except:
 use_bmm_slack = profile_configuration.getboolean('slack', 'use_bmm')
 use_nsls2_slack = profile_configuration.getboolean('slack', 'use_nsls2')
 if is_re_worker_active:
-    bmmbot_secret = profile_configuration.get('slack_qs', 'bmmbot_secret') # '/nsls2/data3/bmm/XAS/secrets/bmmbot_secret'
+    bmmbot_secret = profile_configuration.get('slack_qs', 'bmmbot_secret')
 else:    
-    bmmbot_secret = profile_configuration.get('slack', 'bmmbot_secret') # '/nsls2/data3/bmm/XAS/secrets/bmmbot_secret'
+    bmmbot_secret = profile_configuration.get('slack', 'bmmbot_secret')
 
     
 def post_to_slack(text):

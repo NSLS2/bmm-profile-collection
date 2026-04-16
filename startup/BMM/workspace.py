@@ -24,8 +24,8 @@ try:
     rkvs = redis.Redis(host=redis_host, port=6379, db=0)
 except:
     rkvs = NoRedis()
-LUSTRE_ROOT = '/nsls2/data3'
-LUSTRE_ROOT_BMM = '/nsls2/data3/bmm'
+LUSTRE_ROOT = '/nsls2/data'
+LUSTRE_ROOT_BMM = profile_configuration.get('services', 'bmm')
 SECRETS = os.path.join(LUSTRE_ROOT_BMM, 'XAS', 'secrets')
 SECRET_FILES = ('slack_secret', 'image_uploader_token', 'bmmbot_secret')
 REDISVAR="BMM:scan:type"
@@ -191,7 +191,7 @@ def initialize_lustre():
 
 def initialize_secrets():
     '''Check that the Slack secret files are in their expected locations.
-    If not, copy them from Lustre at /nsls2/data3/bmm/XAS/secrets.
+    If not, copy them from Lustre at /nsls2/data/bmm/XAS/secrets.
 
     '''
     STARTUP = os.path.join(startup_dir, 'BMM')

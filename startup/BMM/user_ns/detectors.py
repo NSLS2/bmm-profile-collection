@@ -282,7 +282,7 @@ except:
 run_report('\t'+'cameras')
 from BMM.camera_device import BMMSnapshot, snap
 from bmm_tools.devices.axis_webcam import AxisCaprotoCam
-from BMM.user_ns.base import bmm_catalog
+from BMM.user_ns.base import bmm_catalog, PROPOSALS, BMM
 
 import bmm_tools.tools.db
 bmm_tools.tools.db.bmm_catalog = bmm_catalog
@@ -296,9 +296,9 @@ show_snapshot = bmm_tools.tools.db.show_snapshot
 run_report('\t\t'+'caproto IOCs for webcams')
 temp_root = '/nsls2/data/bmm/XAS/bucket'
 xascam = AxisCaprotoCam("XF:06BM-ES{AxisCaproto:6}:", name="webcam-1",
-                        root_dir=f"/nsls2/data/bmm/proposals/{RE.md['cycle']}/{RE.md['data_session']}/assets")
+                        root_dir=f"{PROPOSALS}/{RE.md['cycle']}/{RE.md['data_session']}/assets")
 xrdcam = AxisCaprotoCam("XF:06BM-ES{AxisCaproto:5}:", name="webcam-2",
-                        root_dir=f"/nsls2/data/bmm/proposals/{RE.md['cycle']}/{RE.md['data_session']}/assets")
+                        root_dir=f"{PROPOSALS}/{RE.md['cycle']}/{RE.md['data_session']}/assets")
 
 thishost = socket.gethostname()
 anacam = None

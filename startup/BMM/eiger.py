@@ -29,10 +29,10 @@ class BMMEiger(AreaDetector):
     hdf5 = C(
         BMMHDF5Plugin,
         "HDF1:",
-        write_path_template=f"/nsls2/data3/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/eiger1m-1/%Y/%m/%d/",
-        read_path_template=f"/nsls2/data3/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/eiger1m-1//%Y/%m/%d/",
+        write_path_template=f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/eiger1m-1/%Y/%m/%d/",
+        read_path_template=f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/eiger1m-1//%Y/%m/%d/",
         read_attrs=[],
-        root=f"/nsls2/data3/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/eiger1m-1/",
+        root=f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/eiger1m-1/",
     )
     stats = C(EpicsSignalRO, "Stats1:Total_RBV")
     roi2  = C(EpicsSignalRO, "ROIStat1:2:Total_RBV", name = 'diffuse')

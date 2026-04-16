@@ -33,6 +33,7 @@ os.environ['BLUESKY_KAFKA_BOOTSTRAP_SERVERS'] = profile_configuration.get('servi
 
 WORKSPACE = profile_configuration.get('services', 'workspace')
 PROPOSALS = profile_configuration.get('services', 'proposals')
+BMM       = profile_configuration.get('services', 'bmm')
     
 
 

@@ -48,7 +48,7 @@ from bmm_tools.tools.periodictable import Z_number, edge_number
 
 from BMM.user_ns.bmm  import kafka
 
-from BMM.user_ns.base import startup_dir, profile_configuration
+from BMM.user_ns.base import startup_dir, profile_configuration, PROPOSALS
         
 from databroker.assets.handlers import HandlerBase, Xspress3HDF5Handler, XS3_XRF_DATA_KEY
 
@@ -80,7 +80,7 @@ class BMMXspress3HDF5Plugin(Xspress3HDF5Plugin):
 
     @property
     def root_path_str(self):
-        root_path = f"/nsls2/data/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/xspress3-1/"
+        root_path = f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/xspress3-1/"
         return root_path
 
     @property
@@ -181,18 +181,6 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
     '''This class captures everything that is in common for the 1-element
     and 4-element detector interfaces.
     '''
-
-    # if sys.version_info[1] < 10:
-    #     ## HDF5 storage semantics prior to January 2023
-    #     hdf5 = Cpt(Xspress3FileStoreFlyable, 'HDF1:',
-    #                read_path_template='/nsls2/data3/bmm/assets/xspress3/2022',  # path to data folder, as mounted on client (i.e. Lustre) 
-    #                root='/nsls2/data3/bmm/',                                    # path to root, as mounted on client (i.e. Lustre)
-    #                write_path_template='/nsls2/data3/bmm/assets/xspress3/2022', # full path on IOC server (i.e. xf06bm-xspress3)
-    #                )
-    # else:
-        ## new HDF5 storage semantics as of January 2023
-
-
 
     hdf5 = Cpt(BMMXspress3HDF5Plugin,
                "HDF1:", 

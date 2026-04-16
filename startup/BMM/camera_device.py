@@ -243,7 +243,7 @@ class BMMSnapshot(Device):
         folder = os.path.join(BMMuser.workspace, 'snapshots')
         if not os.path.isdir(folder):
             os.makedirs(folder)
-        #folder = f"/nsls2/data3/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/{self.name}/{datetime.datetime.now().strftime('%Y/%m/%d')}"
+        #folder = f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/{self.name}/{datetime.datetime.now().strftime('%Y/%m/%d')}"
         return folder
             
     def stage(self):
