@@ -12,7 +12,7 @@ bluesky-base = "==1.15.0"
 tiled-client = "==0.2.9"
 tiled-server = ">=0.1.0b11"
 python = ">=3.12,<3.13"
-nslsii = "==0.11.8"
+nslsii = "==0.11.9"
 xraylib = "*"
 lmfit = "*"
 xraylarch = "==0.9.80"
@@ -46,6 +46,7 @@ numpy = ">2"
 [feature.terminal.tasks]
 start = "unset SESSION_MANAGER PYTHONPATH && MPLBACKEND=qtagg ipython --profile-dir=."
 pvs = "ipython --profile-dir=. -c 'get_pv_types(); exit()'"
+sync-experiment = { cmd = "sync-experiment -s -b bmm -p {{proposal}}", args = ["proposal"] }
 
 [feature.qs.dependencies ]
 "bluesky-httpserver" = "*"
