@@ -80,7 +80,12 @@ class BMMXspress3HDF5Plugin(Xspress3HDF5Plugin):
 
     @property
     def root_path_str(self):
-        root_path = f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/xspress3-1/"
+        if profile_configuration.getboolean('services', 'proposal_folders_available'):
+            root_path = f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/xspress3-1/"
+        else:
+            ## the current proposal folders are not available, set this to a specific folder where it is OK to write random things
+            ## this will not work after 2026 is over :(
+            root_path = f"{PROPOSALS}/2026-1/pass-320344/assets/xspress3-1/"
         return root_path
 
     @property

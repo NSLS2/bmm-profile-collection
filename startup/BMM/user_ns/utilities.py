@@ -149,11 +149,11 @@ tcs = [Thermocouple('XF:06BM-EPS-OP{Mir:1}T:1',              name = 'Mirror 1, i
        #Thermocouple('XF:06BMA-OP{Fltr:1}T:4',                name = 'Filter assembly 2, slot 2'),
        #Thermocouple('XF:06BMA-OP{Fltr:1}T:6',                name = 'Filter assembly 2, slot 3'),
        #Thermocouple('XF:06BMA-OP{Fltr:1}T:8',                name = 'Filter assembly 2, slot 4'),
-       Rack('XF:06BM-CT{RG:A1}', name = 'Rack A'),
-       Rack('XF:06BM-CT{RG:B1}', name = 'Rack B'),
-       Rack('XF:06BM-CT{RG:C1}', name = 'Rack C1'),
-       Rack('XF:06BM-CT{RG:C2}', name = 'Rack C2'),
-       Rack('XF:06BM-CT{RG:C3}', name = 'Rack C3'),
+       Rack('XF:06BM-CT{RG:A1-RTC:1}', name = 'Rack A'),
+       Rack('XF:06BM-CT{RG:B1-RTC:1}', name = 'Rack B'),
+       Rack('XF:06BM-CT{RG:C1-RTC:1}', name = 'Rack C1'),
+       Rack('XF:06BM-CT{RG:C2-RTC:1}', name = 'Rack C2'),
+       Rack('XF:06BM-CT{RG:C3-RTC:1}', name = 'Rack C3'),
    ]
 
 

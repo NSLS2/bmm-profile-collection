@@ -6,6 +6,7 @@ logger = logging.getLogger('bluesky')
 logger.setLevel('WARNING')
 
 import redis
+from nslsii.utils import open_redis_client
 from BMM.user_ns.base import startup_dir, profile_configuration
 from BMM.user_ns.kafka import kafka
 from BMM.workspace import initialize_workspace, rkvs, rkvs_keys
@@ -55,7 +56,10 @@ if is_re_worker_active:
     BMMuser.bmmbot._bmmbot_secret = profile_configuration.get('slack_qs', 'bmmbot_secret')
 else:
     BMMuser.bmmbot._bmmbot_secret = profile_configuration.get('slack', 'bmmbot_secret')
-BMMuser.bmmbot._redis_client = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'))
+BMMuser.bmmbot._redis_client = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
+                                                 profile_configuration.get('services', 'redis_port'),
+                                                 profile_configuration.get('services', 'redis_ssl'),
+                                                 redis_db=1)
 BMMuser.bmmbot._pass_api = profile_configuration.get('services', 'pass_api') + "/{pass_id}/slack-channels"
 BMMuser.bmmbot.refresh_channel()
 kafka.workspace = BMMuser.workspace

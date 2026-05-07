@@ -1,8 +1,10 @@
-import os, datetime, emojis, re, configparser, numpy, time
+import os, datetime, emojis, re, configparser, numpy, time, orjson
 from lmfit.models import StepModel, RectangleModel
 from matplotlib import get_backend
 import matplotlib
 import matplotlib.pyplot as plt
+from nslsii.utils import open_redis_client
+
 
 ELEMENTS = [
     "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne",
@@ -37,28 +39,54 @@ from redis_json_dict import RedisJSONDict
 nsls2_redis = profile_configuration.get('services', 'nsls2_redis')
 redis_client = redis.Redis(host=nsls2_redis)
 
-bmm_redis = profile_configuration.get('services', 'bmm_redis')
-rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
+
+class NoRedis():
+    def set(self, thing, otherthing):
+        return None
+    def get(self, thing):
+        return None
+
+#bmm_redis = profile_configuration.get('services', 'bmm_redis')
+#rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
+try:
+    rkvs = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
+                             profile_configuration.get('services', 'redis_port'),
+                             profile_configuration.get('services', 'redis_ssl'),
+                             redis_db=profile_configuration.get('services', 'bmm_redis'))
+except:
+    rkvs = NoRedis()
+
 
 #startup_dir = '/nsls2/data/bmm/shared/config/bluesky/profile_collection/startup/'
 
 
 DATA_SECURITY = True
 
-def experiment_folder(catalog, uid):
+def experiment_folder(catalog, uid, endstation='XAS'):
+    endstation = endstation.upper()
 
-    facility_dict = RedisJSONDict(redis_client=redis_client, prefix='xas-')
+    if (endstation == 'XAS'):
+        facility_dict = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
+                                          profile_configuration.get('services', 'redis_port'),
+                                          profile_configuration.get('services', 'redis_ssl'),
+                                          redis_db=1)
+    else:
+        facility_dict = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
+                                          profile_configuration.get('services', 'redis_port'),
+                                          profile_configuration.get('services', 'redis_ssl'),
+                                          redis_db=2)
+
     if 'data_session' in catalog[uid].metadata['start']:
         proposal = catalog[uid].metadata['start']['data_session'] #[5:]
     else:
-        proposal = facility_dict['xas-data_session']
+        proposal = orjson.loads(facility_dict['xas-data_session'])
     if 'XDI' in catalog[uid].metadata['start'] and 'Facility' in catalog[uid].metadata['start']['XDI']:
         cycle = catalog[uid].metadata['start']['XDI']['Facility']['cycle']
     else:
         if 'xas_cycle' in facility_dict:
-            cycle = facility_dict['xas-cycle']
+            cycle = orjson.loadsfacility_dict['xas-cycle'])
         else:
-            cycle = facility_dict['cycle']
+            cycle = orjson.loads(facility_dict['cycle'])
 
     if DATA_SECURITY:
         folder    = os.path.join(PROPOSALS, cycle, f'{proposal}')

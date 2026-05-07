@@ -14,13 +14,17 @@ from pygments.lexers import PythonLexer, IniLexer
 from pygments.formatters import HtmlFormatter
 
 from bmm_tools.tools.periodictable import edge_energy, Z_number, element_symbol, element_name
-from tools import echo_slack, experiment_folder, file_resource, profile_configuration
+from tools import echo_slack, experiment_folder, file_resource, profile_configuration, rkvs
 from slack import img_to_slack, post_to_slack
+from nslsii.utils import open_redis_client
 
 
-import redis
 if not os.environ.get('AZURE_TESTING'):
-    redis_host = profile_configuration.get('services', 'bmm_redis')
+    #redis_host = profile_configuration.get('services', 'bmm_redis')
+    redis_host = profile_configuration.get('services', 'nsls2_redis')
+    redis_port = profile_configuration.get('services', 'redis_port')
+    redis_ssl  = profile_configuration.get('services', 'redis_ssl')
+    redis_db   = profile_configuration.get('services', 'bmm_redis')
 else:
     redis_host = '127.0.0.1'
 class NoRedis():
@@ -28,11 +32,14 @@ class NoRedis():
         return None
     def get(self, thing):
         return None
-try:
-    rkvs = redis.Redis(host=redis_host, port=6379, db=0)
-except:
-    rkvs = NoRedis()
-all_references = json.loads(rkvs.get('BMM:reference:mapping').decode('UTF8'))
+# try:
+#     rkvs = open_redis_client(redis_host, redis_port, redis_ssl, redis_db=redis_db)
+#     #rkvs = redis.Redis(host=redis_host, port=6379, db=0)
+# except Exception as E:
+#     print(E)
+#     rkvs = NoRedis()
+
+all_references = json.loads(rkvs['BMM:reference:mapping'].decode('UTF8'))
 
 
 startup_dir = profile_configuration.get('services', 'startup')
@@ -1304,7 +1311,7 @@ class XASFile():
             if groupby not in ('webcam', 'anacam', 'usbcam', 'usbcam1', 'usbcam2', 'cam8', 'cam9', 'xrf', 'ga'):
                 groupby = 'webcam'
             elif groupby in ('cam8', 'cam9'):
-                groupby 'gige'
+                groupby = 'gige'
             if groupby == 'ga':
                 groupby = 'ga_yuid'
             elif groupby == 'usbcam':

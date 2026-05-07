@@ -1,6 +1,7 @@
 
-import os, datetime, configparser, redis
+import os, datetime, configparser
 from tools import echo_slack, profile_configuration
+from nslsii.utils import open_redis_client
 
 #-------- fetch Slack configuration --------------------------------
 use_nsls2_slack = profile_configuration.getboolean('slack', 'use_nsls2')
@@ -9,7 +10,11 @@ use_bmm_slack = profile_configuration.getboolean('slack', 'use_bmm')
 from bmm_tools.slack.bmmbot import BMMbot
 bmmbot = BMMbot()
 bmmbot._bmmbot_secret = profile_configuration.get('slack', 'bmmbot_secret')
-bmmbot._redis_client = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'))
+bmmbot._redis_client = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
+                                         profile_configuration.get('services', 'redis_port'),
+                                         profile_configuration.get('services', 'redis_ssl'),
+                                         redis_db=1)
+#bmmbot._redis_client = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'))
 bmmbot._pass_api = profile_configuration.get('services', 'pass_api') + "/{pass_id}/slack-channels"
 bmmbot.refresh_channel()
 

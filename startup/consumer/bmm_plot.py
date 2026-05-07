@@ -10,12 +10,12 @@ from mendeleev import element
 
 from larch_interface import Pandrosus, Kekropidai
 from slack import img_to_slack, post_to_slack
-from tools import profile_configuration, element_regex1, element_regex8
+from tools import profile_configuration, element_regex1, element_regex8, rkvs
 
 
-import redis
-bmm_redis = profile_configuration.get('services', 'bmm_redis')
-rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
+# import redis
+# bmm_redis = profile_configuration.get('services', 'bmm_redis')
+# rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
 
 def finished(record):
     if 'num' in record.metadata['start']['plan_args']:  # 1D scan

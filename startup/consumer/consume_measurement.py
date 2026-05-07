@@ -1,5 +1,6 @@
 import datetime, signal, pprint, uuid, sys, os, time
-sys.path.append('/home/xf06bm/.ipython/bmm_tools/src/')
+#sys.path.append('/home/xf06bm/.ipython/bmm_tools/src/')
+sys.path.insert(0,'/home/xf06bm/.ipython/bmm_tools/src/')
 sys.path.append('/home/xf06bm/.ipython/profile_collection/startup')
 
 #from bluesky_kafka import RemoteDispatcher

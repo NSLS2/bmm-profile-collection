@@ -7,35 +7,39 @@ import os
 import re
 import time
 import shutil
-sys.path.append('/home/xf06bm/.ipython/bmm_tools/src/')
+#sys.path.append('/home/xf06bm/.ipython/bmm_tools/src/')
 sys.path.append('/home/xf06bm/.ipython/profile_collection/startup')
 
 from bluesky_kafka.consume import BasicConsumer
 import nslsii
 import nslsii.kafka_utils
 
-from tools import echo_slack, next_index, file_exists, profile_configuration
+from tools import echo_slack, next_index, file_exists, profile_configuration, rkvs
 from slack import img_to_slack, post_to_slack, refresh_slack, describe_slack, test_slack
+from nslsii.utils import open_redis_client
 
 
 from tiled.client import from_profile
 bmm_catalog = from_profile('bmm')
 
-
-import redis
-if not os.environ.get('AZURE_TESTING'):
-    redis_host = profile_configuration.get('services', 'bmm_redis')
-else:
-    redis_host = '127.0.0.1'
-class NoRedis():
-    def set(self, thing, otherthing):
-        return None
-    def get(self, thing):
-        return None
-try:
-    rkvs = redis.Redis(host=redis_host, port=6379, db=0)
-except:
-    rkvs = NoRedis()
+# #import redis
+# if not os.environ.get('AZURE_TESTING'):
+#     #redis_host = profile_configuration.get('services', 'bmm_redis')
+#     redis_host = profile_configuration.get('services', 'nsls2_redis')
+#     redis_port = profile_configuration.get('services', 'redis_port')
+#     redis_ssl  = profile_configuration.get('services', 'redis_ssl')
+#     redis_db   = profile_configuration.get('services', 'bmm_redis')
+# else:
+#     redis_host = '127.0.0.1'
+# class NoRedis():
+#     def set(self, thing, otherthing):
+#         return None
+#     def get(self, thing):
+#         return None
+# try:
+#     rkvs = open_redis_client(redis_host, redis_port, redis_ssl, redis_db=redis_db)
+# except:
+#     rkvs = NoRedis()
 
 
 

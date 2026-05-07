@@ -1,13 +1,17 @@
 from ophyd import EpicsSignalRO
 import os, subprocess, shutil, socket
-import redis
+#import redis
 from rich import print as cprint
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 from BMM.user_ns.base import startup_dir, profile_configuration
+from nslsii.utils import open_redis_client
 
 
 if not os.environ.get('AZURE_TESTING'):
-    redis_host = profile_configuration.get('services', 'bmm_redis')
+    redis_host = profile_configuration.get('services', 'nsls2_redis')
+    redis_port = profile_configuration.get('services', 'redis_port')
+    redis_ssl  = profile_configuration.get('services', 'redis_ssl')
+    redis_db   = profile_configuration.get('services', 'bmm_redis')
 else:
     redis_host = '127.0.0.1'
 
@@ -21,7 +25,9 @@ class NoRedis():
 # things that are configurable                                    #
 ###################################################################
 try:
-    rkvs = redis.Redis(host=redis_host, port=6379, db=0)
+    print(redis_host, redis_port, redis_ssl, redis_db, flush=True)
+    rkvs = open_redis_client(redis_host, redis_port, redis_ssl, redis_db=redis_db)
+    print(rkvs.get('BMM:user:date'))
 except:
     rkvs = NoRedis()
 LUSTRE_ROOT = '/nsls2/data'
