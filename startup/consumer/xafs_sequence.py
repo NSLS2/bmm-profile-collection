@@ -74,6 +74,7 @@ class XAFSSequence():
             this.folder = experiment_folder(self.catalog, uid)
         else:
             this.folder = self.workspace
+
         this.fetch(uid, mode=self.mode)
         self.panlist.append(this)
         self.kek.add(this)

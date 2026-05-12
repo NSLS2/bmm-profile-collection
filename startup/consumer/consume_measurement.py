@@ -8,8 +8,9 @@ from bluesky_kafka.consume import BasicConsumer
 import nslsii
 import nslsii.kafka_utils
 
-from tiled.client import from_profile
-bmm_catalog = from_profile('bmm')
+from tiled.client import from_profile, from_uri
+#bmm_catalog = from_profile('bmm')
+bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
 
 import matplotlib.pyplot as plt
 import bmm_plot
@@ -45,7 +46,7 @@ from align_wheel import AlignWheel
 aw = AlignWheel()
 aw.logger = logger
 
-be_verbose = False
+be_verbose = True
 doing = None
 
 from bmm_live import LineScan, XAFSScan, XRF, AreaScan, XRR
@@ -63,7 +64,7 @@ asc.logger = logger
 xrr = XRR()
 xrr.logger = logger
 
-from tools import peakfit, rectanglefit, stepfit
+from tools import peakfit, rectanglefit, stepfit, flatten_message
 
 if os.getenv('USER') == 'workflow-bmm':
     matplotlib.use('Agg')
@@ -324,16 +325,21 @@ def plot_from_kafka_messages(beamline_acronym):
                 pass
                 
         if name == 'stop':
+            pass
+            ## what was this section trying to do?
+            ## trigger a plot at the end of a scan?? If, that is now done another way....
+
+        
             #print(
             #    f"{datetime.datetime.now().isoformat()} document: {name}\n"
             #    f"contents: {pprint.pformat(doc)}\n"
             #)
             #return
-            uid = message['run_start']  # stop document is the second item in the doc list
-            record = bmm_catalog[uid]
-            verbose = False
-            if 'BMM_kafka' in record.metadata['start']:
-                hint = record.metadata['start']['BMM_kafka']['hint']
+            # uid = message['run_start']  # stop document is the second item in the doc list
+            # record = bmm_catalog[uid]
+            # verbose = False
+            # if 'BMM_kafka' in record.metadata['start']:
+            #     hint = record.metadata['start']['BMM_kafka']['hint']
                 #print(f'[{datetime.datetime.now().isoformat(timespec="seconds")}]   {uid}')
                 # for k in record.metadata['start']['BMM_kafka'].keys():
                 #     if k == 'hint':

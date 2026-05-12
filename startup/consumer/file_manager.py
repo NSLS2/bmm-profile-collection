@@ -7,7 +7,7 @@ import os
 import re
 import time
 import shutil
-#sys.path.append('/home/xf06bm/.ipython/bmm_tools/src/')
+sys.path.insert(0,'/home/xf06bm/.ipython/bmm_tools/src/')
 sys.path.append('/home/xf06bm/.ipython/profile_collection/startup')
 
 from bluesky_kafka.consume import BasicConsumer
@@ -19,8 +19,9 @@ from slack import img_to_slack, post_to_slack, refresh_slack, describe_slack, te
 from nslsii.utils import open_redis_client
 
 
-from tiled.client import from_profile
-bmm_catalog = from_profile('bmm')
+from tiled.client import from_profile, from_uri
+#bmm_catalog = from_profile('bmm')
+bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
 
 # #import redis
 # if not os.environ.get('AZURE_TESTING'):

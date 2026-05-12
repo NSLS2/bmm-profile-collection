@@ -627,7 +627,7 @@ linkam, lmb = None, None
 if WITH_LINKAM:
     run_report('\tLinkam controller')
     from BMM.linkam import Linkam, LinkamMacroBuilder
-    linkam = Linkam('XF:06BM-ES:{LINKAM}:', name='linkam', egu='°C', settle_time=10, limits=(-196.1,560.0))
+    linkam = Linkam('XF:06BM-ES{LINKAM}:', name='linkam', egu='°C', settle_time=10, limits=(-196.1,560.0))
 
     lmb = LinkamMacroBuilder()
     lmb.description = 'the Linkam stage'

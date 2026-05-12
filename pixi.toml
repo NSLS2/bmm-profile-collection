@@ -53,7 +53,7 @@ pvs = "ipython --profile-dir=. -c 'get_pv_types(); exit()'"
 # DB Numbers: 0 is reserved, 1 is for XAS, 2 is for XRD, 3-15 are availble for expansion 
 sync-experiment = { cmd = "sync-experiment -s -b bmm -p {{proposal}} -d {{database}} -v", args = ["proposal", "database"] }
 # launch BMM's kafka-based workflow clients
-plotmanager = "startup/consumer/bin/run-plotmanager"
+plotmanager = "/home/xf06bm/.ipython/profile_collection/startup/consumer/bin/run-plotmanager"
 filemanager = "startup/consumer/bin/run-filemanager"
 
 [feature.qs.dependencies ]

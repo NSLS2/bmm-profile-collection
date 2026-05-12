@@ -68,6 +68,7 @@ if not is_re_worker_active():
                           redis_url=profile_configuration.get('services', 'nsls2_redis'),
                           redis_port=profile_configuration.get('services', 'redis_port'),
                           redis_ssl=profile_configuration.get('services', 'redis_ssl'),
+                          redis_db=1
     )
     ip.log.setLevel('ERROR')
     RE  = ip.user_ns['RE']
@@ -81,6 +82,7 @@ else:
                           redis_url=profile_configuration.get('services', 'nsls2_redis'),
                           redis_port=profile_configuration.get('services', 'redis_port'),
                           redis_ssl=profile_configuration.get('services', 'redis_ssl'),
+                          redis_db=1
     )
     RE  = uns_dict['RE']
     nslsii.configure_kafka_publisher(RE, "bmm")
@@ -145,10 +147,10 @@ RE.subscribe(create_datum_page_cb)
 
 # this prefix needs to be the same (but with a dash) as the call to sync_experiment in user.py
 
-RE.md = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
-                          profile_configuration.get('services', 'redis_port'),
-                          profile_configuration.get('services', 'redis_ssl'),
-                          redis_db=1)
+#RE.md = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
+#                          profile_configuration.get('services', 'redis_port'),
+#                          profile_configuration.get('services', 'redis_ssl'),
+#                          redis_db=1)
 bmm_tools.tools.md.common_re = RE
 bmm_tools.tools.md.common_md = RE.md
     
@@ -168,8 +170,9 @@ bmm_catalog = None
 print()
 if not is_re_worker_active():
     cprint('[cyan]Connecting to Tiled: bmm_catalog, db[/cyan]')
-    from tiled.client import from_profile
+    from tiled.client import from_profile, from_uri
     bmm_catalog = from_profile('bmm')
+    ##bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
     db = Broker(bmm_catalog)
 
 

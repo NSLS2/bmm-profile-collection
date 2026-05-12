@@ -65,16 +65,22 @@ DATA_SECURITY = True
 def experiment_folder(catalog, uid, endstation='XAS'):
     endstation = endstation.upper()
 
+    with open("/etc/bluesky/redis.secret") as f:
+        secret = f.read().strip()
     if (endstation == 'XAS'):
-        facility_dict = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
-                                          profile_configuration.get('services', 'redis_port'),
-                                          profile_configuration.get('services', 'redis_ssl'),
-                                          redis_db=1)
+        rc = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'),
+                         port=profile_configuration.get('services', 'redis_port'),
+                         ssl=profile_configuration.get('services', 'redis_port'),
+                         password=secret,
+                         db=1)
+        facility_dict = RedisJSONDict(rc, prefix='')
     else:
-        facility_dict = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
-                                          profile_configuration.get('services', 'redis_port'),
-                                          profile_configuration.get('services', 'redis_ssl'),
-                                          redis_db=2)
+        rc = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'),
+                         port=profile_configuration.get('services', 'redis_port'),
+                         ssl=profile_configuration.get('services', 'redis_port'),
+                         password=secret,
+                         db=2)
+        facility_dict = RedisJSONDict(rc, prefix='')
 
     if 'data_session' in catalog[uid].metadata['start']:
         proposal = catalog[uid].metadata['start']['data_session'] #[5:]
@@ -84,7 +90,7 @@ def experiment_folder(catalog, uid, endstation='XAS'):
         cycle = catalog[uid].metadata['start']['XDI']['Facility']['cycle']
     else:
         if 'xas_cycle' in facility_dict:
-            cycle = orjson.loadsfacility_dict['xas-cycle'])
+            cycle = orjson.loads(facility_dict['xas-cycle'])
         else:
             cycle = orjson.loads(facility_dict['cycle'])
 
@@ -238,7 +244,7 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
         print(f'last UID was {uid}')
 
     top = 0
-    t  = catalog[uid].primary['data']
+    t  = catalog[uid].primary.read() # ['data']
 
     if signal == 'I0':
         ylabel = 'I0'
@@ -254,13 +260,14 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
         fluo_detectors = catalog[uid].metadata['start']['detectors']
         el = ''
         if '1-element SDD' in fluo_detectors:
-            for k in catalog[uid].primary['data'].keys():
+            #for k in catalog[uid].primary['data'].keys():
+            for k in catalog[uid].primary.read().keys():
                 if element_regex8.match(k):
                     el = element_regex8.match(k).groups()[0]
                     break
             sig = numpy.array(t[el+'8']) / numpy.array(t['I0'])
         elif '4-element SDD' in fluo_detectors:
-            for k in catalog[uid].primary['data'].keys():
+            for k in catalog[uid].primary.read().keys():
                 if element_regex1.match(k):
                     el = element_regex1.match(k).groups()[0]
                     break
@@ -269,7 +276,7 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
                    numpy.array(t[el+'3']) +
                    numpy.array(t[el+'4'])) / numpy.array(t['I0'])
         elif '7-element SDD' in fluo_detectors:
-            for k in catalog[uid].primary['data'].keys():
+            for k in catalog[uid].primary.read().keys():
                 if element_regex1.match(k):
                     el = element_regex1.match(k).groups()[0]
                     break
@@ -340,7 +347,7 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
 def rectanglefit(catalog=None, uid=None, motor=None, signal='It', drop=None, aw=None):
 
     top = 0
-    t  = catalog[uid].primary['data']
+    t  = catalog[uid].primary.read() # ['data']
     positions = numpy.array(t[motor])
     signal = signal.capitalize()
     if signal == 'I0':
@@ -408,7 +415,7 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, ga=No
         print(f'last UID was {uid}')
 
     target = 0
-    t  = catalog[uid].primary['data']
+    t  = catalog[uid].primary.read() # ['data']
     positions = numpy.array(t[motor])
     backwards = False
     if float(positions[-1]) < float(positions[0]):

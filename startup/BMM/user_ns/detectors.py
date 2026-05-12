@@ -361,13 +361,13 @@ else:
     cam7 = None
     
 
-def display_last_image_usb_cam(catalog, camera=usb1):
-    from PIL import Image
-    print(catalog[-1]['primary']['data'][f'{camera.name}_image'])
+# def display_last_image_usb_cam(catalog, camera=usb1):
+#     from PIL import Image
+#     print(catalog[-1]['primary']['data'][f'{camera.name}_image'])
 
-    Image.fromarray(
-        catalog[-1]['primary']['data'][f'{camera.name}_image'].read()[0]
-    ).show()
+#     Image.fromarray(
+#         catalog[-1]['primary']['data'][f'{camera.name}_image'].read()[0]
+#     ).show()
 
 
 ###############################################
