@@ -26,6 +26,8 @@ import matplotlib.pyplot as plt
 import numpy, xraylib
 from bmm_tools.tools.periodictable import Z_number, edge_number
 
+from BMM.user_ns.base import PROPOSALS
+
 ###########################################################################
 # ______  ___   _   _ _____ _____              ___   _____________ _____  #
 # |  _  \/ _ \ | \ | |_   _|  ___|            / / | | |  _  \  ___|  ___| #
@@ -83,7 +85,7 @@ class BMMDanteHDF5Plugin(HDF5Plugin_V33, BMMDanteFileStoreHDF5, FileStoreIterati
 
     @property
     def root_path_str(self):
-        root_path = f"/nsls2/data3/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/dante-1/"
+        root_path = f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/dante-1/"
         return root_path
 
     @property
@@ -297,10 +299,10 @@ class BMMDante(DetectorBase):
     hdf5 = Cpt(
         BMMDanteHDF5Plugin,
         "HDF1:",
-        write_path_template=f"/nsls2/data3/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/dante-1/%Y/%m/%d/",
-        read_path_template=f"/nsls2/data3/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/dante-1//%Y/%m/%d/",
+        write_path_template=f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/dante-1/%Y/%m/%d/",
+        read_path_template=f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/dante-1//%Y/%m/%d/",
         read_attrs=[],
-        root=f"/nsls2/data3/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/dante-1/",
+        root=f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/dante-1/",
     )
     roi1 = Cpt(EpicsSignalRO, "ROIStat1:1:Total_RBV")
     roi2 = Cpt(EpicsSignalRO, "ROIStat1:2:Total_RBV")

@@ -6,11 +6,11 @@ from BMM.larch_interface import Pandrosus, Kekropidai, plt
 from larch.io import create_athena
 
 from slack import img_to_slack, post_to_slack
-from tools import experiment_folder, profile_configuration
+from tools import experiment_folder, profile_configuration, rkvs
 
-import redis
-bmm_redis = profile_configuration.get('services', 'bmm_redis')
-rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
+# import redis
+# bmm_redis = profile_configuration.get('services', 'bmm_redis')
+# rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
 
 class XAFSSequence():
     '''Class for managing the specific plotting chore required for an
@@ -74,6 +74,7 @@ class XAFSSequence():
             this.folder = experiment_folder(self.catalog, uid)
         else:
             this.folder = self.workspace
+
         this.fetch(uid, mode=self.mode)
         self.panlist.append(this)
         self.kek.add(this)

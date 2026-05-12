@@ -1,8 +1,10 @@
-import os, datetime, emojis, re, configparser, numpy, time
+import os, datetime, emojis, re, configparser, numpy, time, orjson
 from lmfit.models import StepModel, RectangleModel
 from matplotlib import get_backend
 import matplotlib
 import matplotlib.pyplot as plt
+from nslsii.utils import open_redis_client
+
 
 ELEMENTS = [
     "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne",
@@ -29,40 +31,75 @@ profile_configuration = configparser.ConfigParser(interpolation=None)
 profile_configuration.read_file(open(cfile))
 
 
+BMM = profile_configuration.get('services', 'bmm')
+PROPOSALS = profile_configuration.get('services', 'proposals')
+
 import redis
 from redis_json_dict import RedisJSONDict
 nsls2_redis = profile_configuration.get('services', 'nsls2_redis')
 redis_client = redis.Redis(host=nsls2_redis)
 
-bmm_redis = profile_configuration.get('services', 'bmm_redis')
-rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
+
+class NoRedis():
+    def set(self, thing, otherthing):
+        return None
+    def get(self, thing):
+        return None
+
+#bmm_redis = profile_configuration.get('services', 'bmm_redis')
+#rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
+try:
+    rkvs = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
+                             profile_configuration.get('services', 'redis_port'),
+                             profile_configuration.get('services', 'redis_ssl'),
+                             redis_db=profile_configuration.get('services', 'bmm_redis'))
+except:
+    rkvs = NoRedis()
+
 
 #startup_dir = '/nsls2/data/bmm/shared/config/bluesky/profile_collection/startup/'
 
 
 DATA_SECURITY = True
 
-def experiment_folder(catalog, uid):
+def experiment_folder(catalog, uid, endstation='XAS'):
+    endstation = endstation.upper()
 
-    facility_dict = RedisJSONDict(redis_client=redis_client, prefix='xas-')
+    with open("/etc/bluesky/redis.secret") as f:
+        secret = f.read().strip()
+    if (endstation == 'XAS'):
+        rc = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'),
+                         port=profile_configuration.get('services', 'redis_port'),
+                         ssl=profile_configuration.get('services', 'redis_port'),
+                         password=secret,
+                         db=1)
+        facility_dict = RedisJSONDict(rc, prefix='')
+    else:
+        rc = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'),
+                         port=profile_configuration.get('services', 'redis_port'),
+                         ssl=profile_configuration.get('services', 'redis_port'),
+                         password=secret,
+                         db=2)
+        facility_dict = RedisJSONDict(rc, prefix='')
+
     if 'data_session' in catalog[uid].metadata['start']:
         proposal = catalog[uid].metadata['start']['data_session'] #[5:]
     else:
-        proposal = facility_dict['xas-data_session']
+        proposal = orjson.loads(facility_dict['xas-data_session'])
     if 'XDI' in catalog[uid].metadata['start'] and 'Facility' in catalog[uid].metadata['start']['XDI']:
         cycle = catalog[uid].metadata['start']['XDI']['Facility']['cycle']
     else:
         if 'xas_cycle' in facility_dict:
-            cycle = facility_dict['xas-cycle']
+            cycle = orjson.loads(facility_dict['xas-cycle'])
         else:
-            cycle = facility_dict['cycle']
+            cycle = orjson.loads(facility_dict['cycle'])
 
     if DATA_SECURITY:
-        folder    = os.path.join('/nsls2', 'data3', 'bmm', 'proposals', cycle, f'{proposal}')
+        folder    = os.path.join(PROPOSALS, cycle, f'{proposal}')
     else:
         proposal  = catalog[uid].metadata['start']['XDI']['Facility']['SAF']
         startdate = catalog[uid].metadata['start']['XDI']['_user']['startdate']
-        folder = os.path.join('/nsls2', 'data3', 'bmm', 'XAS', cycle, str(proposal), startdate)
+        folder = os.path.join(BMM, 'XAS', cycle, str(proposal), startdate)
     #print(f'folder is {folder}')
     return folder
 
@@ -87,7 +124,7 @@ def file_resource(catalog, uid):
 
 def echo_slack(text='', img=None, icon='message', rid=None, measurement='xafs'):
     facility_dict = RedisJSONDict(redis_client=redis_client, prefix='xas-')
-    base   = os.path.join('/nsls2', 'data3', 'bmm', 'proposals', facility_dict['cycle'], facility_dict['data_session'])
+    base   = os.path.join(PROPOSALS, facility_dict['cycle'], facility_dict['data_session'])
     rawlogfile = os.path.join(base, 'dossier', '.rawlog')
     rawlog = open(rawlogfile, 'a')
     rawlog.write(message_div(text, img=img, icon=icon, rid=rid, measurement=measurement))
@@ -207,7 +244,7 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
         print(f'last UID was {uid}')
 
     top = 0
-    t  = catalog[uid].primary['data']
+    t  = catalog[uid].primary.read() # ['data']
 
     if signal == 'I0':
         ylabel = 'I0'
@@ -223,13 +260,14 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
         fluo_detectors = catalog[uid].metadata['start']['detectors']
         el = ''
         if '1-element SDD' in fluo_detectors:
-            for k in catalog[uid].primary['data'].keys():
+            #for k in catalog[uid].primary['data'].keys():
+            for k in catalog[uid].primary.read().keys():
                 if element_regex8.match(k):
                     el = element_regex8.match(k).groups()[0]
                     break
             sig = numpy.array(t[el+'8']) / numpy.array(t['I0'])
         elif '4-element SDD' in fluo_detectors:
-            for k in catalog[uid].primary['data'].keys():
+            for k in catalog[uid].primary.read().keys():
                 if element_regex1.match(k):
                     el = element_regex1.match(k).groups()[0]
                     break
@@ -238,7 +276,7 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
                    numpy.array(t[el+'3']) +
                    numpy.array(t[el+'4'])) / numpy.array(t['I0'])
         elif '7-element SDD' in fluo_detectors:
-            for k in catalog[uid].primary['data'].keys():
+            for k in catalog[uid].primary.read().keys():
                 if element_regex1.match(k):
                     el = element_regex1.match(k).groups()[0]
                     break
@@ -309,7 +347,7 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
 def rectanglefit(catalog=None, uid=None, motor=None, signal='It', drop=None, aw=None):
 
     top = 0
-    t  = catalog[uid].primary['data']
+    t  = catalog[uid].primary.read() # ['data']
     positions = numpy.array(t[motor])
     signal = signal.capitalize()
     if signal == 'I0':
@@ -377,7 +415,7 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, ga=No
         print(f'last UID was {uid}')
 
     target = 0
-    t  = catalog[uid].primary['data']
+    t  = catalog[uid].primary.read() # ['data']
     positions = numpy.array(t[motor])
     backwards = False
     if float(positions[-1]) < float(positions[0]):

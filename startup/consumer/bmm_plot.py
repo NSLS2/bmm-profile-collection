@@ -10,12 +10,12 @@ from mendeleev import element
 
 from larch_interface import Pandrosus, Kekropidai
 from slack import img_to_slack, post_to_slack
-from tools import profile_configuration, element_regex1, element_regex8
+from tools import profile_configuration, element_regex1, element_regex8, rkvs
 
 
-import redis
-bmm_redis = profile_configuration.get('services', 'bmm_redis')
-rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
+# import redis
+# bmm_redis = profile_configuration.get('services', 'bmm_redis')
+# rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
 
 def finished(record):
     if 'num' in record.metadata['start']['plan_args']:  # 1D scan
@@ -198,20 +198,20 @@ def plot_areascan(bmm_catalog, uid):
         fluo_detectors = record.metadata['start']['detectors']
         el = ''
         if '1-element SDD' in fluo_detectors:
-            for k in record.primary['data'].keys():
+            for k in record.primary.read().keys():
                 if element_regex8.match(k):
                     el = element_regex8.match(k).groups()[0]
                     break
             z = numpy.array(table[el+'8']) # / numpy.array(table['I0'])
         elif '4-element SDD' in fluo_detectors:
-            for k in record.primary['data'].keys():
+            for k in record.primary.read().keys():
                 if element_regex1.match(k):
                     el = element_regex1.match(k).groups()[0]
                     break
             z = numpy.array(table[el+'1']) + numpy.array(table[el+'2']) + \
                 numpy.array(table[el+'3']) + numpy.array(table[el+'4'])     # ) / numpy.array(table['I0'])
         elif '7-element SDD' in fluo_detectors:
-            for k in record.primary['data'].keys():
+            for k in record.primary.read().keys():
                 if element_regex1.match(k):
                     el = element_regex1.match(k).groups()[0]
                     break
@@ -413,7 +413,7 @@ def xrfat(**kwargs):
     xmax    = kwargs['xmax']
 
 
-    datatable = catalog[uid].primary['data']
+    datatable = catalog[uid].primary.read() # ['data']
     
     record  = catalog[uid]
     # xafs    = record.primary.read()

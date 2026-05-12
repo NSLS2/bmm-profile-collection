@@ -117,12 +117,12 @@ class XRRFile():
 '''
         longheader = '%D	LinearDetector	9	1288\n'
 
-        nuval = catalog[uid].baseline['data']['nu'][0]
+        nuval = catalog[uid].baseline.read()['nu'][0]
         column_list = ['delta', 'eta', 'attenuator_attenuation', 'mca_full', 'mca_narrow', 'monitor', 'dwti_dwell_time']
         xa = catalog[uid].primary.read(column_list)
         p = xa.to_pandas()
         column_list.insert(2, 'nu')
-        npoints = len(catalog[uid].primary['data']['eta'])
+        npoints = len(catalog[uid].primary.read()['eta'])
         nu = nuval * numpy.ones(npoints)
         p['nu'] = nu
 
@@ -140,7 +140,7 @@ class XRRFile():
 
         
         if style in ('long', 'both'):
-            fullmca = catalog[uid].primary['data']['mythen-2_image'][:,0,:].astype(int)
+            fullmca = catalog[uid].primary.read()['mythen-2_image'][:,0,:].astype(int)
             mcabins = list((f'bin{i+1}' for i in range(fullmca.shape[-1]) ))
             mcaFrame = pandas.DataFrame(fullmca, columns=mcabins)
             
@@ -162,7 +162,7 @@ class XRRFile():
         if os.path.exists(filename) is False:
             return filename
         name, extension = os.path.splitext(filename)
-        pattern = re.compile('\((\d+)\)$')
+        pattern = re.compile('\\((\\d+)\\)$')
         s = pattern.search(name)
         if s is None:
             name = name + '(1)'
@@ -203,7 +203,7 @@ class XRRFile():
         xa = catalog[uid].primary.read(column_list)
         p = xa.to_pandas()
         
-        fullmca = catalog[uid].primary['data']['mythen-2_image'][:,0,:].astype(int)
+        fullmca = catalog[uid].primary.read()['mythen-2_image'][:,0,:].astype(int)
         mcabins = list((f'bin{i+1}' for i in range(fullmca.shape[-1]) ))
         mcaFrame = pandas.DataFrame(fullmca, columns=mcabins)
 
@@ -229,16 +229,16 @@ class XRRFile():
 %D	LinearDetector  4	1283
 
 '''
-        etaval = catalog[uid].baseline['data']['eta'][0]
+        etaval = catalog[uid].baseline.read()['eta'][0]
         column_list = ['delta', 'monitor']
         xa = catalog[uid].primary.read(column_list)
         p = xa.to_pandas()
         column_list.insert(2, 'eta')
-        npoints = len(catalog[uid].primary['data']['delta'])
+        npoints = len(catalog[uid].primary.read()['delta'])
         eta = etaval * numpy.ones(npoints)
         p['eta'] = eta
 
-        fullmca = catalog[uid].primary['data']['mythen-2_image'][:,0,:].astype(int)
+        fullmca = catalog[uid].primary.read()['mythen-2_image'][:,0,:].astype(int)
         mcabins = list((f'bin{i+1}' for i in range(fullmca.shape[-1]) ))
         mcaFrame = pandas.DataFrame(fullmca, columns=mcabins)
 

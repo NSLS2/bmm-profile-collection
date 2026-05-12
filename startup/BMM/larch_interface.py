@@ -173,7 +173,7 @@ class Pandrosus():
             record = self.db[self.uid]
             header = record.metadata
             start = header['start']
-            table  = record.primary['data']
+            table  = record.primary.read() # ['data']
             
         self.group.energy = numpy.array(table['dcm_energy'])
         self.group.i0 = numpy.array(table['I0'])

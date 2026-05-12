@@ -8,7 +8,7 @@ from rich.panel import Panel
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
-from BMM.user_ns.base import profile_configuration
+from BMM.user_ns.base import profile_configuration, BMM
 
 import redis
 from redis_json_dict import RedisJSONDict
@@ -16,6 +16,7 @@ from redis_json_dict import RedisJSONDict
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
 
+from BMM.user_ns.base import PROPOSALS, BMM
 
 os.environ['PAGER'] = 'less -Ps"type Q to quit: "'    # new ipython (or maybe latest less) obviates need for "most"
 
@@ -23,9 +24,9 @@ os.environ['PAGER'] = 'less -Ps"type Q to quit: "'    # new ipython (or maybe la
 ## some global parameters
 BMM_STAFF  = ('Bruce Ravel', 'Jean Jordan-Sweet', 'Joe Woicik', 'Joseph Woicik', 'Vesna Stanic')
 #HBARC      = 1973.27053324
-LUSTRE_XAS = os.path.join('/nsls2', 'data3', 'bmm', 'XAS')
+LUSTRE_XAS = os.path.join(BMM, 'XAS')
 
-LUSTRE_DATA_ROOT = os.path.join('/nsls2', 'data3', 'bmm', 'proposals')
+LUSTRE_DATA_ROOT = os.path.join(PROPOSALS)
 
 try:
     from bluesky_queueserver import is_re_worker_active
@@ -40,7 +41,7 @@ def example_prompt(text='This is an example prompt.  Type something > '):
     print(f"You answered {foo}")
 
 
-DEFAULT_INI = '/nsls2/data3/bmm/shared/config/xafs/scan.ini'
+DEFAULT_INI = BMM + '/shared/config/xafs/scan.ini'
 
 try:
     from bluesky_queueserver import is_re_worker_active
@@ -355,7 +356,7 @@ def bounds(base=0.5, coef=0.25, end='14k', edge=0.3):
 
 
 # def proposal_base():
-#     base = os.path.join('/nsls2', 'data3', 'bmm', 'proposals', user_ns['RE'].md['cycle'], user_ns['RE'].md['data_session'])
+#     base = os.path.join(PROPOSALS, user_ns['RE'].md['cycle'], user_ns['RE'].md['data_session'])
 #     return base
 
     

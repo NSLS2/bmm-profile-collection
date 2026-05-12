@@ -22,7 +22,7 @@ from ophyd import Component as C
 
 
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
-
+from BMM.user_ns.base import PROPOSALS
 
 ######################################################################################
 # ______ _____ _       ___ _____ _   _ _____              ___   _____________ _____  #
@@ -132,10 +132,10 @@ class BMMPilatus(AreaDetector):
     hdf5 = C(
         BMMHDF5Plugin,
         "HDF1:",
-        write_path_template=f"/nsls2/data3/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/pilatus100k-1/%Y/%m/%d/",
-        read_path_template=f"/nsls2/data3/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/pilatus100k-1//%Y/%m/%d/",
+        write_path_template=f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/pilatus100k-1/%Y/%m/%d/",
+        read_path_template=f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/pilatus100k-1//%Y/%m/%d/",
         read_attrs=[],
-        root=f"/nsls2/data3/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/pilatus100k-1/",
+        root=f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/pilatus100k-1/",
     )
     stats = C(EpicsSignalRO, "Stats1:Total_RBV")
     roi2  = C(EpicsSignalRO, "ROIStat1:2:Total_RBV", name = 'diffuse')
@@ -245,10 +245,10 @@ class BMMPilatusTIFF(AreaDetector):
     tiff = C(
         BMMTIFFPlugin,
         "TIFF1:",
-        write_path_template=f"/nsls2/data3/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/pilatus100k-1/%Y/%m/%d/",
-        read_path_template=f"/nsls2/data3/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/pilatus100k-1//%Y/%m/%d/",
+        write_path_template=f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/pilatus100k-1/%Y/%m/%d/",
+        read_path_template=f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/pilatus100k-1//%Y/%m/%d/",
         read_attrs=[],
-        root=f"/nsls2/data3/bmm/proposals/{md['cycle']}/{md['data_session']}/assets/pilatus100k-1/",
+        root=f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/pilatus100k-1/",
     )
     stats = C(EpicsSignalRO, "Stats1:Total_RBV")
 

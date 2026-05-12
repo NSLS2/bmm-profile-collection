@@ -15,7 +15,7 @@ import datetime
 from bluesky import __version__ as bluesky_version
 
 from slack import img_to_slack
-from tools import experiment_folder, echo_slack, file_resource, profile_configuration
+from tools import experiment_folder, echo_slack, file_resource, profile_configuration, rkvs
 
 from bmm_tools.tools.periodictable import Z_number, edge_number
 
@@ -23,9 +23,9 @@ from bmm_tools.tools.periodictable import Z_number, edge_number
 #from bluesky_kafka.produce import BasicProducer
 import pprint
 
-import redis
-bmm_redis = profile_configuration.get('services', 'bmm_redis')
-rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
+# import redis
+# bmm_redis = profile_configuration.get('services', 'bmm_redis')
+# rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
 
 
 

@@ -403,10 +403,11 @@ if BMMuser.element is not None and with_xspress3 is True: # make sure Xspress3 i
 
 run_report('\t'+'final setup: cameras')
 from BMM.user_ns.detectors import xascam, xrdcam, anacam
-xascam._root = os.path.join(BMMuser.folder, 'snapshots')
-xrdcam._root = os.path.join(BMMuser.folder, 'snapshots')
-if not is_re_worker_active():
-    anacam._root = os.path.join(BMMuser.folder, 'snapshots')
+if profile_configuration.getboolean('services', 'proposal_folders_available'):
+    xascam._root = os.path.join(BMMuser.folder, 'snapshots')
+    xrdcam._root = os.path.join(BMMuser.folder, 'snapshots')
+#if profile_configuration.getboolean('cameras', 'anacam') is False or not is_re_worker_active():
+#    anacam._root = os.path.join(BMMuser.folder, 'snapshots')
 
      
 run_report('\t'+'checking motor connections')
@@ -571,6 +572,8 @@ user_ns['RE'].clear_suspenders()
 
 
 if not is_re_worker_active():
+    if not os.path.exists('/home/xf06bm/logs/'):
+        os.mkdir('/home/xf06bm/logs/')
     run_report('\t  '+'establishing local logger')
     from bluesky.log import config_bluesky_logging
     config_bluesky_logging(file='/home/xf06bm/logs/bluesky.log', level='DEBUG')

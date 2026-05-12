@@ -1,4 +1,5 @@
 import nslsii
+from nslsii.utils import open_redis_client
 import os, time, datetime, configparser
 from collections import deque
 
@@ -10,6 +11,7 @@ from tiled.client import from_uri, show_logs
 from rich import print as cprint
 
 import bmm_tools.tools.md
+
 
 try:
     from bluesky_queueserver import is_re_worker_active
@@ -33,7 +35,9 @@ os.environ['BLUESKY_KAFKA_BOOTSTRAP_SERVERS'] = profile_configuration.get('servi
 
 WORKSPACE = profile_configuration.get('services', 'workspace')
 PROPOSALS = profile_configuration.get('services', 'proposals')
+BMM       = profile_configuration.get('services', 'bmm')
     
+#print('just read config file', flush=True)
 
 
 from redis_json_dict import RedisJSONDict
@@ -50,15 +54,36 @@ class dummy_broker:
 dummy = dummy_broker()
 
 use_kafka = True
+#print('about to call configure_base', flush=True)
+#print(f"URL: {profile_configuration.get('services', 'nsls2_redis')}")
+#print(f"Port: {profile_configuration.get('services', 'redis_port')}")
+#print(f"use_ssl: {profile_configuration.get('services', 'redis_ssl')}")
+
 if not is_re_worker_active():
     ip = get_ipython()
-    nslsii.configure_base(ip.user_ns, 'bmm', configure_logging=True, publish_documents_with_kafka=use_kafka)
+    nslsii.configure_base(ip.user_ns,
+                          'bmm',
+                          configure_logging=True,
+                          publish_documents_with_kafka=use_kafka,
+                          redis_url=profile_configuration.get('services', 'nsls2_redis'),
+                          redis_port=profile_configuration.get('services', 'redis_port'),
+                          redis_ssl=profile_configuration.get('services', 'redis_ssl'),
+                          redis_db=1
+    )
     ip.log.setLevel('ERROR')
     RE  = ip.user_ns['RE']
     sd  = ip.user_ns['sd']
     bec = ip.user_ns['bec']
 else:
-    nslsii.configure_base(uns_dict, dummy, configure_logging=True, publish_documents_with_kafka=True)
+    nslsii.configure_base(uns_dict,
+                          dummy,
+                          configure_logging=True,
+                          publish_documents_with_kafka=True,
+                          redis_url=profile_configuration.get('services', 'nsls2_redis'),
+                          redis_port=profile_configuration.get('services', 'redis_port'),
+                          redis_ssl=profile_configuration.get('services', 'redis_ssl'),
+                          redis_db=1
+    )
     RE  = uns_dict['RE']
     nslsii.configure_kafka_publisher(RE, "bmm")
     sd  = uns_dict['sd']
@@ -121,12 +146,13 @@ def post_document(name, doc):
 RE.subscribe(create_datum_page_cb)
 
 # this prefix needs to be the same (but with a dash) as the call to sync_experiment in user.py
-from redis_json_dict import RedisJSONDict
-nsls2_redis = profile_configuration.get('services', 'nsls2_redis')
-RE.md = RedisJSONDict(redis.Redis(nsls2_redis), prefix='xas-')
+
+#RE.md = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
+#                          profile_configuration.get('services', 'redis_port'),
+#                          profile_configuration.get('services', 'redis_ssl'),
+#                          redis_db=1)
 bmm_tools.tools.md.common_re = RE
 bmm_tools.tools.md.common_md = RE.md
-
     
 bec.disable_plots()
 bec.disable_baseline()
@@ -144,8 +170,9 @@ bmm_catalog = None
 print()
 if not is_re_worker_active():
     cprint('[cyan]Connecting to Tiled: bmm_catalog, db[/cyan]')
-    from tiled.client import from_profile
+    from tiled.client import from_profile, from_uri
     bmm_catalog = from_profile('bmm')
+    ##bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
     db = Broker(bmm_catalog)
 
 

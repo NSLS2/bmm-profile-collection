@@ -627,7 +627,7 @@ linkam, lmb = None, None
 if WITH_LINKAM:
     run_report('\tLinkam controller')
     from BMM.linkam import Linkam, LinkamMacroBuilder
-    linkam = Linkam('XF:06BM-ES:{LINKAM}:', name='linkam', egu='°C', settle_time=10, limits=(-196.1,560.0))
+    linkam = Linkam('XF:06BM-ES{LINKAM}:', name='linkam', egu='°C', settle_time=10, limits=(-196.1,560.0))
 
     lmb = LinkamMacroBuilder()
     lmb.description = 'the Linkam stage'
@@ -749,12 +749,12 @@ ks.dm3_axes = (dm3_bct, dm3_bpm, dm3_foils, dm3_fs)
 # run_report('\tvideo recording via USB cameras')
 # from BMM.video import USBVideo
 # usbvideo1 = USBVideo('XF:06BM-ES{UVC-Cam:1}CV1:', name='usbvideo1')
-# usbvideo1.path = '/nsls2/data/bmm/assets/usbcam/'
+# usbvideo1.path = '/nsls2/data/bmm/assets/usbcam/'  # this ain't right
 # usbvideo1.initialize()
 
 # usbvideo2 = USBVideo('XF:06BM-ES{UVC-Cam:1}CV2:', name='usbvideo2')
 # usbvideo2.enable.put(0)
 # usbvideo2.visionfunction3.put(4)
-# usbvideo2.path.put('/nsls2/data/bmm/assets/usbcam/')
+# usbvideo2.path.put('/nsls2/data/bmm/assets/usbcam/')  # this ain't right
 # usbvideo2.framerate.put(60)
 # usbvideo2.startstop.put(0)

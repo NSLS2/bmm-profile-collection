@@ -11,6 +11,8 @@ from BMM.workspace import rkvs
 from ophyd import EpicsSignal
 from ophyd.sim import noisy_det
 
+from rich import print as cprint
+
 try:
     from bluesky_queueserver import is_re_worker_active
 except ImportError:
@@ -22,13 +24,25 @@ except ImportError:
 run_report(__file__, text='detectors and cameras')
 
 
-with_anacam = profile_configuration.getboolean('cameras', 'anacam') # True
-with_cam1   = profile_configuration.getboolean('cameras', 'usb1')   # True
-with_cam2   = profile_configuration.getboolean('cameras', 'usb2')   # True
-with_webcam = profile_configuration.getboolean('cameras', 'webcam') # True
-with_cam8   = profile_configuration.getboolean('cameras', 'cam8')   # True
-with_cam9   = profile_configuration.getboolean('cameras', 'cam9')   # True
-
+if profile_configuration.getboolean('services', 'proposal_folders_available'):
+    from bmm_tools.devices.usb_camera import BMMUVCSingleTrigger
+    with_anacam = profile_configuration.getboolean('cameras', 'anacam') # True
+    with_cam1   = profile_configuration.getboolean('cameras', 'usb1')   # True
+    with_cam2   = profile_configuration.getboolean('cameras', 'usb2')   # True
+    with_webcam = profile_configuration.getboolean('cameras', 'webcam') # True
+    with_cam8   = profile_configuration.getboolean('cameras', 'cam8')   # True
+    with_cam9   = profile_configuration.getboolean('cameras', 'cam9')   # True
+    with_cam7   = profile_configuration.getboolean('cameras', 'cam7')   # True
+else:
+    cprint('[red1]\t\tProposal folders unavailable[/red1]')
+    cprint('[red1]\t\tDisabling all cameras[/red1]')
+    with_anacam = False
+    with_cam1   = False
+    with_cam2   = False
+    with_webcam = False
+    with_cam8   = False
+    with_cam9   = False
+    with_cam7   = False
 
 from ophyd.scaler import EpicsScaler
 
@@ -282,7 +296,7 @@ except:
 run_report('\t'+'cameras')
 from BMM.camera_device import BMMSnapshot, snap
 from bmm_tools.devices.axis_webcam import AxisCaprotoCam
-from BMM.user_ns.base import bmm_catalog
+from BMM.user_ns.base import bmm_catalog, PROPOSALS, BMM
 
 import bmm_tools.tools.db
 bmm_tools.tools.db.bmm_catalog = bmm_catalog
@@ -295,11 +309,15 @@ show_snapshot = bmm_tools.tools.db.show_snapshot
 # happens, so this initial configuration is harmless and transitory
 run_report('\t\t'+'caproto IOCs for webcams')
 temp_root = '/nsls2/data/bmm/XAS/bucket'
-xascam = AxisCaprotoCam("XF:06BM-ES{AxisCaproto:6}:", name="webcam-1",
-                        root_dir=f"/nsls2/data/bmm/proposals/{RE.md['cycle']}/{RE.md['data_session']}/assets")
-xrdcam = AxisCaprotoCam("XF:06BM-ES{AxisCaproto:5}:", name="webcam-2",
-                        root_dir=f"/nsls2/data/bmm/proposals/{RE.md['cycle']}/{RE.md['data_session']}/assets")
-
+if with_webcam is True:
+    xascam = AxisCaprotoCam("XF:06BM-ES{AxisCaproto:6}:", name="webcam-1",
+                            root_dir=f"{PROPOSALS}/{RE.md['cycle']}/{RE.md['data_session']}/assets")
+    xrdcam = AxisCaprotoCam("XF:06BM-ES{AxisCaproto:5}:", name="webcam-2",
+                            root_dir=f"{PROPOSALS}/{RE.md['cycle']}/{RE.md['data_session']}/assets")
+else:
+    xascam = None
+    xrdcam = None
+    
 thishost = socket.gethostname()
 anacam = None
 if is_re_worker_active() is False and 'ws3' in thishost:
@@ -313,7 +331,6 @@ if is_re_worker_active() is False and 'ws3' in thishost:
 
 run_report('\t\t'+'USB cameras: usb1, usb2')
 
-from bmm_tools.devices.usb_camera import BMMUVCSingleTrigger
 if with_cam1 is True:
     usb1 = BMMUVCSingleTrigger('XF:06BM-ES{UVC-Cam:1}', name="usbcam-1", read_attrs=["jpeg"])
 else:
@@ -334,14 +351,23 @@ if with_cam9 is True:
 else:
     cam9 = None
 
+if with_cam7 is True:
+    cam7 = BMMUVCSingleTrigger('XF:06BMB-BI{Scr:4}', name="cam-7", read_attrs=["jpeg"])
+    pvbase = 'XF:06BMB-BI{Scr:4}'
+    for pv in ('image1', 'Pva1', 'Proc1', 'Trans1', 'CC1', 'CC2', 'Over1', 'ROI1', 'ROI2', 'ROI3', 'ROI4',
+               'Stats1', 'Stats2', 'Stats3', 'Stats4', 'Stats5', 'JPEG1'):
+        EpicsSignal(f'{pvbase}{pv}:EnableCallbacks',  name='').put(1)
+else:
+    cam7 = None
+    
 
-def display_last_image_usb_cam(catalog, camera=usb1):
-    from PIL import Image
-    print(catalog[-1]['primary']['data'][f'{camera.name}_image'])
+# def display_last_image_usb_cam(catalog, camera=usb1):
+#     from PIL import Image
+#     print(catalog[-1]['primary']['data'][f'{camera.name}_image'])
 
-    Image.fromarray(
-        catalog[-1]['primary']['data'][f'{camera.name}_image'].read()[0]
-    ).show()
+#     Image.fromarray(
+#         catalog[-1]['primary']['data'][f'{camera.name}_image'].read()[0]
+#     ).show()
 
 
 ###############################################

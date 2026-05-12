@@ -2,14 +2,12 @@ import sys, os, re, shutil, socket, datetime, time, requests
 from distutils.dir_util import copy_tree
 import json, pprint, copy, textwrap
 from subprocess import run
+import warnings
 
 from rich import print as cprint
 
-
-#try:
-#    from start_experiment.start_experiment import start_experiment, validate_proposal
-#except:
-from nslsii.sync_experiment import sync_experiment as start_experiment, validate_proposal
+from nslsii.utils import open_redis_client
+from nslsii.sync_experiment import sync_experiment, validate_proposal
 #print(start_experiment.__globals__['__file__'])
 
 try:
@@ -29,12 +27,12 @@ from bmm_tools.tools.periodictable import edge_energy
 import bmm_tools.tools.md
 from bmm_tools.tools.md import proposal_base
 
-from BMM.functions   import BMM_STAFF, LUSTRE_XAS, LUSTRE_DATA_ROOT
-from BMM.workspace   import rkvs
-from BMM.user_ns.bmm import kafka
-from BMM.logging     import BMM_user_log, BMM_unset_user_log, report
+from BMM.functions    import BMM_STAFF, LUSTRE_XAS, LUSTRE_DATA_ROOT
+from BMM.workspace    import rkvs
+from BMM.user_ns.bmm  import kafka
+from BMM.logging      import BMM_user_log, BMM_unset_user_log, report
 
-from BMM.user_ns.base import startup_dir, profile_configuration
+from BMM.user_ns.base import startup_dir, profile_configuration, PROPOSALS
 
 TEMPLATES_FOLDER = 'templates'
 
@@ -177,7 +175,7 @@ class BMM_User(Borg):
 
     Methods for public use
     ----------------------
-    start_experiment(self, name=None, date=None, gup=0, saf=0)
+    begin_experiment(self, name=None, date=None, gup=0, saf=0)
 
     end_experiment(self, force=False)
 
@@ -517,7 +515,7 @@ class BMM_User(Borg):
         return(verb)
 
     def kafka_establish_folder(self, i, text, folder):
-        base = os.path.join('/nsls2', 'data3', 'bmm', 'proposals', facility_dict['cycle'], facility_dict['data_session'])
+        base = os.path.join(PROPOSALS, facility_dict['cycle'], facility_dict['data_session'])
         kafka.message({'mkdir': os.path.join(base, folder)}) 
         self.print_verb_message(i, 'Verifed', text, '', folder)
         return('Verified')
@@ -525,7 +523,7 @@ class BMM_User(Borg):
 
     def find_or_copy_file(self, i, text, fname):
         src     = os.path.join(startup_dir, fname)
-        dst     = os.path.join('/nsls2', 'data3', 'bmm', 'proposals', facility_dict['cycle'], facility_dict['data_session'])
+        dst     = os.path.join(PROPOSALS, facility_dict['cycle'], facility_dict['data_session'])
         wsp     = self.workspace
         if 'xlsx' in fname:
             src = os.path.join(startup_dir, 'xlsx', fname)
@@ -586,7 +584,7 @@ class BMM_User(Borg):
             pass
 
 
-        base = os.path.join('/nsls2', 'data3', 'bmm', 'proposals', facility_dict['cycle'], facility_dict['data_session'])
+        base = os.path.join(PROPOSALS, facility_dict['cycle'], facility_dict['data_session'])
         
         imagefolder    = 'snapshots'
         prjfolder      = 'prj'
@@ -795,14 +793,23 @@ class BMM_User(Borg):
         ## NSLS-II start experiment infrastructure
         ## this prefix needs to be the same (but without the dash) as the call to RedisJSONDict in user_ns/base.py
         if not is_re_worker_active():  # want to not do this when starting QS environment
-            cprint('\n[indian_red1]Calling sync_experiment. Enter [r]your[/r] BNL username & password at the prompts.[/indian_red1]\n')
+            cprint(f'\n[o u chartreuse3]The following authentication is used to write [i]your[/i] data to a folder that [i]you[/i] can access.[/o u chartreuse3]\n')
+            cprint(f'[indian_red1]Calling sync_experiment for proposal {gup}. Enter [r]your[/r] BNL username & password at the prompts.[/indian_red1]\n')
             cprint('[indian_red1][u]Anyone[/u] on the current proposal can sign in at this prompt.[/indian_red1]\n')
-            start_experiment(gup, 'bmm', verbose=False, prefix='xas')
-        
-        if md['data_session'] in ('pass-301027', 'pass-317886'):  # PU proposal numbers of history
-            self.experimenters = 'Bruce Ravel'
-        else:
-            self.experimenters = ", ".join(list((f"{x['first_name']} {x['last_name']}" for x in validate_proposal(f'pass-{gup}', 'bmm')['users'])))
+            warnings.filterwarnings(action='ignore', category=UserWarning, message=r'Experiment pass-\d+ was already started')
+            sync_experiment(gup, 'bmm', verbose=False, redis_db=1)
+            # user_ns['RE'].md = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
+            #                                      profile_configuration.get('services', 'redis_port'),
+            #                                      profile_configuration.get('services', 'redis_ssl'),
+            #                                      redis_db=1)
+            bmm_tools.tools.md.common_re = user_ns['RE']
+            bmm_tools.tools.md.common_md = user_ns['RE'].md
+            facility_dict = user_ns["RE"].md
+
+        #if md['data_session'] in ('pass-301027', 'pass-317886'):  # PU proposal numbers of history
+        #    self.experimenters = 'Bruce Ravel'
+        #else:
+        self.experimenters = ", ".join(list((f"{x['first_name']} {x['last_name']}" for x in validate_proposal(f'pass-{gup}', 'bmm')['users'])))
         
         lustre_root = os.path.join(LUSTRE_DATA_ROOT, f'{self.cycle}', f'pass-{gup}')
         # if not os.path.isdir(lustre_root):
@@ -833,7 +840,12 @@ class BMM_User(Borg):
             os.makedirs(os.path.join(user_workspace, 'templates'))
         self.workspace = user_workspace
 
-        self.new_experiment(lustre_root, saf=saf, gup=gup, name=name)
+        if profile_configuration.getboolean('services', 'proposal_folders_available'):
+            self.new_experiment(lustre_root, saf=saf, gup=gup, name=name)
+        else:
+            cprint('[red1]\t\tProposal folders unavailable[/red1]')
+            cprint('[red1]\t\tSkipping BMMuser.new_experiment()[/red1]')
+            
 
         try:
             # direct Slack messages to new proposal channel
@@ -844,9 +856,12 @@ class BMM_User(Borg):
             # set correctly later in the startup process
             pass
 
-        if kafka.file_exists(folder=proposal_base(), filename='.introduction_made', number=False) is False:
-            self.welcome_experimenters()
-            kafka.message({'touch': os.path.join(proposal_base(), '.introduction_made')})
+        if profile_configuration.getboolean('services', 'proposal_folders_available'):
+            if kafka.file_exists(folder=proposal_base(), filename='.introduction_made', number=False) is False:
+                self.welcome_experimenters()
+                kafka.message({'touch': os.path.join(proposal_base(), '.introduction_made')})
+        else:
+            cprint('[red1]\t\tSkipping kafka welcome[/red1]')
 
         # preserve BMMuser state to a json string #
         self.prev_fig = None
@@ -863,18 +878,18 @@ class BMM_User(Borg):
         os.chmod(jsonfile, 0o444)
 
         ## update things that use a local folder
-        try:
-            #xascam._root = os.path.join(self.folder, 'snapshots')
-            #xrdcam._root = os.path.join(self.folder, 'snapshots')
-            anacam._root = os.path.join(self.folder, 'snapshots')
-            #usb1.tiff1.file_path.put(self.folder, 'snapshots')
-            #usb2.tiff1.file_path.put(self.folder, 'snapshots')
-        except:
-            pass
+        # try:
+        #     #xascam._root = os.path.join(self.folder, 'snapshots')
+        #     #xrdcam._root = os.path.join(self.folder, 'snapshots')
+        #     anacam._root = os.path.join(self.folder, 'snapshots')
+        #     #usb1.tiff1.file_path.put(self.folder, 'snapshots')
+        #     #usb2.tiff1.file_path.put(self.folder, 'snapshots')
+        # except:
+        #     pass
 
         ## update detectors, etc. that rely upon bmm_tools.tools.md to know the current value of RE.md
         bmm_tools.tools.md.common_md = user_ns['RE'].md
-
+        
     def welcome_experimenters(self):
         text = f'''Welcome to the Slack channel for your beamtime at BMM!
  
@@ -890,7 +905,7 @@ Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{s
         '''In the situation where bsui needs to be stopped (or crashes) before
         an experiment is properly ended using the end_experiment()
         command, this function will read a json serialization of the
-        arguments to the start_experiment() command.
+        arguments to the begin_experiment() command.
 
         If that serialization file is found at bsui start-up, this function
         is run. Thus, the session is immediately ready for the current user.
@@ -916,7 +931,10 @@ Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{s
         print('PI            = %s' % self.name)
         print('Experimenters = %s' % '\n'.join(experimenters))
         print('Date          = %s' % self.date)
-        print('Data folder   = %s' % proposal_base())
+        if profile_configuration.getboolean('services', 'proposal_folders_available'):
+            print('Data folder   = %s' % proposal_base())
+        else:
+            cprint('Data folder   = %s' % '[grey58]proposal folders are unavailable[/grey58]')
         print('Work space    = %s' % self.workspace)
         print('GUP           = %s' % self.gup)
         print('SAF           = %s' % self.saf)
@@ -938,7 +956,7 @@ Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{s
 
             
         #####################################################################
-        # remove the json serialization of the start_experiment() arguments #
+        # remove the json serialization of the begin_experiment() arguments #
         #####################################################################
 
         if os.path.isfile(os.path.join(os.environ['HOME'], 'Data', '.BMMuser')):

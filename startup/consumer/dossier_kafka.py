@@ -14,13 +14,17 @@ from pygments.lexers import PythonLexer, IniLexer
 from pygments.formatters import HtmlFormatter
 
 from bmm_tools.tools.periodictable import edge_energy, Z_number, element_symbol, element_name
-from tools import echo_slack, experiment_folder, file_resource, profile_configuration
+from tools import echo_slack, experiment_folder, file_resource, profile_configuration, rkvs
 from slack import img_to_slack, post_to_slack
+from nslsii.utils import open_redis_client
 
 
-import redis
 if not os.environ.get('AZURE_TESTING'):
-    redis_host = profile_configuration.get('services', 'bmm_redis')
+    #redis_host = profile_configuration.get('services', 'bmm_redis')
+    redis_host = profile_configuration.get('services', 'nsls2_redis')
+    redis_port = profile_configuration.get('services', 'redis_port')
+    redis_ssl  = profile_configuration.get('services', 'redis_ssl')
+    redis_db   = profile_configuration.get('services', 'bmm_redis')
 else:
     redis_host = '127.0.0.1'
 class NoRedis():
@@ -28,11 +32,14 @@ class NoRedis():
         return None
     def get(self, thing):
         return None
-try:
-    rkvs = redis.Redis(host=redis_host, port=6379, db=0)
-except:
-    rkvs = NoRedis()
-all_references = json.loads(rkvs.get('BMM:reference:mapping').decode('UTF8'))
+# try:
+#     rkvs = open_redis_client(redis_host, redis_port, redis_ssl, redis_db=redis_db)
+#     #rkvs = redis.Redis(host=redis_host, port=6379, db=0)
+# except Exception as E:
+#     print(E)
+#     rkvs = NoRedis()
+
+all_references = json.loads(rkvs['BMM:reference:mapping'].decode('UTF8'))
 
 
 startup_dir = profile_configuration.get('services', 'startup')
@@ -172,8 +179,7 @@ class BMMDossier():
 
         ## gather information for the dossier from the start document
         ## of the first scan in the sequence
-        startdoc = bmm_catalog[self.uidlist[0]].metadata['start']
-        XDI = startdoc['XDI']
+        XDI = bmm_catalog[self.uidlist[0]].start['XDI']
         if '_snapshots' in XDI:
             snapshots = XDI['_snapshots']
         else:
@@ -315,7 +321,7 @@ class BMMDossier():
             if thismode in ('xs', 'xs1', 'fluorescence'):
                 el = XDI['Element']['symbol']
                 if 'xrf_uid' in XDI['_snapshots']:
-                    if '4-element SDD' in bmm_catalog[self.uidlist[0]].metadata['start']['detectors']:
+                    if '4-element SDD' in bmm_catalog[self.uidlist[0]].start['detectors']:
                         rois = [int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'1'][0]),
                                 int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'2'][0]),
                                 int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'3'][0]),
@@ -324,10 +330,10 @@ class BMMDossier():
                                 int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['4-element SDD_channel02_xrf']).sum()),
                                 int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['4-element SDD_channel03_xrf']).sum()),
                                 int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['4-element SDD_channel04_xrf']).sum()) ]
-                    elif '1-element SDD' in bmm_catalog[self.uidlist[0]].metadata['start']['detectors']:
+                    elif '1-element SDD' in bmm_catalog[self.uidlist[0]].start['detectors']:
                         rois = [int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'8'][0]),]
                         ocrs = [int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['1-element SDD_channel08_xrf']).sum()),]
-                    elif '7-element SDD' in bmm_catalog[self.uidlist[0]].metadata['start']['detectors']:
+                    elif '7-element SDD' in bmm_catalog[self.uidlist[0]].start['detectors']:
                         rois = [int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'1'][0]),
                                 int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'2'][0]),
                                 int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'3'][0]),
@@ -374,8 +380,8 @@ class BMMDossier():
                                                    steps         = XDI['_user']['steps'],
                                                    times         = XDI['_user']['times'],
                                                    reference     = re.sub(r'(\d+)', r'<sub>\1</sub>', this_ref),
-                                                   seqstart      = datetime.datetime.fromtimestamp(bmm_catalog[self.uidlist[0]].metadata['start']['time']).strftime('%A, %B %d, %Y %I:%M %p'),
-                                                   seqend        = datetime.datetime.fromtimestamp(bmm_catalog[self.uidlist[-1]].metadata['stop']['time']).strftime('%A, %B %d, %Y %I:%M %p'),
+                                                   seqstart      = datetime.datetime.fromtimestamp(bmm_catalog[self.uidlist[0]].start['time']).strftime('%A, %B %d, %Y %I:%M %p'),
+                                                   seqend        = datetime.datetime.fromtimestamp(bmm_catalog[self.uidlist[-1]].stop['time']).strftime('%A, %B %d, %Y %I:%M %p'),
                                                    mono          = self.mono_text(bmm_catalog),
                                                    pdsmode       = '%s  (%s)' % self.pdstext(bmm_catalog),
                                                    pccenergy     = '%.1f' % XDI['_user']['pccenergy'],
@@ -502,8 +508,8 @@ class BMMDossier():
 
         text = ''
         for i,u in enumerate(self.uidlist):
-            filename = bmm_catalog[u].metadata['start']['XDI']['_user']['filename']
-            ext = bmm_catalog[u].metadata['start']['XDI']['_user']['start'] + i
+            filename = bmm_catalog[u].start['XDI']['_user']['filename']
+            ext = bmm_catalog[u].start['XDI']['_user']['start'] + i
             printedname = filename
             hdf5file = self.hdf5_filename(bmm_catalog, u)
             pilatusfile = self.pilatus_filename(bmm_catalog, u)
@@ -512,7 +518,7 @@ class BMMDossier():
             text += template.format(filename    = filename,
                                     printedname = printedname,
                                     ext         = ext,
-                                    scanid      = bmm_catalog[u].metadata['start']['scan_id'],
+                                    scanid      = bmm_catalog[u].start['scan_id'],
                                     uid         = u,)
             if hdf5file is not None:
                 text += hdf5template.format(filename    = filename,
@@ -533,7 +539,7 @@ class BMMDossier():
         dcmx = bmm_catalog[self.uidlist[0]].baseline.data['dcm_x'][0]
         if dcmx > 10:
             return 'Si(311)'
-        elif bmm_catalog[self.uidlist[0]].metadata['start']['XDI']['_user']['ththth'] is True:
+        elif bmm_catalog[self.uidlist[0]].start['XDI']['_user']['ththth'] is True:
             return 'Si(333)'
         else:
             return 'Si(111)'
@@ -877,7 +883,7 @@ class BMMDossier():
 
         ## gather information for the dossier from the start document
         ## of the first scan in the sequence
-        startdoc = catalog[self.uidlist[0]].metadata['start']
+        startdoc = catalog[self.uidlist[0]].start
         XDI = startdoc['XDI']
         if '_snapshots' in XDI:
             snapshots = XDI['_snapshots']
@@ -948,8 +954,8 @@ class BMMDossier():
                                               cam9uid       = snapshots['cam9_uid'],
                                               mode          = XDI['_user']['mode'],
                                               motors        = self.motor_sidebar(catalog),
-                                              seqstart      = datetime.datetime.fromtimestamp(catalog[self.uidlist[0]].metadata['start']['time']).strftime('%A, %B %d, %Y %I:%M %p'),
-                                              seqend        = datetime.datetime.fromtimestamp(catalog[self.uidlist[-1]].metadata['stop']['time']).strftime('%A, %B %d, %Y %I:%M %p'),
+                                              seqstart      = datetime.datetime.fromtimestamp(catalog[self.uidlist[0]].start['time']).strftime('%A, %B %d, %Y %I:%M %p'),
+                                              seqend        = datetime.datetime.fromtimestamp(catalog[self.uidlist[-1]].stop['time']).strftime('%A, %B %d, %Y %I:%M %p'),
                                               mono          = self.mono_text(catalog),
                                               pdsmode       = '%s  (%s)' % self.pdstext(catalog),
                                               experimenters = XDI['_user']['experimenters'],
@@ -996,7 +1002,7 @@ class BMMDossier():
 
         ## gather information for the dossier from the start document
         ## of the first scan in the sequence
-        startdoc = catalog[self.uidlist[0]].metadata['start']
+        startdoc = catalog[self.uidlist[0]].start
         XDI = startdoc['XDI']
         if '_snapshots' in XDI:
             snapshots = XDI['_snapshots']
@@ -1065,8 +1071,8 @@ class BMMDossier():
                                               matout        = XDI['_snapshots']['matout'],
                                               mode          = XDI['_user']['mode'],
                                               motors        = self.motor_sidebar(catalog),
-                                              seqstart      = datetime.datetime.fromtimestamp(catalog[self.uidlist[0]].metadata['start']['time']).strftime('%A, %B %d, %Y %I:%M %p'),
-                                              seqend        = datetime.datetime.fromtimestamp(catalog[self.uidlist[-1]].metadata['stop']['time']).strftime('%A, %B %d, %Y %I:%M %p'),
+                                              seqstart      = datetime.datetime.fromtimestamp(catalog[self.uidlist[0]].start['time']).strftime('%A, %B %d, %Y %I:%M %p'),
+                                              seqend        = datetime.datetime.fromtimestamp(catalog[self.uidlist[-1]].stop['time']).strftime('%A, %B %d, %Y %I:%M %p'),
                                               mono          = self.mono_text(catalog),
                                               pdsmode       = '%s  (%s)' % self.pdstext(catalog),
                                               experimenters = XDI['_user']['experimenters'],
@@ -1117,21 +1123,21 @@ class XASFile():
     
     def plot_hint(self, catalog=None, uid=None):
         text = 'ln(I0/It)  --  ln($5/$6)'
-        el = catalog[uid].metadata['start']['XDI']['Element']['symbol']
+        el = catalog[uid].start['XDI']['Element']['symbol']
         
-        if '1-element SDD' in catalog[uid].metadata['start']['detectors']:
+        if '1-element SDD' in catalog[uid].start['detectors']:
             text = f'{el}8/I0  --  $8/$5'
-        elif '4-element SDD' in catalog[uid].metadata['start']['detectors']:
+        elif '4-element SDD' in catalog[uid].start['detectors']:
             text = f'({el}1+{el}2+{el}3+{el}4)/I0  --  ($8+$9+$10+$11)/$5'
-        elif '7-element SDD' in catalog[uid].metadata['start']['detectors']:
+        elif '7-element SDD' in catalog[uid].start['detectors']:
             text = f'({el}1+{el}2+{el}3+{el}4+{el}5+{el}6+{el}7)/I0  --  ($8+$9+$10+$11+$12+$13+$14)/$5'
-        elif 'reference' in catalog[uid].metadata['start']['plan_name']:
+        elif 'reference' in catalog[uid].start['plan_name']:
             text = 'ln(It/Ir)  --  ln($6/$7)'
-        elif 'yield' in catalog[uid].metadata['start']['plan_name']:
+        elif 'yield' in catalog[uid].start['plan_name']:
             text = 'Iy/I0  --  $8/$5'
-        elif 'pips' in catalog[uid].metadata['start']['plan_name']:
+        elif 'pips' in catalog[uid].start['plan_name']:
             text = 'Pips/I0  --  $8/$5'
-        elif 'test' in catalog[uid].metadata['start']['plan_name']:
+        elif 'test' in catalog[uid].start['plan_name']:
             text = 'I0  --  $5'
         return text
 
@@ -1150,8 +1156,9 @@ class XASFile():
         '''Write an XDI-style file for an XAS scan.
 
         '''
-        metadata = catalog[uid].metadata
-        xdi = metadata["start"]["XDI"]
+        r = catalog[uid]
+        metadata = r.metadata
+        xdi = r.start["XDI"]
         if filename is None:
             filename = xdi['_filename']
         fname = os.path.join(experiment_folder(catalog, uid), filename)
@@ -1172,14 +1179,14 @@ class XASFile():
                 if precision is not None:  # add precision if needed
                     value = round(float(value), precision)
                 handle.write(f'# {family}.{k}: {value} {unit}\n')
-        start = datetime.datetime.fromtimestamp(metadata['start']['time']).strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
-        end   = datetime.datetime.fromtimestamp(metadata['stop']['time']).strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
+        start = datetime.datetime.fromtimestamp(r.start['time']).strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
+        end   = datetime.datetime.fromtimestamp(r.stop['time']).strftime("%Y-%m-%dT%H:%M:%S")  # '%A, %d %B, %Y %I:%M %p')
         handle.write(f'# Scan.start_time: {start}\n')
         handle.write(f'# Scan.end_time: {end}\n')
         handle.write(f'# Scan.uid: {uid}\n')
         handle.write(f'# Scan.transient_id: {metadata["start"]["scan_id"]}\n')
         
-        if any(x in metadata['start']['detectors'] for x in ('1-element SDD', '4-element SDD', '7-element SDD')):
+        if any(x in r.start['detectors'] for x in ('1-element SDD', '4-element SDD', '7-element SDD')):
             hdf5files = file_resource(catalog, uid)
             for h in hdf5files:
                 relative = '/'.join(h.split('/')[-6:])
@@ -1201,48 +1208,48 @@ class XASFile():
         ## Column.N header lines
         column_list = ['dcm_energy', 'dcm_energy_setpoint', 'dwti_dwell_time', 'I0', 'It', 'Ir']
         column_labels = ['energy', 'requested_energy', 'measurement_time', 'xmu', 'I0', 'It', 'Ir']
-        if 'yield' in metadata['start']['plan_name'] or include_yield is True:
+        if 'yield' in r.start['plan_name'] or include_yield is True:
             handle.write( '# Column.8: Iy nA\n')
             column_list.append('Iy')
             column_labels.append('Iy')
 
-        if 'pips' in metadata['start']['plan_name'].lower():
+        if 'pips' in r.start['plan_name'].lower():
             handle.write( '# Column.8: PIPS nA\n')
             column_list.append('Pips')
             column_labels.append('Pips')
 
         
-        el = metadata['start']['XDI']['Element']['symbol']
+        el = r.start['XDI']['Element']['symbol']
         nchan = 0
-        if '1-element SDD' in metadata['start']['detectors']:
+        if '1-element SDD' in r.start['detectors']:
             nchan = 1
             column_list.append(f'{el}8')
             column_labels.append(f'{el}8')
             handle.write(f'# Column.8: {el}8 counts\n')
-        elif '4-element SDD' in metadata['start']['detectors']:
+        elif '4-element SDD' in r.start['detectors']:
             column_list.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4'])
             column_labels.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4'])
             nchan = 4
-            if 'pilatus100k-1' in metadata['start']['detectors']:
+            if 'pilatus100k-1' in r.start['detectors']:
                 column_list.extend(['diffuse', 'specular'])
                 column_labels.extend(['diffuse', 'specular'])
                 
-        elif '7-element SDD' in metadata['start']['detectors']:
+        elif '7-element SDD' in r.start['detectors']:
             column_list.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4', f'{el}5', f'{el}6', f'{el}7'])
             column_labels.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4', f'{el}5', f'{el}6', f'{el}7'])
             nchan = 7
-            if 'pilatus100k-1' in metadata['start']['detectors']:
+            if 'pilatus100k-1' in r.start['detectors']:
                 column_list.extend(['diffuse', 'specular'])
                 column_labels.extend(['diffuse', 'specular'])
                 
         if nchan > 0:
-            if 'yield' in metadata['start']['plan_name'] or include_yield is True:
+            if 'yield' in r.start['plan_name'] or include_yield is True:
                 for i in range(1, nchan+1):
                     handle.write(f'# Column.{i+8}: {el}{i} counts\n')
             else:
                 for i in range(1, nchan+1):
                     handle.write(f'# Column.{i+7}: {el}{i} counts\n')
-        if 'pilatus100k-1' in metadata['start']['detectors']:
+        if 'pilatus100k-1' in r.start['detectors']:
             handle.write(f'# Column.{8+nchan}: diffuse counts\n')
             handle.write(f'# Column.{9+nchan}: specular counts\n')
 
@@ -1251,21 +1258,21 @@ class XASFile():
         xa = catalog[uid].primary.read(column_list)
         p = xa.to_pandas()
         column_list.insert(3, 'xmu')
-        if '1-element SDD' in metadata['start']['detectors']:
+        if '1-element SDD' in r.start['detectors']:
             p['xmu'] = p[f'{el}8']/p['I0']
-        elif '4-element SDD' in metadata['start']['detectors']:
+        elif '4-element SDD' in r.start['detectors']:
             p['xmu'] = (p[f'{el}1']+p[f'{el}2']+p[f'{el}3']+p[f'{el}4'])/p['I0']
-        elif '7-element SDD' in metadata['start']['detectors']:
+        elif '7-element SDD' in r.start['detectors']:
             p['xmu'] = (p[f'{el}1']+p[f'{el}2']+p[f'{el}3']+p[f'{el}4']+p[f'{el}5']+p[f'{el}6']+p[f'{el}7'])/p['I0']
-        elif 'transmission' in metadata['start']['plan_name']:
+        elif 'transmission' in r.start['plan_name']:
             p['xmu'] = numpy.log(p['It']/p['I0'])
-        elif 'reference' in metadata['start']['plan_name']:
+        elif 'reference' in r.start['plan_name']:
             p['xmu'] = numpy.log(p['Ir']/p['It'])
-        elif 'yield' in metadata['start']['plan_name']:
+        elif 'yield' in r.start['plan_name']:
             p['xmu'] = p['Iy']/p['It']
-        elif 'pips' in metadata['start']['plan_name']:
+        elif 'pips' in r.start['plan_name']:
             p['xmu'] = p['Pips']/p['It']
-        elif 'test' in metadata['start']['plan_name']:
+        elif 'test' in r.start['plan_name']:
             p['xmu'] = p['I0']
         else:
             p['xmu'] = numpy.log(p['It']/p['I0'])
@@ -1304,7 +1311,7 @@ class XASFile():
             if groupby not in ('webcam', 'anacam', 'usbcam', 'usbcam1', 'usbcam2', 'cam8', 'cam9', 'xrf', 'ga'):
                 groupby = 'webcam'
             elif groupby in ('cam8', 'cam9'):
-                groupby 'gige'
+                groupby = 'gige'
             if groupby == 'ga':
                 groupby = 'ga_yuid'
             elif groupby == 'usbcam':
@@ -1318,12 +1325,12 @@ class XASFile():
         result = []
         groups = {}
         for x in allxas:
-            #print(x, allxas[x].metadata['stop']['num_events']['primary'], allxas[x].metadata['start']['num_points'])
-            if allxas[x].metadata['stop']['num_events']['primary'] == allxas[x].metadata['start']['num_points']:
+            #print(x, allxas[x].stop['num_events']['primary'], allxas[x].start['num_points'])
+            if allxas[x].stop['num_events']['primary'] == allxas[x].start['num_points']:
                 ## if complete, generate the data file
                 self.to_xdi(catalog=catalog, uid=x, logger=logger)
                 ## gather together scans from sequences for the purpose of generating dossier files
-                grouping_uid = allxas[x].metadata['start']['XDI']['_snapshots'][groupby]
+                grouping_uid = allxas[x].start['XDI']['_snapshots'][groupby]
                 if grouping_uid in groups:
                     groups[grouping_uid].append(x)
                 else:
@@ -1361,8 +1368,8 @@ class SEADFile():
                     handle.write(f'# {family}.mono_energy: {xdi[family][k]}\n')
                 else:
                     handle.write(f'# {family}.{k}: {xdi[family][k]}\n')
-        start = datetime.datetime.fromtimestamp(catalog[uid].metadata['start']['time']).strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
-        end   = datetime.datetime.fromtimestamp(catalog[uid].metadata['stop']['time']).strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
+        start = datetime.datetime.fromtimestamp(catalog[uid].start['time']).strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
+        end   = datetime.datetime.fromtimestamp(catalog[uid].stop['time']).strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
         handle.write(f'# Scan.start_time: {start}\n')
         handle.write(f'# Scan.end_time: {end}\n')
         handle.write(f'# Scan.uid: {uid}\n')
@@ -1379,18 +1386,18 @@ class SEADFile():
         column_list = ['I0', 'It', 'Ir']
         column_labels = ['time', 'I0', 'It', 'Ir']
         
-        el = catalog[uid].metadata['start']['XDI']['Element']['symbol']
+        el = catalog[uid].start['XDI']['Element']['symbol']
         nchan = 0
-        if '1-element SDD' in catalog[uid].metadata['start']['detectors']:
+        if '1-element SDD' in catalog[uid].start['detectors']:
             nchan = 1
             column_list.append(f'{el}8')
             column_labels.append(f'{el}8')
             handle.write(f'# Column.8: {el}8\n')
-        elif '4-element SDD' in catalog[uid].metadata['start']['detectors']:
+        elif '4-element SDD' in catalog[uid].start['detectors']:
             column_list.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4'])
             column_labels.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4'])
             nchan = 4
-        elif '7-element SDD' in catalog[uid].metadata['start']['detectors']:
+        elif '7-element SDD' in catalog[uid].start['detectors']:
             column_list.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4', f'{el}5', f'{el}6', f'{el}7'])
             column_labels.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4', f'{el}5', f'{el}6', f'{el}7'])
             nchan = 7
@@ -1440,7 +1447,7 @@ class LSFile():
         handle = open(fname, 'w')
         handle.write(f'# XDI/1.0 BlueSky/{bluesky_version} BMM/{pathlib.Path(sys.executable).parts[-3]}\n')
 
-        start = datetime.datetime.fromtimestamp(catalog[uid].metadata['start']['time']).strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
+        start = datetime.datetime.fromtimestamp(catalog[uid].start['time']).strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
         handle.write(f'# Scan.start_time: {start}\n')
         handle.write(f'# Scan.uid: {uid}\n')
         handle.write(f'# Scan.transient_id: {catalog[uid].metadata["start"]["scan_id"]}\n')
@@ -1454,16 +1461,16 @@ class LSFile():
         handle.write( '# Column.2: I0 nA\n')
         handle.write( '# Column.3: It nA\n')
         handle.write( '# Column.4: Ir nA\n')
-        if '1-element SDD' in catalog[uid].metadata['start']['detectors']:
+        if '1-element SDD' in catalog[uid].start['detectors']:
             nchan = 1
             column_list.append(f'{el}8')
             column_labels.append(f'{el}8')
             handle.write(f'# Column.5: {el}8\n')
-        elif '4-element SDD' in catalog[uid].metadata['start']['detectors']:
+        elif '4-element SDD' in catalog[uid].start['detectors']:
             column_list.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4'])
             column_labels.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4'])
             nchan = 4
-        elif '7-element SDD' in catalog[uid].metadata['start']['detectors']:
+        elif '7-element SDD' in catalog[uid].start['detectors']:
             column_list.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4', f'{el}5', f'{el}6', f'{el}7'])
             column_labels.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4', f'{el}5', f'{el}6', f'{el}7'])
             nchan = 7
@@ -1507,11 +1514,11 @@ class RasterFiles():
         '''
 
         record  = catalog[uid]
-        xlsxout = os.path.join(experiment_folder(catalog, uid), record.metadata['start']['XDI']['_snapshots']['xlsxout'])
-        matout  = os.path.join(experiment_folder(catalog, uid), record.metadata['start']['XDI']['_snapshots']['matout'])
+        xlsxout = os.path.join(experiment_folder(catalog, uid), record.start['XDI']['_snapshots']['xlsxout'])
+        matout  = os.path.join(experiment_folder(catalog, uid), record.start['XDI']['_snapshots']['matout'])
 
         
-        motors = record.metadata['start']['motors']
+        motors = record.start['motors']
         #print('Reading data set...')
         datatable = record.primary.read()
 
@@ -1521,21 +1528,21 @@ class RasterFiles():
         it   = numpy.array(datatable['It'])
         ir   = numpy.array(datatable['Ir'])
 
-        if '4-element SDD' in catalog[uid].metadata['start']['detectors'] or 'if' in catalog[uid].metadata['start']['detectors'] or 'xs' in catalog[uid].metadata['start']['detectors']:
-            det_name = catalog[uid].metadata['start']['plan_name'].split()[-1]
+        if '4-element SDD' in catalog[uid].start['detectors'] or 'if' in catalog[uid].start['detectors'] or 'xs' in catalog[uid].start['detectors']:
+            det_name = catalog[uid].start['plan_name'].split()[-1]
             det_name = det_name[:-1]
             z = numpy.array(datatable[det_name+'1'])+numpy.array(datatable[det_name+'2'])+numpy.array(datatable[det_name+'3'])+numpy.array(datatable[det_name+'4'])
-        elif 'noisy_det' in catalog[uid].metadata['start']['detectors']:
+        elif 'noisy_det' in catalog[uid].start['detectors']:
             det_name = 'noisy_det'
             z = numpy.array(datatable['noisy_det'])
         else:
-            det_name = catalog[uid].metadata['start']['plan_name'].split()[-1]
+            det_name = catalog[uid].start['plan_name'].split()[-1]
             z = numpy.zeros(len(slow))
             
         ## save map in xlsx format
         wb = openpyxl.Workbook()
         ws1 = wb.active
-        ws1.title = record.metadata['start']['XDI']['Sample']['name']
+        ws1.title = record.start['XDI']['Sample']['name']
         ws1.append((motors[0], motors[1], f'{det_name}/I0', det_name, 'I0', 'It', 'Ir'))
         for i in range(len(slow)):
             ws1.append((slow[i], fast[i], z[i]/i0[i], z[i], i0[i], it[i], ir[i]))
@@ -1543,7 +1550,7 @@ class RasterFiles():
         log_entry(logger, f'wrote {xlsxout}')
 
         ## save map in matlab format 
-        savemat(matout, {'label'   : record.metadata['start']['XDI']['Sample']['name'],
+        savemat(matout, {'label'   : record.start['XDI']['Sample']['name'],
                          motors[0] : list(slow),
                          motors[1] : list(fast),
                          'I0'      : list(i0),

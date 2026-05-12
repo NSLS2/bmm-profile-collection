@@ -1,13 +1,17 @@
 from ophyd import EpicsSignalRO
 import os, subprocess, shutil, socket
-import redis
+#import redis
 from rich import print as cprint
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 from BMM.user_ns.base import startup_dir, profile_configuration
+from nslsii.utils import open_redis_client
 
 
 if not os.environ.get('AZURE_TESTING'):
-    redis_host = profile_configuration.get('services', 'bmm_redis')
+    redis_host = profile_configuration.get('services', 'nsls2_redis')
+    redis_port = profile_configuration.get('services', 'redis_port')
+    redis_ssl  = profile_configuration.get('services', 'redis_ssl')
+    redis_db   = profile_configuration.get('services', 'bmm_redis')
 else:
     redis_host = '127.0.0.1'
 
@@ -21,11 +25,13 @@ class NoRedis():
 # things that are configurable                                    #
 ###################################################################
 try:
-    rkvs = redis.Redis(host=redis_host, port=6379, db=0)
+    print(redis_host, redis_port, redis_ssl, redis_db, flush=True)
+    rkvs = open_redis_client(redis_host, redis_port, redis_ssl, redis_db=redis_db)
+    print(rkvs.get('BMM:user:date'))
 except:
     rkvs = NoRedis()
-LUSTRE_ROOT = '/nsls2/data3'
-LUSTRE_ROOT_BMM = '/nsls2/data3/bmm'
+LUSTRE_ROOT = '/nsls2/data'
+LUSTRE_ROOT_BMM = profile_configuration.get('services', 'bmm')
 SECRETS = os.path.join(LUSTRE_ROOT_BMM, 'XAS', 'secrets')
 SECRET_FILES = ('slack_secret', 'image_uploader_token', 'bmmbot_secret')
 REDISVAR="BMM:scan:type"
@@ -191,7 +197,7 @@ def initialize_lustre():
 
 def initialize_secrets():
     '''Check that the Slack secret files are in their expected locations.
-    If not, copy them from Lustre at /nsls2/data3/bmm/XAS/secrets.
+    If not, copy them from Lustre at /nsls2/data/bmm/XAS/secrets.
 
     '''
     STARTUP = os.path.join(startup_dir, 'BMM')
