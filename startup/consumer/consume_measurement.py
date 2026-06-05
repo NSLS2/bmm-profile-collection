@@ -9,8 +9,8 @@ import nslsii
 import nslsii.kafka_utils
 
 from tiled.client import from_profile, from_uri
-#bmm_catalog = from_profile('bmm')
-bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
+bmm_catalog = from_profile('bmm')
+#bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
 
 import matplotlib.pyplot as plt
 import bmm_plot
@@ -95,7 +95,8 @@ def plot_from_kafka_messages(beamline_acronym):
 
         if name == 'bmm':
             if any(x in message for x in ('xafs_sequence', 'glancing_angle', 'align_wheel', 'wafer', 'mono_calibration',
-                                          'xrfat', 'linescan', 'xafsscan', 'timescan', 'xrf', 'areascan', 'close', 'logger', 'refresh_slack',
+                                          'xrfat', 'linescan', 'xafsscan', 'timescan', 'xrf', 'areascan', 'close',
+                                          'logger', 'refresh_slack', 'show_metadata',
                                           'peakfit', 'stepfit', 'rectanglefit', 'reset_rois',
                                           'backend', 'xrr', 'xrr_alignment', 'xrr_calibration_plot')) :
                 if be_verbose is True:
@@ -252,7 +253,10 @@ def plot_from_kafka_messages(beamline_acronym):
                     
             elif 'verbose' in message:
                 be_verbose = message['verbose']
-            
+
+            elif 'show_metadata' in message:
+                print(bmm_catalog[message['uid']].metadata)
+                
             elif 'close' in message:
                 if message['close'] == 'all':
                     plt.close('all')
@@ -326,43 +330,7 @@ def plot_from_kafka_messages(beamline_acronym):
                 
         if name == 'stop':
             pass
-            ## what was this section trying to do?
-            ## trigger a plot at the end of a scan?? If, that is now done another way....
-
         
-            #print(
-            #    f"{datetime.datetime.now().isoformat()} document: {name}\n"
-            #    f"contents: {pprint.pformat(doc)}\n"
-            #)
-            #return
-            # uid = message['run_start']  # stop document is the second item in the doc list
-            # record = bmm_catalog[uid]
-            # verbose = False
-            # if 'BMM_kafka' in record.metadata['start']:
-            #     hint = record.metadata['start']['BMM_kafka']['hint']
-                #print(f'[{datetime.datetime.now().isoformat(timespec="seconds")}]   {uid}')
-                # for k in record.metadata['start']['BMM_kafka'].keys():
-                #     if k == 'hint':
-                #         continue
-                #     print(f"\t\t{k}: {record.metadata['start']['BMM_kafka'][k]}")
-
-        #        if hint.startswith('areascan'):
-        #            if verbose: print('saw a areascan stop doc')
-        #            print(f"{datetime.datetime.now().isoformat()} areascan stop document: {name}\n")
-        #            bmm_plot.plot_areascan(bmm_catalog, uid)
-        #         elif hint.startswith('linescan'):
-        #             if verbose: print('saw a linescan stop doc')
-        #             #bmm_plot.plot_linescan(bmm_catalog, uid)
-        #         elif hint.startswith('timescan'):
-        #             if verbose: print('saw a timescan stop doc')
-        #             #bmm_plot.plot_timescan(bmm_catalog, uid)
-        #         elif hint.startswith('rectanglescan'):
-        #             if verbose: print('saw a rectanglescan stop doc')
-        #             #bmm_plot.plot_rectanglescan(bmm_catalog, uid)
-        #         elif hint.startswith('xafs'):
-        #             if verbose: print('saw an xafs stop doc')
-        #             #plt.close('all')
-        #             #bmm_plot.plot_xafs(bmm_catalog, uid)
     ## end of examine_message ##################################################################
     
     kafka_config = nslsii.kafka_utils._read_bluesky_kafka_config_file(config_file_path="/etc/bluesky/kafka.yml")

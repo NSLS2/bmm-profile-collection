@@ -128,10 +128,6 @@ def timescan(detector, readings, dwell, delay, outfile=None, force=False, md={})
     thismd['XDI']['Scan']['delay']      = delay
     thismd['XDI']['Scan']['element']    = BMMuser.element
 
-    if 'BMM_kafka' not in md:
-        md['BMM_kafka'] = dict()
-    if 'hint' not in md['BMM_kafka']:
-        md['BMM_kafka']['hint'] = f'timescan {detector}'
         
     def count_scan(dets, readings, delay, md):
         uid = yield from count(dets, num=readings, delay=delay, md={**thismd, **md, 'plan_name' : f'count measurement {detector}'})

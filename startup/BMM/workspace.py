@@ -25,9 +25,9 @@ class NoRedis():
 # things that are configurable                                    #
 ###################################################################
 try:
-    print(redis_host, redis_port, redis_ssl, redis_db, flush=True)
+    #print(redis_host, redis_port, redis_ssl, redis_db, flush=True)
     rkvs = open_redis_client(redis_host, redis_port, redis_ssl, redis_db=redis_db)
-    print(rkvs.get('BMM:user:date'))
+    #print(rkvs.get('BMM:user:date'))
 except:
     rkvs = NoRedis()
 LUSTRE_ROOT = '/nsls2/data'
@@ -45,7 +45,7 @@ def rkvs_keys(printed=True):
 
     With printed=True, write a table of keys and values to the screen
 
-    With printed=False, return a list containing keys as normal strings
+    With printed=False, return a list containing kueys as normal strings
     '''
     keys = sorted(list(x.decode('UTF-8') for x in rkvs.keys()))
     if printed is True:

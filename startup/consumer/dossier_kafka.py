@@ -1102,10 +1102,10 @@ class BMMDossier():
 class XASFile():
 
     units = {
-        'Detector': {'I0_dark'           : ('A', 5),
-                     'It_dark'           : ('A', 5),
-                     'Ir_dark'           : ('A', 5),
-        },
+        # 'Detector': {'I0_dark'           : ('A', 5),
+        #              'It_dark'           : ('A', 5),
+        #              'Ir_dark'           : ('A', 5),
+        # },
         'Facility': {'energy'            : ('geV', None),
                      'current'           : ('mA', 1),
         },
@@ -1170,7 +1170,7 @@ class XASFile():
             for k in xdi[family].keys():
                 unit, precision = '', None
                 if family in self.units and k in self.units[family]:
-                    unit, precision = units[family][k][0]  # add units if needed
+                    unit, precision = self.units[family][k]  # add units if needed
                 if family == 'Sample' and k == 'comment':
                     continue
                 if family == 'Sample' and k == 'extra_metadata':

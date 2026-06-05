@@ -1,5 +1,5 @@
 
-import os, gzip
+import os, gzip, datetime
 from matplotlib import get_backend
 
 from BMM.larch_interface import Pandrosus, Kekropidai, plt
@@ -175,7 +175,9 @@ class XAFSSequence():
         ## numbering of the live plot and triplot images with
         ## the sequence numbering of the dossier itself
         seqnumber = int(rkvs.get('BMM:dossier:seqnumber').decode('utf-8'))
-        ok = self.merge(prj=True, filename=filename, seqnumber=seqnumber)
+        print(datetime.datetime.now())
+        ok = self.merge(filename=filename, seqnumber=seqnumber)
+        print(datetime.datetime.now())
         if ok == 1:
             if get_backend().lower() == 'agg':
                 if seqnumber is not None:
@@ -184,8 +186,11 @@ class XAFSSequence():
                     except:
                         filename = filename.replace('.png', '_01.png')
                     fname = os.path.join(experiment_folder(self.catalog, self.uidlist[0]), filename)
+                    print(datetime.datetime.now())
+                    print(fname)
                 self.fig.savefig(fname)
                 name = self.catalog[self.uidlist[0]].metadata['start']['XDI']['Sample']['name']
+                print(datetime.datetime.now())
                 self.logger.info(f'saved XAFS summary figure {fname}')
                 img_to_slack(fname, title=name, measurement='xafs')
 

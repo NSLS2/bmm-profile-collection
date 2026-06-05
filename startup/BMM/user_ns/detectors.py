@@ -30,9 +30,9 @@ if profile_configuration.getboolean('services', 'proposal_folders_available'):
     with_cam1   = profile_configuration.getboolean('cameras', 'usb1')   # True
     with_cam2   = profile_configuration.getboolean('cameras', 'usb2')   # True
     with_webcam = profile_configuration.getboolean('cameras', 'webcam') # True
+    with_cam7   = profile_configuration.getboolean('cameras', 'cam7')   # True
     with_cam8   = profile_configuration.getboolean('cameras', 'cam8')   # True
     with_cam9   = profile_configuration.getboolean('cameras', 'cam9')   # True
-    with_cam7   = profile_configuration.getboolean('cameras', 'cam7')   # True
 else:
     cprint('[red1]\t\tProposal folders unavailable[/red1]')
     cprint('[red1]\t\tDisabling all cameras[/red1]')
@@ -40,10 +40,10 @@ else:
     with_cam1   = False
     with_cam2   = False
     with_webcam = False
+    with_cam7   = False
     with_cam8   = False
     with_cam9   = False
-    with_cam7   = False
-
+    
 from ophyd.scaler import EpicsScaler
 
 class GonioStruck(EpicsScaler):
@@ -355,7 +355,7 @@ if with_cam7 is True:
     cam7 = BMMUVCSingleTrigger('XF:06BMB-BI{Scr:4}', name="cam-7", read_attrs=["jpeg"])
     pvbase = 'XF:06BMB-BI{Scr:4}'
     for pv in ('image1', 'Pva1', 'Proc1', 'Trans1', 'CC1', 'CC2', 'Over1', 'ROI1', 'ROI2', 'ROI3', 'ROI4',
-               'Stats1', 'Stats2', 'Stats3', 'Stats4', 'Stats5', 'JPEG1'):
+               'Stats1', 'Stats2', 'Stats3', 'Stats4', 'Stats5', 'ROIStat1', 'JPEG1', ):
         EpicsSignal(f'{pvbase}{pv}:EnableCallbacks',  name='').put(1)
 else:
     cam7 = None

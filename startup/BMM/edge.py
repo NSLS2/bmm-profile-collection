@@ -346,13 +346,13 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
             
 Something has gone wrong while trying to change edge.  Scan sequence has been stopped.
 
-Maybe the beam has dumped, Maybe there is a motor controller problem.  Check screen at beamline for more information.            
+Maybe the beam has dumped, maybe there is a motor controller problem.  Check screen at beamline for more information.            
 
 :bangbang: :bangbang: :bangbang: :bangbang: :bangbang: ''')
 
-            cprint('\n\n[red3]The next command will force a return to the ipython command line,[/red3]')
+            cprint('\n\n[red3]The next command will force a return to the ipython command line.[/red3]\n')
             cprint('[yellow3]The intent is to fail somewhat gracefully during a failed[/yellow3]')
-            cprint('[yellow3]change_edge() happening during an automation scan sequence.[/yellow3]')
+            cprint('[yellow3]change_edge() happening during an automation scan sequence.[/yellow3]\n')
             cprint('[grey58]Hopefully there are screen messages that give a clue for what happened....\n\n[/grey58]')
             ## the next line is intended to trigger an immediate error and return to the IPython command line
             wa.put(1)
@@ -504,6 +504,7 @@ Maybe the beam has dumped, Maybe there is a motor controller problem.  Check scr
             dcm.bragg_small_move(direction=-1, verbose=True)
         yield from wiggle_bct()
         yield from mv(dcm.bragg.acceleration, BMMuser.acc_slow)
+        print(f'mmode={mode}, edge={energy+target}, reference={el}, bender={bender}, insist={insist}, no_ref={no_ref}')
         yield from change_mode(mode=mode, prompt=False, edge=energy+target, reference=el, bender=bender, insist=insist, no_ref=no_ref)
         yield from mv(dcm.bragg.acceleration, BMMuser.acc_fast)
 

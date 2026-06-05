@@ -7,7 +7,8 @@ except ImportError:
 
 from bluesky.plan_stubs import mv, sleep
 import datetime
-import matplotlib
+#import matplotlib
+from rich import print as cprint
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
@@ -25,6 +26,7 @@ from BMM.user_ns.detectors   import quadem1, ION_CHAMBERS, pilatus
 from BMM.user_ns.instruments import xafs_wheel
 from BMM.user_ns.dcm         import *
 from BMM.user_ns.suspenders  import suspenders
+from BMM.user_ns.utilities   import pbs_di_a, pbs_di_b
 
 def resting_redis():
     user_ns['rkvs'].set('BMM:scan:type', 'idle')
@@ -103,6 +105,11 @@ def resting_state():
         xs1.channel08.get_mcaroi(mcaroi_number=16).kind = 'hinted'
         xs1.channel08.get_mcaroi(mcaroi_number=16).total_rbv.kind = 'hinted'
     _locked_dwell_time.move(0.5)
+    if pbs_di_a.get() < 0.25 or pbs_di_a.get() < 0.25:
+        cprint(f'\n[deep_pink2]The DI water flow rate through the pink beam stop is below 0.25 gallons/minute\nThis needs immediate attention![/deep_pink2]')
+    elif pbs_di_a.get() < 0.3 or pbs_di_a.get() < 0.3:
+        cprint(f'\n[yellow3]The DI water flow rate through the pink beam stop is below 0.3 gallons/minute.\nThis will need attention soon.[/yellow3]')
+    
     
 def resting_state_plan():
     '''
@@ -150,7 +157,12 @@ def resting_state_plan():
         xs1 = user_ns['xs1']
         xs1.channel08.get_mcaroi(mcaroi_number=16).kind = 'hinted'
         xs1.channel08.get_mcaroi(mcaroi_number=16).total_rbv.kind = 'hinted'
-    
+    if pbs_di_a.get() < 0.25 or pbs_di_a.get() < 0.25:
+        cprint(f'\n[deep_pink2]The DI water flow rate through the pink beam stop is below 0.25 gallons/minute\nThis needs immediate attention![/deep_pink2]')
+    elif pbs_di_a.get() < 0.3 or pbs_di_a.get() < 0.3:
+        cprint(f'\n[yellow3]The DI water flow rate through the pink beam stop is below 0.3 gallons/minute.\nThis will need attention soon.[/yellow3]')
+
+        
 
 def end_of_macro():
     '''Plan for bringing controls into their resting state at the end of

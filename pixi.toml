@@ -44,8 +44,7 @@ bmm_tools = { git = "https://github.com/NSLS2/bmm_tools", branch = "main" }
 nslsii = "==0.11.9"
 ipython = ">=9.5.0"
 numpy = ">2"
-## needed by file-manager for writing powerpoint reports of the sort that the IBM folk like
-python-pptx = "==1.0.2"
+python-pptx = "*"
 
 [feature.terminal.tasks]
 start = "unset SESSION_MANAGER PYTHONPATH && MPLBACKEND=qtagg ipython --profile-dir=."
@@ -54,7 +53,7 @@ pvs = "ipython --profile-dir=. -c 'get_pv_types(); exit()'"
 sync-experiment = { cmd = "sync-experiment -s -b bmm -p {{proposal}} -d {{database}} -v", args = ["proposal", "database"] }
 # launch BMM's kafka-based workflow clients
 plotmanager = "/home/xf06bm/.ipython/profile_collection/startup/consumer/bin/run-plotmanager"
-filemanager = "startup/consumer/bin/run-filemanager"
+filemanager = "/home/xf06bm/.ipython/profile_collection/startup/consumer/bin/run-filemanager"
 
 [feature.qs.dependencies ]
 "bluesky-httpserver" = "*"

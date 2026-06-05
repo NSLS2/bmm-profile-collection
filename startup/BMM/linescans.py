@@ -31,6 +31,7 @@ from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
 from BMM.resting_state import resting_state_plan
 from BMM.logging       import BMM_log_info, BMM_msg_hook
 from BMM.functions     import clean_img
+from BMM.metadata      import bmm_metadata, metadata_at_this_moment
 from BMM.workspace     import rkvs
 
 from BMM.user_ns.base        import WORKSPACE
@@ -69,6 +70,25 @@ def unset_mouse_click():
     rkvs.set('BMM:mouse_event:motor2', '')
 
 
+def fetch_XDI_for_linescan():
+    first = bmm_metadata(measurement   = 'linescan',
+                         experimenters = rkvs['BMM:user:experimenters'].decode('utf-8'),
+                         edge_energy   = dcm.en,
+                         scantype      = 'step',
+                         channelcut    = False,
+                         sample        = '',
+                         element       = rkvs['BMM:user:element'].decode('utf-8'),
+                         edge          = rkvs['BMM:user:edge'].decode('utf-8'),
+    )
+    second = metadata_at_this_moment()
+    facility = first['Facility'] | second['Facility']
+    xdi = first | second  # union prioritizing values in second
+    xdi['Scan']['energy'] = xdi['Scan']['edge_energy']
+    del xdi['Scan']['edge_energy']
+    xdi = {'XDI': xdi | {'Facility':facility}}
+    return xdi
+            
+    
 
     
 def pluck(suggested_motor=None):
@@ -301,11 +321,12 @@ def slit_height(start=-1.5, stop=1.5, nsteps=31, move=False, force=False, slp=1.
             if ok is False:
                 return(yield from null())
 
+            xdi = fetch_XDI_for_linescan()
             kafka.message({'linescan': 'start',
                            'motor' : motor.name,
                            'detector' : 'I0',
                            'fluo_detector': None,})
-            uid = yield from rel_scan([*ION_CHAMBERS], motor, start, stop, nsteps, md={'plan_name' : f'rel_scan linescan {motor.name} I0'})
+            uid = yield from rel_scan([*ION_CHAMBERS], motor, start, stop, nsteps, md={**xdi, 'plan_name' : f'rel_scan linescan {motor.name} I0'})
             kafka.message({'linescan': 'stop',})
             
             user_ns['RE'].msg_hook = BMM_msg_hook
@@ -321,7 +342,7 @@ def slit_height(start=-1.5, stop=1.5, nsteps=31, move=False, force=False, slp=1.
                                'choice' : choice})
                 top = fetch_peak_position_via_redis()
                 if top is None:
-                    error_msg('Failed to find rocking curve peak position.')
+                    error_msg('Failed to slit_height curve peak position.')
                     raise ValueError('Failed to find slit_height peak position.')
                 yield from mv(motor, top)
                 
@@ -415,11 +436,12 @@ def mirror_pitch(start=None, stop=None, nsteps=41, mirror='m3', move=False, forc
             #rkvs.set('BMM:peakposition', -10_000_000_000.1)
             #yield from mv(_locked_dwell_time, 0.1)
 
+            xdi = fetch_XDI_for_linescan()
             kafka.message({'linescan': 'start',
                            'motor' : motor.name,
                            'detector' : 'I0',
                            'fluo_detector': None,})
-            uid = yield from rel_scan([*ION_CHAMBERS], motor, start, stop, nsteps, md={'plan_name' : f'rel_scan linescan {motor.name} I0'})
+            uid = yield from rel_scan([*ION_CHAMBERS], motor, start, stop, nsteps, md={**xdi, 'plan_name' : f'rel_scan linescan {motor.name} I0'})
             kafka.message({'linescan': 'stop',})
             
             user_ns['RE'].msg_hook = BMM_msg_hook
@@ -433,8 +455,8 @@ def mirror_pitch(start=None, stop=None, nsteps=41, mirror='m3', move=False, forc
                                'choice' : choice})
                 top = fetch_peak_position_via_redis()
                 if top is None:
-                    error_msg('Failed to find rocking curve peak position.')
-                    raise ValueError('Failed to find rocking curve peak position.')
+                    error_msg('Failed to find mirror pitch peak position.')
+                    raise ValueError('Failed to find mirror pitch peak position.')
                 yield from mv(motor, top)
 
             else:
@@ -536,14 +558,16 @@ def rocking_curve(start=-0.10, stop=0.10, nsteps=101, detector='I0', choice='pea
             #if sgnl == 'Bicron':
             #    yield from mv(slitsg.vsize, 5)
                 
+            xdi = fetch_XDI_for_linescan()
             dets = ION_CHAMBERS.copy()
             kafka.message({'linescan': 'start',
                            'motor' : motor.name,
                            'detector' : 'I0',
                            'fluo_detector': None,})
-            uid = yield from rel_scan(dets, motor, start, stop, nsteps, md={'plan_name' : f'rel_scan linescan {motor.name} I0'})
+            uid = yield from rel_scan(dets, motor, start, stop, nsteps, md={**xdi, 'plan_name' : f'rel_scan linescan {motor.name} I0'})
             kafka.message({'linescan': 'stop',})
             kafka.message({'close': 'last'})
+            yield from sleep(1.0)
             kafka.message({'peakfit' : True,
                            'uid' : uid,
                            'motor_name' : 'dcm_pitch',
@@ -644,11 +668,12 @@ def hcenter(start=-1, stop=1, nsteps=41, move=False, force=False, choice='peak')
             #rkvs.set('BMM:peakposition', -10_000_000_000.1)
             #yield from mv(_locked_dwell_time, 0.1)
 
+            xdi = fetch_XDI_for_linescan()
             kafka.message({'linescan': 'start',
                            'motor' : motor.name,
                            'detector' : 'I0',
                            'fluo_detector': None,})
-            uid = yield from rel_scan([*ION_CHAMBERS], motor, start, stop, nsteps, md={'plan_name' : f'rel_scan linescan {motor.name} I0'})
+            uid = yield from rel_scan([*ION_CHAMBERS], motor, start, stop, nsteps, md={**xdi, 'plan_name' : f'rel_scan linescan {motor.name} I0'})
             kafka.message({'linescan': 'stop',})
             
             user_ns['RE'].msg_hook = BMM_msg_hook
@@ -715,9 +740,7 @@ def find_slot(shape='slot'):
         yield from rectangle_scan(motor=xafs_y, start=-10,  stop=10,  nsteps=31, detector='It', chore='find_slot')
     else:
         yield from rectangle_scan(motor=xafs_y, start=-3,  stop=3,  nsteps=31, detector='It', chore='find_slot')
-    #kafka.message({'close': 'all'})
     yield from rectangle_scan(motor=xafs_x, start=-10, stop=10, nsteps=31, detector='It', chore='find_slot')
-                              #md={'BMM_kafka': {'hint': f'rectanglescan It xafs_x notnegated'}})
     user_ns['xafs_wheel'].in_place()
     kafka.message({'close': 'all'})
     kafka.message({'align_wheel' : 'stop'})
@@ -725,9 +748,7 @@ def find_slot(shape='slot'):
 
 def find_reference():
     yield from rectangle_scan(motor=xafs_refy, start=-4,   stop=4,   nsteps=31, detector='Ir')
-                              #md={'BMM_kafka': {'hint': f'rectanglescan Ir xafs_refy notnegated'}})
     yield from rectangle_scan(motor=xafs_refx, start=-10,  stop=10,  nsteps=31, detector='Ir')
-                              #md={'BMM_kafka': {'hint': f'rectanglescan Ir xafs_refx notnegated'}})
     bold_msg(f'Found reference slot at (X,Y) = ({xafs_refx.position}, {xafs_refy.position})')
 
     
@@ -769,13 +790,10 @@ def rectangle_scan(motor=None, start=-20, stop=20, nsteps=41, detector='It',
                     (motor.name, sgnl, start, stop, nsteps, motor.user_readback.get())
             
             if negate == True:
-                hint = f'rectanglescan {detector.capitalize()} {motor.name} negated'
+                #hint = f'rectanglescan {detector.capitalize()} {motor.name} negated'
+                hint = f'rectanglescan negated'
             else:
-                hint = f'rectanglescan {detector.capitalize()} {motor.name} notnegated'
-            if 'BMM_kafka' not in md:
-                md['BMM_kafka'] = dict()
-            if 'hint' not in md['BMM_kafka']:
-                md['BMM_kafka']['hint'] = hint
+                hint = f'rectanglescan notnegated'
 
             fluo_detector = None
             if detector.lower() == 'if':
@@ -783,11 +801,12 @@ def rectangle_scan(motor=None, start=-20, stop=20, nsteps=41, detector='It',
             elif detector == 'Dante':
                 fluo_detector = 'Dante'
             yield from prepare_alignment_scan()
+            xdi = fetch_XDI_for_linescan()
             kafka.message({'linescan'      : 'start',
                            'motor'         : motor.name,
                            'detector'      : detector.capitalize(),
                            'fluo_detector' : fluo_detector,})
-            uid = yield from rel_scan(dets, motor, start, stop, nsteps, md={**md, 'plan_name' : f'rel_scan linescan {motor.name} I0'})
+            uid = yield from rel_scan(dets, motor, start, stop, nsteps, md={**xdi, **md, 'plan_name' : f'rel_scan linescan {motor.name} I0 {hint}'})
             kafka.message({'linescan': 'stop',})
 
             if move is True:
@@ -797,7 +816,7 @@ def rectangle_scan(motor=None, start=-20, stop=20, nsteps=41, detector='It',
                                'signal'       : detector.capitalize(),
                                'motor_name'   : motor.name })
 
-                top = fetch_peak_position_via_redis(verbose=True)
+                top = fetch_peak_position_via_redis() # verbose=True)
                 if top is None:
                     error_msg('Failed to find rectangle midpoint.')
                     raise ValueError('Failed to find rectangle midpoint.')
@@ -866,11 +885,12 @@ def peak_scan(motor=None, start=-20, stop=20, nsteps=41, detector='It', find='ma
                 fluo_detector = user_ns['xs'].name
             elif detector == 'Dante':
                 fluo_detector = 'Dante'
+            xdi = fetch_XDI_for_linescan()
             kafka.message({'linescan': 'start',
                            'motor' : motor.name,
                            'detector' : detector.capitalize(),
                            'fluo_detector': fluo_detector,})
-            uid = yield from rel_scan(dets, motor, start, stop, nsteps, md={'plan_name' : f'rel_scan linescan {motor.name} I0'})
+            uid = yield from rel_scan(dets, motor, start, stop, nsteps, md={**xdi, 'plan_name' : f'rel_scan linescan {motor.name} I0'})
             kafka.message({'linescan': 'stop',})
 
             kafka.message({'stepfit'    : True,
@@ -1089,16 +1109,6 @@ def linescan(detector, axis, start, stop, nsteps, dopluck=True, force=False, sta
                 (thismotor.name, detector, start, stop, nsteps, value)
         ##suspenders.set_suspenders()            # engage suspenders
 
-        thismd = dict()
-        thismd['XDI'] = dict()
-        thismd['XDI']['Facility'] = dict()
-        thismd['XDI']['Facility']['GUP'] = BMMuser.gup
-        thismd['XDI']['Facility']['SAF'] = BMMuser.saf
-
-        if 'BMM_kafka' not in md:
-            md['BMM_kafka'] = dict()
-        if 'hint' not in md['BMM_kafka'] or thismotor.name not in md['BMM_kafka']['hint']:
-            md['BMM_kafka']['hint'] = f'linescan {detector} {thismotor.name}'
         fluo_detector = None
         if detector in ('Xs', 'Xs1', 'Fluorescence', 'Fluo', 'Flourescence', 'Flou'):
             fluo_detector = xs.name
@@ -1118,7 +1128,8 @@ def linescan(detector, axis, start, stop, nsteps, dopluck=True, force=False, sta
         rkvs.set('BMM:scan:estimated', 0)
 
         def scan_xafs_motor(dets, motor, start, stop, nsteps):
-            uid = yield from rel_scan(dets, motor, start, stop, nsteps, md={**thismd, **md, 'plan_name' : f'rel_scan linescan {motor.name} {detector}'})
+            xdi = fetch_XDI_for_linescan()
+            uid = yield from rel_scan(dets, motor, start, stop, nsteps, md={**xdi, **md, 'plan_name' : f'rel_scan linescan {motor.name} {detector}'})
             return uid
 
         thisuid = yield from scan_xafs_motor(dets, thismotor, start, stop, nsteps)

@@ -633,7 +633,10 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
                     axis.add_patch(Rectangle((lower,ymin), upper-lower, ymax-ymin, facecolor=roicolor))
             plt.legend()
             #plt.show()
-    
+
+    def close_plot(self, what='all'):
+        plt.close(what)
+            
     def table(self):
         '''Pretty print a table of values for each ROI and for all N channels.
         '''

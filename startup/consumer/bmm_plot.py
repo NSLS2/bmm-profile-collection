@@ -28,15 +28,23 @@ def finished(record):
     return True
 
 def checkhint(hint, which):
-    if hint.startswith(which) is False:
+    ret = True
+    if which not in hint:
+        ret = False
+    if which == 'timescan':     # try "count"
+        if 'count' in hint:
+            ret = True
+    if which == 'areascan':     # try "grid_scan"
+        if 'grid_scan' in hint:
+            ret = True
+    if ret is False:
         print(f'plot_{which}: hint mismatch, how did you get here?')
-        return False
-    return True
+    return ret
 
 def plot_linescan(bmm_catalog, uid):
     record = bmm_catalog[uid]
     if finished(record) is False: return
-    hint = record.metadata['start']['BMM_kafka']['hint']
+    hint = record.metadata['start']['plan_name']
     if checkhint(hint, 'linescan') is False: return
     detector, motor = hint.split()[1:]
 
@@ -88,7 +96,7 @@ def plot_linescan(bmm_catalog, uid):
 def plot_timescan(bmm_catalog, uid):
     record = bmm_catalog[uid]
     if finished(record) is False: return
-    hint = record.metadata['start']['BMM_kafka']['hint']
+    hint = record.metadata['start']['plan_name']
     if checkhint(hint, 'timescan') is False: return
     detector = hint.split()[1]
 
@@ -140,9 +148,12 @@ def plot_timescan(bmm_catalog, uid):
 def plot_rectanglescan(bmm_catalog, uid):
     record = bmm_catalog[uid]
     if finished(record) is False: return
-    hint = record.metadata['start']['BMM_kafka']['hint']
-    if checkhint(hint, 'rectanglescan') is False: return
-    detector, motor, negated = hint.split()[1:]
+    hint = record.metadata['start']['plan_name']
+    if checkhint(hint, 'rectanglescan') is False:
+        print('failed to parse hint for rectanglescan')
+        return
+    hints = hint.split()
+    detector, motor, negated = hints[3], hints[2], hints[-1]
 
     table = record.primary.read()
 
@@ -171,7 +182,7 @@ def plot_rectanglescan(bmm_catalog, uid):
 def plot_areascan(bmm_catalog, uid):
     record = bmm_catalog[uid]
     if finished(record) is False: return
-    hint = record.metadata['start']['BMM_kafka']['hint']
+    hint = record.metadata['start']['plan_name']
     if checkhint(hint, 'areascan') is False: return
     detector, slow, fast, contour, log, energy = hint.split()[1:]
     pngout = record.metadata['start']['BMM_kafka']['pngout']
@@ -250,12 +261,14 @@ def plot_areascan(bmm_catalog, uid):
 def plot_xafs(bmm_catalog, uid):
     record = bmm_catalog[uid]
     if finished(record) is False: return
-    metadata = record.metadata['start']['BMM_kafka']
-    hint = metadata['hint']
+    hint = record.start['plan_name']
     mode = hint.split()[1]
     if checkhint(hint, 'xafs') is False: return
     this = Pandrosus()
-    this.element, this.edge, this.folder, this.db = metadata['element'], metadata['edge'], metadata['folder'], bmm_catalog
+    (this.element, this.edge, this.folder, this.db) = (record.start['XDI']['Element']['symbol'],
+                                                       record.start['XDI']['Element']['edge'],
+                                                       '',
+                                                       bmm_catalog)
     this.facecolor = (0.95, 0.95, 0.95)
     this.fetch(uid=uid, mode=mode)
     this.title = f"{metadata['filename']}  scan {metadata['count']}/{metadata['repetitions']}"

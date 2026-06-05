@@ -14,14 +14,18 @@ from bluesky_kafka.consume import BasicConsumer
 import nslsii
 import nslsii.kafka_utils
 
-from tools import echo_slack, next_index, file_exists, profile_configuration, rkvs
+from tools import echo_slack, next_index, file_exists, profile_configuration, rkvs, facility_dict
 from slack import img_to_slack, post_to_slack, refresh_slack, describe_slack, test_slack
 from nslsii.utils import open_redis_client
 
+import bmm_tools.tools.db
 
 from tiled.client import from_profile, from_uri
-#bmm_catalog = from_profile('bmm')
-bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
+bmm_catalog = from_profile('bmm')
+#bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
+bmm_tools.tools.db.bmm_catalog = bmm_catalog
+from bmm_tools.tools.db import file_resource
+
 
 # #import redis
 # if not os.environ.get('AZURE_TESTING'):
@@ -114,7 +118,7 @@ def manage_files_from_kafka_messages(beamline_acronym):
         name, message = doc
 
         if be_verbose is True:
-            print('\n\nVerbose mode is on:')
+            #print('\n\nVerbose mode is on:')
             pprint.pprint(message)
             print('\n')
 
@@ -190,6 +194,10 @@ def manage_files_from_kafka_messages(beamline_acronym):
             elif 'refresh_slack' in message:
                 refresh_slack()
 
+            elif 'show_experimental_folder' in message:
+                fd = facility_dict()
+                print(os.path.join(profile_configuration.get('services', 'proposals'), fd['cycle'], fd['data_session']))
+
             elif 'describe_slack' in message:
                 describe_slack()
 
@@ -205,17 +213,20 @@ def manage_files_from_kafka_messages(beamline_acronym):
                 if 'file' in message:
                     source = message['file']
                 elif 'uuid' in message:
-                    record = bmm_catalog[message['uuid']]
-                    docs = record.documents()
-                    found = []
-                    for d in docs:
-                        if d[0] == 'resource':
-                            this = os.path.join(d[1]['root'], d[1]['resource_path'])
-                            if '_%d' in this or re.search(r'%\d\.\dd', this) is not None:
-                                this = this % 0
-                            found.append(this)
+                    print(message['uuid'])
+                    found = file_resource(message['uuid'])
+                    print(found)
+                    # record = bmm_catalog[message['uuid']]
+                    # docs = record.documents()
+                    # found = []
+                    # for d in docs:
+                    #     if d[0] == 'resource':
+                    #         this = os.path.join(d[1]['root'], d[1]['resource_path'])
+                    #         if '_%d' in this or re.search(r'%\d\.\dd', this) is not None:
+                    #             this = this % 0
+                    #         found.append(this)
                     source = found[0]
-                    uuid = True
+                    #uuid = True
                 target = message['target']
                 shutil.copy(source, target)
                 logger.info(f'copied {source} to {target}')

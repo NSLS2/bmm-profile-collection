@@ -347,7 +347,7 @@ class LineScan():
         x,y = ev.xdata, ev.ydata
         print('plucked', x, ev.canvas.figure.axes[0].get_xlabel(), ev.canvas.figure.number)
         if x is not None:
-            rkvs.set('BMM:mouse_event:value', x)
+            rkvs.set('BMM:mouse_event:value', float(x))
             rkvs.set('BMM:mouse_event:motor', ev.canvas.figure.axes[0].get_xlabel())
 
 
@@ -1260,9 +1260,9 @@ class AreaScan():
         x,y = ev.xdata, ev.ydata
         print(x, ev.canvas.figure.axes[0].get_xlabel(), ev.canvas.figure.number)
         print(y, ev.canvas.figure.axes[0].get_ylabel(), ev.canvas.figure.number)
-        rkvs.set('BMM:mouse_event:value', x)
+        rkvs.set('BMM:mouse_event:value', float(x))
         rkvs.set('BMM:mouse_event:motor', ev.canvas.figure.axes[0].get_xlabel())
-        rkvs.set('BMM:mouse_event:value2', y)
+        rkvs.set('BMM:mouse_event:value2', float(y))
         rkvs.set('BMM:mouse_event:motor2', ev.canvas.figure.axes[0].get_ylabel())
 
     def stop(self, catalog, **kwargs):
@@ -1395,7 +1395,7 @@ class XRR():
         x,y = ev.xdata, ev.ydata
         print('plucked', x, ev.canvas.figure.axes[0].get_xlabel(), ev.canvas.figure.number)
         if x is not None:
-            rkvs.set('BMM:mouse_event:value', x)
+            rkvs.set('BMM:mouse_event:value', float(x))
             rkvs.set('BMM:mouse_event:motor', ev.canvas.figure.axes[0].get_xlabel())
 
 
@@ -1522,7 +1522,11 @@ class XRR():
         fwhm = float(right - left)
         fwhm_center = left + fwhm/2
 
-        results = {'com': com, 'fwhm': fwhm, 'fwhm_center': fwhm_center, 'peak': peak, 'peakpos': peakpos}
+        results = {'com': float(com),
+                   'fwhm': fwhm,
+                   'fwhm_center': float(fwhm_center),
+                   'peak': float(peak),
+                   'peakpos': float(peakpos)}
         print(results)
         rkvs.set('BMM:xrd:peak_stats', str(results))
         

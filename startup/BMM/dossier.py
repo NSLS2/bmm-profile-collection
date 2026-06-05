@@ -25,8 +25,11 @@ from bmm_tools.tools.misc import now
 from bmm_tools.tools.periodictable import edge_energy, Z_number, element_name
 
 from BMM.user_ns.base      import bmm_catalog
-from BMM.user_ns.detectors import with_cam1, with_cam2, with_cam8, with_cam9, with_webcam, with_anacam
+from BMM.user_ns.bmm       import BMMuser
+from BMM.user_ns.detectors import with_cam1, with_cam2, with_cam7, with_cam8, with_cam9, with_webcam, with_anacam
+from BMM.user_ns.detectors import anacam, usb1, usb2, cam8, cam9, cam7, xascam
 from BMM.user_ns.dwelltime import use_7element, use_4element, use_1element
+
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
@@ -214,7 +217,7 @@ class DossierTools():
         metadata (UID, filename) for dossier creation
         '''
         ahora = now()
-        BMMuser, xascam, anacam, usb1, usb2 = user_ns['BMMuser'], user_ns['xascam'], user_ns['anacam'], user_ns['usb1'], user_ns['usb2']
+        ##BMMuser, xascam, anacam, usb1, usb2 = user_ns['BMMuser'], user_ns['xascam'], user_ns['anacam'], user_ns['usb1'], user_ns['usb2']
         image_ana, image_web, image_usb1, image_usb2 = '','','',''
         anauid, webuid, usb1uid, usb2uid = '','','',''
         anasnap, websnap, usb1snap, usb2snap = '','','',''

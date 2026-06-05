@@ -41,7 +41,7 @@ class USBVideo(Device):
     # def __init__(self):
     #     super().__init__(*args, **kwargs)
     #     self.visionfunction3.put(4)
-    #     self.path.put('/nsls2/data3/bmm/assets/usbcam/')
+    #     self.path.put('/nsls2/data/bmm/assets/usbcam/')
     #     self.enable.put(0)
     #     self.framerate.put(60)
     #     self.startstop.put(0)

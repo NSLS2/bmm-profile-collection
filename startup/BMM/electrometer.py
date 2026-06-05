@@ -33,13 +33,13 @@ class BMMQuadEM(QuadEM):
     em_range  = Cpt(EpicsSignalWithRBV, 'Range', string=True)
     I0 = Cpt(Nanoize, derived_from='current1.mean_value')
     It = Cpt(Nanoize, derived_from='current2.mean_value')
-    Ir = Cpt(Nanoize, derived_from='current3.mean_value')
-    Iy = Cpt(Nanoize, derived_from='current4.mean_value')
+    Ir = Cpt(Nanoize, derived_from='current4.mean_value')  # !!FIXME!!
+    Iy = Cpt(Nanoize, derived_from='current3.mean_value')  # !!FIXME!!
 
     compute_current_offset1 = Cpt(EpicsSignal, 'ComputeCurrentOffset1.PROC')
     compute_current_offset2 = Cpt(EpicsSignal, 'ComputeCurrentOffset2.PROC')
-    compute_current_offset3 = Cpt(EpicsSignal, 'ComputeCurrentOffset3.PROC')
-    compute_current_offset4 = Cpt(EpicsSignal, 'ComputeCurrentOffset4.PROC')
+    compute_current_offset3 = Cpt(EpicsSignal, 'ComputeCurrentOffset4.PROC')  # !!FIXME!!
+    compute_current_offset4 = Cpt(EpicsSignal, 'ComputeCurrentOffset3.PROC')  # !!FIXME!!
     
     
     #state  = Cpt(EpicsSignal, 'Acquire')

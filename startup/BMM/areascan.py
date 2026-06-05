@@ -173,6 +173,7 @@ def areascan(detector,
 
         ini_f, ini_s = fast.position, slow.position
         report(f'Starting areascan at x,y = {fast.position:.3f}, {slow.position:.3f}', level='bold', slack=True)
+        kafka.message({'mkdir': os.path.join(proposal_base(), 'maps')})
         kafka.message({'areascan'     : 'start',
                        'slow_motor'   : slow.name,
                        'slow_start'   : startslow,

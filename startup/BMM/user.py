@@ -792,19 +792,21 @@ class BMM_User(Borg):
 
         ## NSLS-II start experiment infrastructure
         ## this prefix needs to be the same (but without the dash) as the call to RedisJSONDict in user_ns/base.py
+        bmm_tools.tools.md.common_re = user_ns['RE']
+        bmm_tools.tools.md.common_md = user_ns['RE'].md
+        facility_dict = user_ns['RE'].md
         if not is_re_worker_active():  # want to not do this when starting QS environment
             cprint(f'\n[o u chartreuse3]The following authentication is used to write [i]your[/i] data to a folder that [i]you[/i] can access.[/o u chartreuse3]\n')
             cprint(f'[indian_red1]Calling sync_experiment for proposal {gup}. Enter [r]your[/r] BNL username & password at the prompts.[/indian_red1]\n')
             cprint('[indian_red1][u]Anyone[/u] on the current proposal can sign in at this prompt.[/indian_red1]\n')
             warnings.filterwarnings(action='ignore', category=UserWarning, message=r'Experiment pass-\d+ was already started')
-            sync_experiment(gup, 'bmm', verbose=False, redis_db=1)
-            # user_ns['RE'].md = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
-            #                                      profile_configuration.get('services', 'redis_port'),
-            #                                      profile_configuration.get('services', 'redis_ssl'),
-            #                                      redis_db=1)
-            bmm_tools.tools.md.common_re = user_ns['RE']
-            bmm_tools.tools.md.common_md = user_ns['RE'].md
-            facility_dict = user_ns["RE"].md
+            new_md = sync_experiment(gup,
+                                     'bmm',
+                                     verbose=False,
+                                     redis_db=profile_configuration.get('services', 'xas_redis'),
+                                     redis_ssl=profile_configuration.get('services', 'redis_ssl'))
+            bmm_tools.tools.md.common_md = new_md
+            facility_dict = new_md
 
         #if md['data_session'] in ('pass-301027', 'pass-317886'):  # PU proposal numbers of history
         #    self.experimenters = 'Bruce Ravel'
