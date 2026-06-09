@@ -9,6 +9,7 @@ pid/
 *.directory
 *.save__
 .~lock*
+.git-bkp
 
 # secrets that should not be commited to an on-line repo
 bmmbot_secret
