@@ -22,6 +22,7 @@ import bmm_tools.tools.db
 
 from tiled.client import from_profile, from_uri
 bmm_catalog = from_profile('bmm')
+bmm_catalog.context.http_client.headers['tiled-qos'] = 'acquisition'
 #bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
 bmm_tools.tools.db.bmm_catalog = bmm_catalog
 from bmm_tools.tools.db import file_resource

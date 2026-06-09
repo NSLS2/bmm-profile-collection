@@ -10,6 +10,7 @@ import nslsii.kafka_utils
 
 from tiled.client import from_profile, from_uri
 bmm_catalog = from_profile('bmm')
+bmm_catalog.context.http_client.headers['tiled-qos'] = 'acquisition'
 #bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
 
 import matplotlib.pyplot as plt

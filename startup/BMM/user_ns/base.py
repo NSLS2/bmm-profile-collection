@@ -91,6 +91,7 @@ else:
 RE.unsubscribe(0)  # remove databroker, which was subscribed first by configure_base
 tiled_writing_client = from_uri(profile_configuration.get('services', 'tiled'),
                                 api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_BMM"])
+tiled_writing_client.context.http_client.headers['tiled-qos'] = 'acquisition'
 
 datum_docs_cache = deque()
 def create_datum_page_cb(name, doc):
@@ -172,6 +173,7 @@ if not is_re_worker_active():
     cprint('[cyan]Connecting to Tiled: bmm_catalog, db[/cyan]')
     from tiled.client import from_profile, from_uri
     bmm_catalog = from_profile('bmm')
+    bmm_catalog.context.http_client.headers['tiled-qos'] = 'acquisition'
     ##bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
     db = Broker(bmm_catalog)
 
