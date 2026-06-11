@@ -5,8 +5,10 @@ from collections import deque
 
 from event_model import pack_datum_page
 from bluesky.plan_stubs import mv, mvr, sleep
+from bluesky.callbacks.buffer import BufferingWrapper
 from databroker import Broker
 from tiled.client import from_uri, show_logs
+from bluesky_tiled_plugins import TiledInserter
 
 from rich import print as cprint
 
@@ -89,9 +91,16 @@ else:
     sd  = uns_dict['sd']
     bec = uns_dict['bec']
 RE.unsubscribe(0)  # remove databroker, which was subscribed first by configure_base
+
 tiled_writing_client = from_uri(profile_configuration.get('services', 'tiled'),
                                 api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_BMM"])
 tiled_writing_client.context.http_client.headers['tiled-qos'] = 'acquisition'
+
+tiled_inserter = TiledInserter(tiled_writing_client, 'bmm',
+                               backup_directory='/tmp/tiled_backup',
+                               backup_dictionary=None)
+tiled_inserter = BufferingWrapper(tiled_inserter)
+
 
 datum_docs_cache = deque()
 def create_datum_page_cb(name, doc):
@@ -102,48 +111,10 @@ def create_datum_page_cb(name, doc):
     if len(datum_docs_cache) > 0:
         datum_page = pack_datum_page(*datum_docs_cache)
         datum_docs_cache.clear()
-        post_document("datum_page", datum_page)
+        tiled_inserter("datum_page", datum_page)
 
-    post_document(name, doc)
+    tiled_inserter(name, doc)
 
-
-def post_document(name, doc):
-    #tz = time.monotonic()
-
-    ATTEMPTS = 6
-    error = None
-    #cprint(f'[orange1]{name}[/orange1]')
-    for attempt in range(ATTEMPTS):
-        try:
-            tiled_writing_client.post_document(name, doc)
-        except Exception as exc:
-            print("(BMM local warning) Document saving failure:", repr(exc))
-            error = exc
-        else:
-            break
-        print(f'(BMM local warning) sleeping {2**attempt} seconds before trying again...')
-        time.sleep(2**attempt)
-    else:
-        # out of attempts
-        print('***************************************************')
-        print('(BMM local warning) ')
-        print('One last try to connect to tiled.  Wating 2 minutes')
-        print(f'Begin sleeping for 2 minutes at {datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")}')
-        print('***************************************************')
-        time.sleep(120)
-        try:
-            tiled_writing_client.post_document(name, doc)
-        except Exception as exc:
-            print("(BMM local warning) Document saving failure:", repr(exc))
-            print("Likeliest cause is a network failure or a Tiled service failure.  Contact beamline staff.")
-            error = exc
-            raise error
-        else:
-            pass
-
-    #print(f"post_document timing: {time.monotonic() - tz:.3}\n")
-    
-# RE.subscribe(post_document)
 RE.subscribe(create_datum_page_cb)
 
 # this prefix needs to be the same (but with a dash) as the call to sync_experiment in user.py
