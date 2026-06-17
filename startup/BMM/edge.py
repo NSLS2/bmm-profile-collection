@@ -34,7 +34,7 @@ user_ns = vars(user_ns_module)
 
 from BMM.user_ns.bmm         import BMMuser
 from BMM.user_ns.dcm         import dcm
-from BMM.user_ns.detectors   import xs, xs1, xs4, xs7
+from BMM.user_ns.detectors   import xs, xs1, xs4, xs7, pilatus
 from BMM.user_ns.dwelltime   import with_xspress3
 from BMM.user_ns.instruments import * #kill_mirror_jacks, m3_ydi, m3_ydo, m3_yu, m3_xd, m3_xu, ks, m2_ydi, m2_ydo, m2_yu
 from BMM.user_ns.motors      import *
@@ -382,6 +382,7 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
             return
 
         suspenders.set_suspenders()
+        collimated_to_focused, focused_to_collimated = False, False
 
         if energy > 8000:
             mode = 'A' if focus else 'D'
@@ -407,6 +408,10 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
             warning_msg('Ophyd connection failure' % el)
             yield from null()
             return
+        if mode in ('A', 'B', 'C') and current_mode in ('D', 'E', 'F'):
+            collimated_to_focused = True
+        if mode in ('D', 'E', 'F') and current_mode in ('A', 'B', 'C'):
+            focused_to_collimated = True
 
         ## trouble with MC06
         #slits = False
@@ -486,10 +491,12 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
         if no_hslits is True:
             pass
         elif mode == 'XRD':
+            yield from mv(m2_bender.kill_cmd, 1)            
             yield from mv(slits3.hsize, 1.5)  # changed to 1.5 for 500 mA operations
         elif mode in ('D', 'E', 'F'):
             yield from mv(slits3.hsize, 3)
         elif mode in ('A', 'B', 'C'):
+            yield from mv(m2_bender.kill_cmd, 1)            
             yield from mv(slits3.hsize, 0.4)
 
         ## these two instruments involve hijacking the refx and refy motors for other purposes,
@@ -509,6 +516,8 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
         yield from mv(dcm.bragg.acceleration, BMMuser.acc_fast)
 
         ## RIGHT HERE: set Pilatus threshold to energy - 2000 eV
+        if profile_configuration.getboolean('detectors', 'pilatus') is True:
+            pilatus.threshold_energy.put(energy+target-2000)
         
         ## verify that dcm.para has arrived in place.  if not, presume
         ## that it has stalled.  back off and try again to move
@@ -637,10 +646,13 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
 
         if mode == 'XRD':
             yield from mv(slits3.hsize, 7)
+            yield from mv(slits3.vsize, 1)
+            yield from mv(m2_bender.kill_cmd, 1)            
             report('Finished configuring for XRD', level='bold', slack=True)
         else:
-            #if mode in ('D', 'E', 'F'):
-            if no_hslits is False:
+            # return slits to prior size unless changing bewteen focused and collimated, in which
+            # case  the slits should stay the size they were while changing edge
+            if no_hslits is False and collimated_to_focused is False and focused_to_collimated is False:
                 yield from mv(slits3.hsize, hsize_save)
             report(f'Finished configuring for {el.capitalize()} {edge.capitalize()} edge, now in photon delivery mode {get_mode()}', level='bold', slack=True)
         # if slits is False:

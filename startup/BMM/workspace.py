@@ -125,7 +125,8 @@ def check_workstation_access():
         
 def check_lan():
     freakout = 0
-    for host in ('ioc2', 'disp1'):
+    #for host in ('ioc2', 'disp1'):
+    for host in ('ioc2',):
         response = os.system(f"ping -q -c 1 xf06bm-{host} > /dev/null")
         if response != 0:
             error_msg(f'{TAB}*** Uh oh!  xf06bm-{host} is not responding to a ping!')

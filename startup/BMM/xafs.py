@@ -42,7 +42,7 @@ from BMM.user_ns.base       import profile_configuration
 from BMM.user_ns.base       import bmm_catalog, WORKSPACE
 from BMM.user_ns.dcm        import dcm
 from BMM.user_ns.dwelltime  import _locked_dwell_time, use_7element, use_4element, use_1element
-from BMM.user_ns.detectors  import quadem1, xs, xs1, xs4, xs7, ic0, ic1, ic2, pilatus, dante, ION_CHAMBERS
+from BMM.user_ns.detectors  import quadem1, xs, xs1, xs4, xs7, ic0, ic1, ic2, pilatus, dante, ION_CHAMBERS, ic0
 from BMM.user_ns.suspenders import suspenders
 
 try:
@@ -496,6 +496,20 @@ def xafs(inifile=None, **kwargs):
                 return
         #_locked_dwell_time.quadem_dwell_time.settle_time = 0
 
+        if ic0.current1.mean_value.get() > 696.0:
+            error_msg('\nThe I0 chamber is saturated, reading greater than 696 nA.')
+            whisper('\nThe solution is to reduce the horizontal size of slits3, perhaps 0.4 mm or less')
+            whisper('\ttry: RE(mv(slits3.hsize, 0.4))')
+            bold_msg('\nNot clear to start scan sequence....\n')
+            yield from null()
+            return
+        elif ic0.current1.mean_value.get() > 680.0:
+            error_msg('\nThe I0 chamber is close to saturated, reading greater than 680 nA.')
+            whisper('\nThe solution is to reduce the horizontal size of slits3, perhaps 0.4 mm or less')
+            whisper('\ttry: RE(mv(slits3.hsize, 0.4))')
+            bold_msg('\nNot clear to start scan sequence....\n')
+            yield from null()
+            return
 
         ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
         ## decide whether to ask kafka worker to copy INI file to proposal folder
