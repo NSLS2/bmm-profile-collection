@@ -647,11 +647,13 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
         if mode == 'XRD':
             yield from mv(slits3.hsize, 7)
             yield from mv(slits3.vsize, 1)
+            yield from mv(m2_yaw, -0.067)  #  value from 18 June, 2026
             yield from mv(m2_bender.kill_cmd, 1)            
             report('Finished configuring for XRD', level='bold', slack=True)
         else:
             # return slits to prior size unless changing bewteen focused and collimated, in which
             # case  the slits should stay the size they were while changing edge
+            yield from mv(m2_yaw, 0.129)
             if no_hslits is False and collimated_to_focused is False and focused_to_collimated is False:
                 yield from mv(slits3.hsize, hsize_save)
             report(f'Finished configuring for {el.capitalize()} {edge.capitalize()} edge, now in photon delivery mode {get_mode()}', level='bold', slack=True)
