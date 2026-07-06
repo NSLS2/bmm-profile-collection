@@ -1,9 +1,21 @@
 import re
 from BMM.macrobuilder import BMMMacroBuilder
 from ophyd import EpicsSignal
+from bluesky.plan_stubs import sleep, mv, mvr, null
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
+
+from BMM.user_ns.base import profile_configuration
+from BMM.user_ns.motors import xafs_spare
+
+def it_in():
+    yield from mv(xafs_spare, profile_configuration.getfloat('experiments', 'it_in'))
+    
+def it_out():
+    yield from mv(xafs_spare, profile_configuration.getfloat('experiments', 'it_out'))
+    
+
 
 class ResonantReflectivityMacroBuilder(BMMMacroBuilder):
     '''A class for parsing specially constructed spreadsheets and

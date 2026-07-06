@@ -109,7 +109,7 @@ from BMM.electrometer import BMMQuadEM, BMMDualEM, dark_current, IntegratedIC
 ION_CHAMBERS = []               # list of ion chambers in use, will be populated below
 
 # configure signal chains for I0/It/Ir, configuration flags from BMM.user_ns.dwelltime
-from BMM.user_ns.dwelltime import with_ic0, with_ic1, with_ic2, with_iy, with_pips
+from BMM.user_ns.dwelltime import with_ic0, with_ic1, with_ic2, with_iy, with_pips, with_diode
 
 try:
     quadem1 = BMMQuadEM('XF:06BM-BI{EM:1}EM180:', name='quadem1')
@@ -144,13 +144,17 @@ try:
     elif with_pips is True:
         quadem1.Iy.kind, quadem1.Iy.name = 'hinted', 'Pips'
         rkvs.set('BMM:pips', 1)
+    elif with_diode is True:
+        quadem1.Iy.kind, quadem1.Iy.name = 'hinted', 'Diode'
+        rkvs.set('BMM:diode', 1)
     else:
         quadem1.Iy.kind, quadem1.Iy.name = 'omitted', 'Iy'
         rkvs.set('BMM:Iy', 0)
         rkvs.set('BMM:pips', 0)
+        rkvs.set('BMM:diode', 0)
 
 
-    if with_iy is True or with_pips is True or with_ic0 is False or with_ic1 is False or with_ic2 is False:
+    if with_iy is True or with_pips is True or with_diode is True or with_ic0 is False or with_ic1 is False or with_ic2 is False:
         ION_CHAMBERS.append(quadem1)
 
     set_precision(quadem1.current1.mean_value, 3)
@@ -162,7 +166,8 @@ try:
     set_precision(quadem1.current4.mean_value, 3)
     toss = quadem1.Iy.describe()
 
-except:
+except Exception as E:
+    print(E)
     quadem1 = None
     whisper('\t\t\t'+'quadem is not available, carrying on anyway....')
 

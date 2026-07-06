@@ -317,6 +317,7 @@ xafs_wheel.slotone = 0 # -30        # the angular position of slot #1,  this cha
 #xafs_wheel.user_offset.put(-0.7821145500000031)
 slot = xafs_wheel.set_slot
 xafs_wheel.x_motor = xafs_x
+xafs_wheel.y_motor = xafs_y
 if rkvs.get('BMM:wheel:outer') is None:
     xafs_wheel.outer_position = 0
 else:
@@ -327,6 +328,7 @@ xafs_wheel.inner_position   = xafs_wheel.outer_position + 26.0
 xafs_ref = WheelMotor('XF:06BMA-BI{XAFS-Ax:Ref}Mtr',  name='xafs_ref')
 xafs_ref.slotone = 0        # the angular position of slot #1
 xafs_ref.x_motor = xafs_refx
+xafs_ref.y_motor = xafs_refy
 
 
 #                          ring, slot, elem, material, on wheel (ring: 0=outer, 1=inner)
@@ -699,7 +701,7 @@ if profile_configuration.getboolean('detectors', 'eiger') is True:
 refl = None
 if refldet is not None:
     run_report('\tresonant reflectivity automation')
-    from BMM.reflectivity import ResonantReflectivityMacroBuilder
+    from BMM.reflectivity import ResonantReflectivityMacroBuilder, it_in, it_out
     refl = ResonantReflectivityMacroBuilder(detector=refldet)
     refl.description = 'a resonant reflectivity experiment'
     refl.instrument = 'resonant reflectivity'

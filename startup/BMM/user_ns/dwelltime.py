@@ -17,6 +17,7 @@ run_report(__file__, text='dwelltime + selecting detectors for use')
 with_quadem    = profile_configuration.getboolean('electrometers', 'quadem') # True            # available for Iy and other signals
 with_iy        = profile_configuration.getboolean('electrometers', 'iy')     # False           # electron yield
 with_pips      = profile_configuration.getboolean('electrometers', 'pips')   # False           # PIPS
+with_diode     = profile_configuration.getboolean('electrometers', 'diode')  # False          # reflectivity PIN diode
 with_ic0       = profile_configuration.getboolean('electrometers', 'ic0')    # True            # new I0 chamber
 with_ic1       = profile_configuration.getboolean('electrometers', 'ic1')    # True            # new It chamber
 with_ic2       = profile_configuration.getboolean('electrometers', 'ic2')    # True            # new Ir chamber

@@ -870,6 +870,7 @@ def xafs(inifile=None, **kwargs):
                 with_yield = True
             else:
                 with_yield = False
+                
             kafka.message({'xafs_sequence' : 'start',
                            'element'       : p["element"],
                            'edge'          : p["edge"],
@@ -877,7 +878,7 @@ def xafs(inifile=None, **kwargs):
                            'workspace'     : BMMuser.workspace,
                            'repetitions'   : p["nscans"],
                            'mode'          : p['mode'],
-                           'with_yield'    : with_yield })
+                           'with_yield'    : with_yield})
             refmat = 'none'
             if p["element"] in user_ns['xafs_ref'].mapping:
                 refmat = user_ns['xafs_ref'].mapping[p["element"]][3]
@@ -915,7 +916,8 @@ def xafs(inifile=None, **kwargs):
                            'repetitions': p["nscans"],
                            'sample': sample,
                            'reference_material': refmat,
-                           'fluo_detector': fluo_detector})
+                           'fluo_detector': fluo_detector,
+                           'with_diode' : profile_configuration.getboolean('electrometers', 'diode')})
             
             for i in range(p['start'], p['start']+p['nscans'], 1):
                 cnt += 1

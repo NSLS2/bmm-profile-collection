@@ -38,6 +38,9 @@ class WheelMotor(EndStationEpicsMotor):
     inner_position : (float)
         The position of the inner ring on that motor
 
+    y_position : (float)
+        The height of the aligned slot on the respective motor
+
     slotone : (float)
         The position of the first slot in user units on the wheel motor
 
@@ -50,6 +53,15 @@ class WheelMotor(EndStationEpicsMotor):
 
     set_slot(n) :
         move to the given slot number, taking care to go the shorter way
+
+    outer():
+        move in x to the nominal outer slot position
+
+    inner():
+        move in x to the nominal inner slot position
+
+    height():
+        move in y to the nominal slot position
 
     reset() :
         return the wheel to 0
@@ -136,16 +148,26 @@ class WheelMotor(EndStationEpicsMotor):
         #user_ns['wmb'].inner_position = user_ns['wmb'].outer_position + 26
         self.outer_position = self.x_motor.position
         self.inner_position = self.outer_position + 26
+        self.y_position     = self.y_motor.position
         if self.x_motor.name == 'xafs_x':
-            rkvs.set('BMM:wheel:outer', self.outer_position)
+            rkvs.set('BMM:wheel:outer',  self.outer_position)
+            rkvs.set('BMM:wheel:height', self.y_position)
         elif self.x_motor.name == 'xafs_refx':
-            rkvs.set('BMM:ref:outer', self.outer_position)
+            rkvs.set('BMM:ref:outer',    self.outer_position)
+            rkvs.set('BMM:ref:height',   self.y_position)
 
-    def inner(self):
+    def inner(self, slot=None):
         yield from mv(self.x_motor, self.inner_position)
-
-    def outer(self):
+        if slot is not None:
+            yield from self.set_slot(slot)
+        
+    def outer(self, slot=None):
         yield from mv(self.x_motor, self.outer_position)
+        if slot is not None:
+            yield from self.set_slot(slot)
+
+    def height(self):
+        yield from mv(self.y_motor, self.y_position)
 
     def slot_ring(self):
         if 'double' in user_ns['BMMuser'].instrument:

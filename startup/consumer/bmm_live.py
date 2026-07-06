@@ -214,6 +214,12 @@ class LineScan():
             self.denominator = 'I0'
             self.axes.set_ylabel(f'{self.numerator}/{self.denominator}')
 
+        ## pin diode: plot Diode/I0
+        elif self.numerator == 'Diode':
+            self.description = 'pin diode'
+            self.denominator = 'I0'
+            self.axes.set_ylabel(f'{self.numerator}/{self.denominator}')
+
         ## Bicron
         elif self.numerator == 'Bicron':
             self.description = 'Bicron'
@@ -462,6 +468,9 @@ class LineScan():
             signal  = kwargs['data']['dir'] / kwargs['data']['dwti_dwell_time']
         elif self.numerator == 'Refl':
             signal  = kwargs['data']['dir'] / kwargs['data']['dwti_dwell_time']
+        elif self.numerator == 'Diode':
+            signal = kwargs['data'][self.numerator]
+            
         elif self.numerator in ('Struck', 'Bicron', 'Apd'):
             if self.numerator in kwargs['data']:
                 signal = kwargs['data'][self.numerator]
@@ -618,18 +627,19 @@ class XAFSScan():
     def start(self, **kwargs):
         '''Begin a sequence of XAFS live plots.
         '''
-        self.ongoing     = True
-        self.energy      = []
-        self.i0sig       = []
-        self.trans       = []
-        self.fluor       = []
-        self.refer       = []
-        self.iysig       = []
-        self.mode        = kwargs['mode']
-        self.filename    = kwargs['filename']
-        self.repetitions = kwargs['repetitions']
-        self.count       = 1
-        self.sample      = kwargs['sample']
+        self.ongoing       = True
+        self.energy        = []
+        self.i0sig         = []
+        self.trans         = []
+        self.fluor         = []
+        self.refer         = []
+        self.iysig         = []
+        self.mode          = kwargs['mode']
+        self.filename      = kwargs['filename']
+        self.repetitions   = kwargs['repetitions']
+        self.count         = 1
+        self.sample        = kwargs['sample']
+        self.with_diode    = kwargs['with_diode']
         self.fluo_detector = kwargs['fluo_detector']
         self.reference_material = kwargs['reference_material']
 
@@ -863,7 +873,10 @@ class XAFSScan():
 
         if self.mode in ('pilatus', 'eiger'):  # re-purpose refer and iysig
             self.refer.append(kwargs['data']['diffuse']/kwargs['data']['I0'])
-            self.iysig.append(kwargs['data']['specular']/kwargs['data']['I0'])
+            if self.with_diode is True:
+                self.iysig.append(kwargs['data']['Diode']/kwargs['data']['I0'])
+            else:
+                self.iysig.append(kwargs['data']['specular']/kwargs['data']['I0'])
             self.line_iy.set_data(self.energy, self.iysig)
 
         if self.mode == 'yield':

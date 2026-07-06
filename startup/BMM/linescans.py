@@ -930,7 +930,7 @@ motor_nicknames = {'x'    : xafs_x,     'roll' : xafs_roll,
 ## for consistency with areascan().  This does a simple check to see if the old
 ## argument order is being used and swaps them if need be
 def ls_backwards_compatibility(detin, axin):
-    if type(axin) is str and axin.capitalize() in ('It', 'If', 'I0', 'Iy', 'Pips', 'Ir', 'Both',
+    if type(axin) is str and axin.capitalize() in ('It', 'If', 'I0', 'Iy', 'Pips', 'Diode', 'Ir', 'Both',
                                                    'I0a', 'I0b', 'Ic0', 'Ic1', 'Bicron',
                                                    'Xs', 'Xs1', 'Xs4', 'Xs7', 'Pilatus', 'Eiger', 'Dante'):
         return(axin, detin)
@@ -1001,8 +1001,11 @@ def linescan(detector, axis, start, stop, nsteps, dopluck=True, force=False, sta
         detector = detector.capitalize()
 
         ## sanity checks on axis
-        if axis not in motor_nicknames.keys() and 'EpicsMotor' not in str(type(axis)) \
-           and 'PseudoSingle' not in str(type(axis)) and 'WheelMotor' not in str(type(axis)):
+        if axis not in motor_nicknames.keys() \
+           and 'EpicsMotor' not in str(type(axis)) \
+           and 'PseudoSingle' not in str(type(axis)) \
+           and 'WheelMotor' not in str(type(axis)) \
+           and 'EncodedEndStationEpicsMotor' not in str(type(axis)):
             error_msg('\n*** %s is not a linescan motor (%s)\n' %
                       (axis, str.join(', ', motor_nicknames.keys())))
             yield from null()
@@ -1030,9 +1033,9 @@ def linescan(detector, axis, start, stop, nsteps, dopluck=True, force=False, sta
         BMMuser.motor = thismotor
 
         # sanity checks on detector
-        if detector not in ('It', 'If', 'I0', 'Iy', 'Pips', 'Ir', 'Both', 'Bicron', 'Ic0', 'Ic1', 'Xs', 'Xs1', 'Xs4', 'Xs7', 'Pilatus', 'Eiger', 'Dante'):
+        if detector not in ('It', 'If', 'I0', 'Iy', 'Pips', 'Diode', 'Ir', 'Both', 'Bicron', 'Ic0', 'Ic1', 'Xs', 'Xs1', 'Xs4', 'Xs7', 'Pilatus', 'Eiger', 'Dante'):
             error_msg('\n*** %s is not a linescan measurement (%s)\n' %
-                      (detector, 'it, if, i0, iy, pips, ir, both, bicron, Ic0, Ic1, xs, xs1, xs4, xs7, pilatus, eiger, dante'))
+                      (detector, 'it, if, i0, iy, pips, diode, ir, both, bicron, Ic0, Ic1, xs, xs1, xs4, xs7, pilatus, eiger, dante'))
             yield from null()
             return
 
@@ -1063,6 +1066,9 @@ def linescan(detector, axis, start, stop, nsteps, dopluck=True, force=False, sta
         elif detector == 'Iy':
             denominator = ' / I0'
             detname = 'electron yield'
+        elif detector == 'Diode':
+            denominator = ' / I0'
+            detname = 'pin diode'
         elif detector == 'If':
             dets.append(xs)
             detname = 'fluorescence'

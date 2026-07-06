@@ -190,7 +190,7 @@ def quick_change(el, focus=False, edge='K', target=300., reference=False):
     probably OK for adjacent elements.
 
     '''
-    yield from change_edge(el, focus=focus, edge=edge, slits=False,  mirror=False, tune=False, target=target, xrd=False,
+    yield from change_edge(el, focus=focus, edge=edge, slits=False,  mirror=False, tune=True, target=target, xrd=False,
                            bender=True, insist=False, no_ref=not reference, no_hslits=True)
     
 def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True, tune=True, target=300.,
@@ -612,6 +612,7 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
         # run a slit horizontal center scan if focused #
         ################################################
         if mode in ('A', 'B', 'C'):
+            yield from mv(m2.yaw, 0.129)
             if no_hslits is False:
                 yield from hcenter(move=True)
                 kafka.message({'close': 'last'})
@@ -653,7 +654,6 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
         else:
             # return slits to prior size unless changing bewteen focused and collimated, in which
             # case  the slits should stay the size they were while changing edge
-            yield from mv(m2_yaw, 0.129)
             if no_hslits is False and collimated_to_focused is False and focused_to_collimated is False:
                 yield from mv(slits3.hsize, hsize_save)
             report(f'Finished configuring for {el.capitalize()} {edge.capitalize()} edge, now in photon delivery mode {get_mode()}', level='bold', slack=True)

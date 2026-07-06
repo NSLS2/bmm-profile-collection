@@ -106,9 +106,12 @@ def plot_from_kafka_messages(beamline_acronym):
 
             if 'xafs_sequence' in message:
                 if message['xafs_sequence'] == 'start':
-                    xafsseq.start(element=message['element'], edge=message['edge'], folder=message['folder'],
-                                  workspace=message['workspace'],
-                                  repetitions=message['repetitions'], mode=message['mode'])
+                    xafsseq.start(element     = message['element'],
+                                  edge        = message['edge'],
+                                  folder      = message['folder'],
+                                  workspace   = message['workspace'],
+                                  repetitions = message['repetitions'],
+                                  mode        = message['mode'])
                 elif message['xafs_sequence'] == 'stop':
                     xafsseq.stop(filename=message['filename'])
                 elif message['xafs_sequence'] == 'add':

@@ -264,6 +264,7 @@ def dark_current():
     if reopen:
         print('\nClosing photon shutter')
         yield from user_ns['shb'].close_plan()
+        yield from sleep(3)
     if with_quadem:
         yield from user_ns['quadem1'].dark_current()
     if with_ic0:
