@@ -5,8 +5,6 @@ name = "bmm-profile-collection"
 platforms = ["linux-64"]
 version = "2026.2.0"
 
-[system-requirements]
-
 [feature.profile.dependencies]
 bluesky-base = "==1.15.0"
 tiled-client = ">=0.2.11"
