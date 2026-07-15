@@ -1,0 +1,155 @@
+{
+    "slack" : true,
+    "dryrun" : false,
+    "primary_element": "Ni",
+    "composition" : "Al/Cu/Ni",
+    "origins": {
+                "Ni": {
+                        "T1": {
+                                "duration": 300,
+                                "xafs_x": 177.287,
+                                "xafs_pitch": 6.070,
+                                "xafs_y": 378.17,
+                                "xafs_roll": -0.7
+                        },
+                        "T2": {
+                                "duration": 600,
+                                "xafs_x": 177.910,
+                                "xafs_pitch": 5.263,
+                                "xafs_y": 377.81,
+                                "xafs_roll": -0.7
+                        },
+                        "T3": {
+                                "duration": 1200,
+                                "xafs_x": 178.390,
+                                "xafs_pitch": 5.635,
+                                "xafs_y": 377.81,
+                                "xafs_roll": -0.7
+                        },
+                        "T4": {
+                                "duration": 1800,
+                                "xafs_x": 178.634,
+                                "xafs_pitch": 6.035,
+                                "xafs_y": 377.15,
+                                "xafs_roll": -0.7
+                        },
+                        "T5": {
+                                "duration": 3600,
+                                "xafs_x": 178.619,
+                                "xafs_pitch": 5.644,
+                                "xafs_y": 376.462,
+                               "xafs_roll": -0.7
+                        },
+                        "T6": {
+                                "duration": 5400,
+                                "xafs_x": 178.114,
+                                "xafs_pitch": 5.742,
+                                "xafs_y": 377.480,
+                                "xafs_roll": -0.7
+                        },
+                        "T7": {
+                                "duration": 0,
+                                "xafs_x": 178.241,
+                                "xafs_pitch": 5.742,
+                                "xafs_y": 377.46,
+                                "xafs_roll": -0.7
+                        },
+                        "T8": {
+                                "duration": 0,
+                                "xafs_x": 177.205,
+                                "xafs_pitch": 6.141,
+                                "xafs_y": 377.80,
+                                "xafs_roll": -0.7
+                        }
+                },
+                "Cu": {
+                        "T1": {
+                                "duration": 300,
+                                "xafs_x": 175.679,
+                                "xafs_pitch": 7.557,
+                                "xafs_y": 379.80,
+                                "xafs_roll": 0.05
+                        },
+                        "T2": {
+                                "duration": 600,
+                                "xafs_x": 176.190,
+                                "xafs_pitch": 7.260,
+                                "xafs_y": 379.83,
+                                "xafs_roll": 0.05
+                        },
+                       "T3": {
+                                "duration": 1200,
+                                "xafs_x": 176.699,
+                                "xafs_pitch": 7.517,
+                                "xafs_y": 379.31,
+                                "xafs_roll": 0.05
+                        },
+                        "T4": {
+                                "duration": 1800,
+                                "xafs_x": 176.847,
+                                "xafs_pitch": 7.552,
+                                "xafs_y": 378.32,
+                                "xafs_roll": 0.05
+                        },
+                        "T5": {
+                                "duration": 3600,
+                                "xafs_x": 176.891,
+                                "xafs_pitch": 7.260,
+                                "xafs_y": 378.83,
+                                "xafs_roll": 0.05
+                        },
+                        "T6": {
+                                "duration": 5400,
+                                "xafs_x": 176.331,
+                                "xafs_pitch": 7.539,
+                                "xafs_y": 378.8,
+                                "xafs_roll": 0.05
+                        },
+                        "T7": {
+                                "duration": 0,
+                                "xafs_x": 176.332,
+                                "xafs_pitch": 7.974,
+                                "xafs_y": 377.83,
+                                "xafs_roll": 0.05
+                        }
+                }
+        },
+    "detector_distances": {
+                "Ni": 205,
+                "Cu": 205
+    },
+    "slits": {
+                "Ni": [0.2, 0.3],
+                "Cu": [0.2, 0.3]
+    },
+    "reference" : {
+                "nscans" : 1,
+                "start" : "next",
+                "mode" : "reference",
+                "bounds" : "-15    -5    15   30",
+                "steps" : "1    0.3   0.5",
+                "times" : "0.5   0.5   0.5",
+                "snapshots" : false,
+                "lims" : false
+    },
+    "xanes" : {
+                "nscans" : 1,
+                "start" : "next",
+                "mode" : "fluorescence",
+                "bounds" : "-12    -3    15   45",
+                "steps" : "1    0.3   0.5",
+                "times" : "0.5   0.5   0.5",
+                "snapshots" : false,
+                "lims" : false
+    },
+    "exafs" : {
+                "nscans" : 1,
+                "start" : "next",
+                "mode" : "fluorescence",
+                "bounds" : "-200    -30     -10    25    12k",
+                "steps" : "10     2.0    0.3    0.05k",
+                "times" : "1 1 1 1",
+                "snapshots" : true,
+                "lims" : true
+    }
+}
