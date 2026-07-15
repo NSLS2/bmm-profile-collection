@@ -310,7 +310,7 @@ examine_fmbo_motor_group(dm2list)
                                  
 run_report('\tsample wheels')
 from BMM.wheel import WheelMotor, WheelMacroBuilder, reference, show_reference_wheel
-from BMM.user_ns.motors import xafs_x, xafs_refx
+from BMM.user_ns.motors import xafs_x, xafs_y, xafs_refx, xafs_refy
 
 xafs_wheel = xafs_rotb  = WheelMotor('XF:06BMA-BI{XAFS-Ax:RotB}Mtr',  name='xafs_wheel')
 xafs_wheel.slotone = 0 # -30        # the angular position of slot #1,  this changed Jan 2026

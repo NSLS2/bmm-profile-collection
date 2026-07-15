@@ -860,7 +860,7 @@ class BMM_User(Borg):
 
         if profile_configuration.getboolean('services', 'proposal_folders_available'):
             if kafka.file_exists(folder=proposal_base(), filename='.introduction_made', number=False) is False:
-                self.welcome_experimenters()
+                #self.welcome_experimenters()
                 kafka.message({'touch': os.path.join(proposal_base(), '.introduction_made')})
         else:
             cprint('[red1]\t\tSkipping kafka welcome[/red1]')
@@ -900,7 +900,9 @@ class BMM_User(Borg):
 
 BMM data access: https://nsls2.github.io/bmm-beamline-manual/data.html
 Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{self.gup}`'''
-        #self.bmmbot.chat_and_pin(text)
+        self.bmmbot.chat_and_pin(text)
+        self.bmmbot.client.conversations_invite(channel=self.bmmbot.non_chat_channel, users='U03HA6MM7HT')
+        ## user: nsls2_machine_monitor    userid: U03HA6MM7HT
         
         
     def start_experiment_from_serialization(self):
@@ -951,6 +953,10 @@ Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{s
         Unset the logger at the end of an experiment.
         '''
 
+        #self.bmmbot.client.conversations_kick(channel=self.bmmbot.non_chat_channel, users='U03HA6MM7HT')
+        ## user: nsls2_machine_monitor    userid: U03HA6MM7HT
+
+        
         if not force:
             if not self.user_is_defined:
                 error_msg('There is not a current experiment!')
