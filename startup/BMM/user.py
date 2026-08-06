@@ -899,7 +899,10 @@ class BMM_User(Borg):
 :atom_symbol: Beamline messages will be posted on #pass-{self.gup}-bmm.
 
 BMM data access: https://nsls2.github.io/bmm-beamline-manual/data.html
-Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{self.gup}`'''
+Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{self.gup}`
+
+Remote desktop sharing: https://nsls2.github.io/bmm-beamline-manual/manage.html#dealing-with-guacamole
+'''
         self.bmmbot.chat_and_pin(text)
         self.bmmbot.client.conversations_invite(channel=self.bmmbot.non_chat_channel, users='U03HA6MM7HT')
         ## user: nsls2_machine_monitor    userid: U03HA6MM7HT

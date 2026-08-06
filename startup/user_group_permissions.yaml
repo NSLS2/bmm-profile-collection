@@ -21,6 +21,7 @@ user_groups:
       - "shb_close_plan"
       - ":^agent_"
       - ":^CMS_"
+      - "populate_overnight_CMS_driven_experiments"
     forbidden_plans:
       - ":^_"  # All plans with names starting with '_'
     allowed_devices:

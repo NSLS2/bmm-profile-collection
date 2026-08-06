@@ -648,8 +648,8 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
         if mode == 'XRD':
             yield from mv(slits3.hsize, 7)
             yield from mv(slits3.vsize, 1)
-            yield from mv(m2_yaw, -0.067)  #  value from 18 June, 2026
-            yield from mv(m2_bender.kill_cmd, 1)            
+            yield from mv(m2.yaw, -0.067)  #  value from 18 June, 2026
+            yield from mv(m2.bender.kill_cmd, 1)            
             report('Finished configuring for XRD', level='bold', slack=True)
         else:
             # return slits to prior size unless changing bewteen focused and collimated, in which
@@ -663,7 +663,7 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
     def cleanup_plan():
         suspenders.clear_suspenders()
         #yield from dcm.kill_plan()
-        yield from mv(m2_bender.kill_cmd, 1)
+        yield from mv(m2.bender.kill_cmd, 1)
         BMMuser.state_to_redis(filename=os.path.join(BMMuser.workspace, '.BMMuser'), prefix='')
         yield from resting_state_plan()
         end = time.time()

@@ -21,6 +21,7 @@ from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
 from bmm_tools.tools.md import proposal_base
 
 from BMM.functions         import present_options
+from BMM.user_ns.base      import bmm_catalog
 from BMM.user_ns.bmm       import kafka
 from BMM.logging           import BMM_log_info, BMM_msg_hook, report
 from BMM.linescans         import linescan, prepare_alignment_scan, fetch_peak_position_via_redis
@@ -259,7 +260,15 @@ class GlancingAngle(Device):
                        'signal'     : 'It',
                        'spinner'    : self.current() })
         target = fetch_peak_position_via_redis(verbose=True)
-        yield from mv(motor, target)
+        if target is None:
+            uid = bmm_catalog[-1].metadata['start']['uid']
+            error_msg(f'Failed to retrieve result of step fit to alignment in {motor.name}.')
+            error_msg(f'To investigate the cause, Bruce will need this UID: {uid}.')
+            whisper('This first thing you should try is to simply rerun the auto_align() plan,')
+            whisper('the problem might have been a failure to retrieve the result of the fit.')
+            return
+        else:
+            yield from mv(motor, target)
         
         
         # table  = user_ns['db'][-1].table()

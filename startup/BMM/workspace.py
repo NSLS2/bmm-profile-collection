@@ -388,8 +388,8 @@ def check_instruments(linkam, lakeshore, xs):
     '''
     verbosebold_msg(f'\t\tverifying availability of instruments ...')
     check_linkam(linkam)
-    check_lakeshore(lakeshore)
-    check_biologic()
+    #check_lakeshore(lakeshore)
+    #check_biologic()
     check_electrometers()
     #check_xspress3(xs)
     check_diode()

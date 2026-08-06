@@ -154,7 +154,7 @@ def pluck(suggested_motor=None):
         unset_mouse_click()
         return(yield from null())
         
-    for m in user_ns['sd'].baseline:
+    for m in user_ns['sd'].baseline or m == 'xafs_spare':
         if m.name == motor_name:
             motor = m
             break
@@ -259,12 +259,12 @@ def fetch_peak_position_via_redis(maxtries=6, verbose=False):
     time.sleep(0.25)
     top = float(rkvs.get('BMM:peakposition').decode('utf8'))
     count = 0
-    #if verbose: print(f"{count = }, {top = }")
     while top < UNSET_PEAK_POSITION:
-        time.sleep(0.1 * 2**count)
+        this_pause = 0.1 * 2**count
+        time.sleep(this_pause)
         top = float(rkvs.get('BMM:peakposition').decode('utf8'))
         count += 1
-        if verbose: print(f"{count = }, {top = }", flush=True)
+        if verbose: print(f"{count = }, {top = }, {this_pause = }", flush=True)
         if count > maxtries:
             return(None)
     return top

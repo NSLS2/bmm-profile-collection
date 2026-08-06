@@ -631,12 +631,18 @@ class BMMDossier():
         '''
         if motor == 'slot':     # deal specially with major instruments
             motor_name = motor
-            position = self.wheel_slot(float(baseline["xafs_wheel"][0]))
-            text = f'              <div>{motor}, {position}</div>\n'
+            try:
+                position = self.wheel_slot(float(baseline["xafs_wheel"][0]))
+                text = f'              <div>{motor}, {position}</div>\n'
+            except:
+                text = f'              <div>{motor}, ---</div>\n'
         elif motor == 'spinner':
             motor_name = motor
-            position = self.spinner(float(baseline["xafs_garot"][0]))
-            text = f'              <div>{motor}, {position}</div>\n'
+            try:
+                position = self.spinner(float(baseline["xafs_garot"][0]))
+                text = f'              <div>{motor}, {position}</div>\n'
+            except:
+                text = f'              <div>{motor}, ---</div>\n'
         else:                   # 'xafs_table' is a long string, special case
             motor_name = motor.replace('xt', 'xafs_table')
             label = motor

@@ -5,7 +5,7 @@ import bluesky.preprocessors as bpp
 import redis
 from bluesky import plan_stubs as bps
 from BMM.edge import change_edge
-from BMM.user_ns.base import profile_configuration
+from BMM.user_ns.base import profile_configuration, startup_dir
 from BMM.user_ns.instruments import slits3
 from BMM.user_ns.motors import xafs_det
 
@@ -293,7 +293,7 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
         time = int(time)
         
         if str(scantype) == 'xanes':
-            with open('/opt/bluesky/things/overnight.txt', 'a', encoding='utf-8') as f:
+            with open(overnight_file, 'a', encoding='utf-8') as f:
                 f.write(f"{now()}  {composition}  {distance} {time}\n")
 
         ga.spin = False
@@ -316,15 +316,17 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
         # if scantype.lower() == 'xanes':
         #     elements = [config['primary_element']]
         # el
-        if element is not None:
-            elements = [element]
-        else:
-            znums = list(Z_number(x) for x in config['detector_distances'].keys())
-            elements = list(element_symbol(x) for x in sorted(znums))
-            ## if mono is currently at the highest energy edge, reverse the element list
-            if BMMuser.element == elements[-1]:
-                elements.reverse()
 
+        # if element is not None:
+        #     elements = [element]
+        # else:
+        #     znums = list(Z_number(x) for x in config['detector_distances'].keys())
+        #     elements = list(element_symbol(x) for x in sorted(znums))
+        #     ## if mono is currently at the highest energy edge, reverse the element list
+        #     if BMMuser.element == elements[-1]:
+        #         elements.reverse()
+
+        elements = ('Ni',)
 
         for i, el in enumerate(elements):
 
@@ -394,11 +396,17 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
     xafs_detx = user_ns['xafs_detx']
     slits3 = user_ns['slits3']
     BMMuser.prompt = False
-    with open('/opt/bluesky/things/cms.json') as f:
-        config = json.load(f)
-    # pprint.pprint(config)
-    # print('\n')
 
+    overnight_file = '/home/xf06bm/overnight.txt'
+    
+    cfile = os.path.join(startup_dir, "cms.json")
+    with open(cfile) as f:
+        config = json.load(f)
+    pprint.pprint(config)
+    print('\n')
+    yield from null()
+    return
+    
     if scantype is not None:
         scantype = str(scantype)
         if 'xanes' in scantype:
@@ -428,7 +436,8 @@ def populate_overnight_CMS_driven_experiments():
     This is intended to be run from the bluesky command line at BMM.
 
     '''
-    with open('/opt/bluesky/things/overnight.txt', 'r') as f:
+    overnight_file = '/opt/bluesky/things/overnight.txt'
+    with open(overnight_file, 'r') as f:
         instructions = f.readlines()
 
     #beamline_tla  = "bmm"

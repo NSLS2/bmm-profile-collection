@@ -430,6 +430,8 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
      else:
           if bender is True:
                yield from mv(m2_bender.kill_cmd, 1)
+               m2_bender.llm.put(-10)  # why is this needed? why do the limits get reset frequently?
+               m2_bender.hlm.put(213000)
                if mode == 'XRD':
                     if abs(m2_bender.user_readback.get() - BMMuser.bender_xrd) > BMMuser.bender_margin: # give some wiggle room for having
                          base.extend([m2_bender, BMMuser.bender_xrd])                                   # recently adjusted the bend

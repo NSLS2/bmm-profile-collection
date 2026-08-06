@@ -655,13 +655,13 @@ if WITH_LAKESHORE:
     ## 1 second updates on scan and ctrl
     lakeshore.temp_scan_rate.put(6)
     lakeshore.ctrl_scan_rate.put(6)
-    lakeshore.ramp_rate.put(0.5)
+    lakeshore.ramp_rate.put(5)
 
     lsmb = LakeShoreMacroBuilder()
     lsmb.description = 'the LakeShore 331 temperature controller'
     lsmb.instrument='LakeShore'
     lsmb.folder = BMMuser.workspace
-
+    
 
 
 

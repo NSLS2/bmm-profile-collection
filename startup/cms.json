@@ -1,8 +1,8 @@
 {
     "slack" : true,
-    "dryrun" : false,
+    "dryrun" : true,
     "primary_element": "Ni",
-    "composition" : "Al/Cu/Ni",
+    "composition" : "AlCuNi",
     "origins": {
                 "Ni": {
                         "T1": {
