@@ -154,7 +154,7 @@ def pluck(suggested_motor=None):
         unset_mouse_click()
         return(yield from null())
         
-    for m in user_ns['sd'].baseline or m == 'xafs_spare':
+    for m in user_ns['sd'].baseline:
         if m.name == motor_name:
             motor = m
             break
