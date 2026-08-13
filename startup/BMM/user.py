@@ -714,7 +714,7 @@ class BMM_User(Borg):
         self.find_or_copy_file(0, 'Linkam stage spreadsheet',          'linkam.xlsx')
         self.find_or_copy_file(0, 'Lakeshore spreadsheet',             'lakeshore.xlsx')
         self.find_or_copy_file(0, 'motor grid spreadsheet',            'grid.xlsx')
-        self.find_or_copy_file(0, 'resonant reflectivity spreadsheet', 'reflectivity.xlsx')
+        self.find_or_copy_file(0, 'resonant refl. spreadsheet',        'reflectivity.xlsx')
         step += 1            
         
         ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--

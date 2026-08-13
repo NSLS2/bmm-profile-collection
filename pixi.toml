@@ -31,7 +31,7 @@ databroker = "==2.0.0"
 epicscorelibs = ">=7.0.7.99.1.1,<8"
 emojis = ">=0.7.0,<0.8"
 bluesky-tiled-plugins = ">=2.0.6"
-ophyd-async = ">=0.13.7,<0.14"
+ophyd-async = ">=0.20.0,<0.21"
 matplotlib-base = ">=3.10"
 nslsii = "==0.11.9"
 

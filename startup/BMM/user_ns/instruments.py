@@ -4,7 +4,7 @@ from bmm_tools.tools.messages import error_msg, whisper
 
 from BMM.functions import run_report, examine_fmbo_motor_group, examine_xafs_motor_group
 from BMM.workspace import rkvs
-from BMM.user_ns.base import profile_configuration
+from BMM.user_ns.base import profile_configuration, sd
 
 run_report(__file__, text='instrument definitions')
 
@@ -15,20 +15,14 @@ WITH_LINKAM       = profile_configuration.getboolean('experiments', 'linkam') # 
 WITH_ENCLOSURE    = profile_configuration.getboolean('experiments', 'enclosure') # False
 WITH_SALTFURNACE  = profile_configuration.getboolean('experiments', 'saltfurnace') # False
 WITH_RADIOLOGICAL = profile_configuration.getboolean('experiments', 'radiological') # False
-if WITH_ENCLOSURE is True:
-    from BMM.user_ns.motors import xafs_refy, xafs_refx
-    run_report('\tAir Science enclosure')
-    xafs_samx = xafs_refx
-    xafs_samy = xafs_refy
-    print(f'{TAB}defined xafs_samx/xafs_samy as xafs_refx/xafs_refy')
-    
-if WITH_SALTFURNACE is True:
-    from BMM.user_ns.motors import xafs_refy, xafs_refx, xafs_det
-    run_report('\tMolten salt furnace')
-    xafs_detx = xafs_refx
-    xafs_dety = xafs_refy
-    xafs_detz = xafs_det
-    print(f'{TAB}defined xafs_detx/xafs_dety/xafs_detz as xafs_refx/xafs_refy/xafs_det')
+
+# if WITH_SALTFURNACE is True:
+#     from BMM.user_ns.motors import xafs_refy, xafs_refx, xafs_det
+#     run_report('\tMolten salt furnace')
+#     xafs_detx = xafs_refx
+#     xafs_dety = xafs_refy
+#     xafs_detz = xafs_det
+#     print(f'{TAB}defined xafs_detx/xafs_dety/xafs_detz as xafs_refx/xafs_refy/xafs_det')
 
     
     

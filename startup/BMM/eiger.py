@@ -19,13 +19,13 @@ md = user_ns["RE"].md
 from nslsii.ad33 import SingleTriggerV33
 from ophyd import Component as C
 
+from BMM.user_ns.base import PROPOSALS
 
-from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
-
+from bmm_tools.tools.messages  import *  # error_msg et al. + boxedtext
 from bmm_tools.devices.pilatus import BMMFileStoreHDF5, BMMHDF5Plugin
 
 class BMMEiger(AreaDetector):
-    image = C(ImagePlugin, "image1:")
+    #image = C(ImagePlugin, "image1:")
     hdf5 = C(
         BMMHDF5Plugin,
         "HDF1:",

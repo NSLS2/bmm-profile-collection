@@ -501,7 +501,7 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
 
         ## these two instruments involve hijacking the refx and refy motors for other purposes,
         ## so the reference stages should NOT be moved
-        if WITH_ENCLOSURE is True or WITH_SALTFURNACE is True:
+        if WITH_ENCLOSURE is True or WITH_SALTFURNACE is True or profile_configuration.getboolean("experiments", "use_reference") is False:
             no_ref = True
 
         cprint('[yellow2]bragg_small_move[/yellow2]')

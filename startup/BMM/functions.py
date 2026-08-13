@@ -8,7 +8,7 @@ from rich.panel import Panel
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
-from BMM.user_ns.base import profile_configuration, BMM
+from BMM.user_ns.base import profile_configuration, BMM, sd
 
 import redis
 from redis_json_dict import RedisJSONDict
@@ -303,7 +303,6 @@ def bounds(base=0.5, coef=0.25, end='14k', edge=0.3):
     answer += f'times  =     {base:.2f}  {base:.2f}  {base:.2f}  {1/time:.2f}k  {1/time:.2f}k'
 
     print(answer)
-
 
 
 

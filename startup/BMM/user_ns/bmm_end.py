@@ -31,7 +31,7 @@ from BMM.motor_status import motor_status, ms # , motor_metadata, xrd_motors, xr
 run_report('\t'+'FMBO motor tools')
 from bmm_tools.devices.fmbo import FMBO_status
 
-from BMM.user_ns.base import profile_configuration
+from BMM.user_ns.base import profile_configuration, sd
 from BMM.desc_string  import set_desc_strings
 if profile_configuration.getboolean('miscellaneous', 'set_desc_strings'):
     run_report('\t'+'setting motor description strings')
@@ -45,6 +45,32 @@ run_report('\t'+'support for wafer samples')
 from BMM.wafer import Wafer
 wafer = Wafer()
 
+
+############################################################
+#  _____ _   _ _____  _     _____ _____ _   _______ _____  #
+# |  ___| \ | /  __ \| |   |  _  /  ___| | | | ___ \  ___| #
+# | |__ |  \| | /  \/| |   | | | \ `--.| | | | |_/ / |__   #
+# |  __|| . ` | |    | |   | | | |`--. \ | | |    /|  __|  #
+# | |___| |\  | \__/\| |___\ \_/ /\__/ / |_| | |\ \| |___  #
+# \____/\_| \_/\____/\_____/\___/\____/ \___/\_| \_\____/  #
+############################################################
+                                                        
+# Enclosure motors need to be defined /after/ motors, instruments, AND metadata are defined
+
+def motor_by_name(motor):
+    for m in sd.baseline:
+        if m.name == motor:
+            return m
+    return None
+
+from BMM.user_ns.instruments import WITH_ENCLOSURE
+if WITH_ENCLOSURE is True:
+    #from BMM.user_ns.motors import xafs_refy, xafs_refx
+    run_report('\tAir Science enclosure')
+    xafs_samx = motor_by_name(profile_configuration.get('experiments', 'enclosure_x'))
+    xafs_samy = motor_by_name(profile_configuration.get('experiments', 'enclosure_y'))
+    print(f'\t\t\tdefined xafs_samx/xafs_samy as {xafs_samx.name}/{xafs_samy.name}')
+    
 
 
 ###########################################################################################
@@ -69,6 +95,7 @@ gawheel.cleanup = 'yield from mv(xafs_x, samx, xafs_y, samy, xafs_pitch, samp, x
 gawheel.initialize = '''samx, samy, samp = xafs_x.position, xafs_y.position, xafs_pitch.position
     if ga.ready_to_start() is not True:
         return(yield from null())'''
+
 
 
 #########################################################################################
