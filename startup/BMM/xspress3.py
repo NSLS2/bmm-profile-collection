@@ -110,8 +110,9 @@ class BMMXspress3HDF5Plugin(Xspress3HDF5Plugin):
         hangs.  Also to add some indication on screen for what is happening.
         """
         whisper("                        warming up the hdf5 plugin...")
-        self.enable.set(1).wait()
-
+        #self.enable.set(1).wait()
+        yield from mv(self.enable, 1)
+        
         # JOSH: proposed changes for new IOC
         sigs = OrderedDict([(self.parent.cam.array_callbacks, 1),
                             (self.parent.cam.image_mode, "Single"),
@@ -132,7 +133,8 @@ class BMMXspress3HDF5Plugin(Xspress3HDF5Plugin):
             sig.set(val).wait()
             ttime.sleep(0.1)  # abundance of caution
 
-        self.parent.cam.acquire.set(1).wait()
+        #self.parent.cam.acquire.set(1).wait()
+        yield from mv(self.parent.cam.acquire, 1)
         
         # JOSH: do we need more than 2 seconds here?
         #       adding more time here helps!
@@ -141,7 +143,8 @@ class BMMXspress3HDF5Plugin(Xspress3HDF5Plugin):
 
         for sig, val in reversed(list(original_vals.items())):
             ttime.sleep(0.1)
-            sig.set(val).wait()
+            #sig.set(val).wait()
+            yield from mv(sig, val)
         whisper("                        done")
 
     def unstage(self):
