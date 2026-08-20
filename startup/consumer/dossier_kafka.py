@@ -20,11 +20,11 @@ from nslsii.utils import open_redis_client
 
 
 if not os.environ.get('AZURE_TESTING'):
-    #redis_host = profile_configuration.get('services', 'bmm_redis')
-    redis_host = profile_configuration.get('services', 'nsls2_redis')
-    redis_port = profile_configuration.get('services', 'redis_port')
-    redis_ssl  = profile_configuration.get('services', 'redis_ssl')
-    redis_db   = profile_configuration.get('services', 'bmm_redis')
+    #redis_host = profile_configuration['services']['bmm_redis']
+    redis_host = profile_configuration['services']['nsls2_redis']
+    redis_port = profile_configuration['services']['redis_port']
+    redis_ssl  = profile_configuration['services']['redis_ssl']
+    redis_db   = profile_configuration['services']['bmm_redis']
 else:
     redis_host = '127.0.0.1'
 class NoRedis():
@@ -42,7 +42,7 @@ class NoRedis():
 all_references = json.loads(rkvs['BMM:reference:mapping'].decode('UTF8'))
 
 
-startup_dir = profile_configuration.get('services', 'startup')
+startup_dir = profile_configuration['services']['startup']
 
 def log_entry(logger, message):
     #if logger.name == 'BMM file manager logger' or logger.name == 'bluesky_kafka':

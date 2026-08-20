@@ -210,7 +210,7 @@ def configure_xafs_y(load='light'):
         toss = EpicsSignal(f'XF:06BM-ES{{MC:09-Ax:7}}Mtr.{k}', name='toss')
         toss.put(v)
 
-WITH_DISPLEX = profile_configuration.getboolean('experiments', 'displex') # False
+WITH_DISPLEX = profile_configuration['experiments']['displex'] # False
 if WITH_DISPLEX is True:
     configure_xafs_y('heavy')
 else:

@@ -10,11 +10,11 @@ run_report(__file__, text='instrument definitions')
 
 TAB = '\t\t\t'
 
-WITH_LAKESHORE    = profile_configuration.getboolean('experiments', 'lakeshore') # False
-WITH_LINKAM       = profile_configuration.getboolean('experiments', 'linkam') # True
-WITH_ENCLOSURE    = profile_configuration.getboolean('experiments', 'enclosure') # False
-WITH_SALTFURNACE  = profile_configuration.getboolean('experiments', 'saltfurnace') # False
-WITH_RADIOLOGICAL = profile_configuration.getboolean('experiments', 'radiological') # False
+WITH_LAKESHORE    = profile_configuration['experiments']['lakeshore'] # False
+WITH_LINKAM       = profile_configuration['experiments']['linkam'] # True
+WITH_ENCLOSURE    = profile_configuration['experiments']['enclosure'] # False
+WITH_SALTFURNACE  = profile_configuration['experiments']['saltfurnace'] # False
+WITH_RADIOLOGICAL = profile_configuration['experiments']['radiological'] # False
 
 # if WITH_SALTFURNACE is True:
 #     from BMM.user_ns.motors import xafs_refy, xafs_refx, xafs_det
@@ -71,7 +71,7 @@ from BMM.user_ns.bmm import BMMuser
 from BMM.user_ns.motors import mcs8_motors, xafs_motors
 
 ## collimating mirror
-WITH_M1    = profile_configuration.getboolean('miscellaneous', 'with_m1') # False
+WITH_M1    = profile_configuration['miscellaneous']['with_m1'] # False
 
 if WITH_M1:
     print(f'{TAB}FMBO motor group: m1')
@@ -404,7 +404,7 @@ xafs_ref.mapping = {'empty0': [0,  1, 'empty0', 'empty', True],
 
 if WITH_RADIOLOGICAL:
     try:
-        uranium = profile_configuration.get('experiments', 'u_ref').split()
+        uranium = profile_configuration['experiments']['u_ref'].split()
         uranium[0] = int(uranium[0])
         uranium[1] = int(uranium[1])
         uranium[4] = bool(uranium[3])
@@ -415,7 +415,7 @@ if WITH_RADIOLOGICAL:
         error_msg('Unable to read U reference configuration from INI file')
         pass
     try:
-        technicium = profile_configuration.get('experiments', 'tc_ref').split()
+        technicium = profile_configuration['experiments']['tc_ref'].split()
         technicium[0] = int(technicium[0])
         technicium[1] = int(technicium[1])
         technicium[4] = bool(technicium[3])
@@ -426,7 +426,7 @@ if WITH_RADIOLOGICAL:
         error_msg('Unable to read Tc reference configuration from INI file')
         pass
     try:
-        thorium = profile_configuration.get('experiments', 'th_ref').split()
+        thorium = profile_configuration['experiments']['th_ref'].split()
         thorium[0] = int(thorium[0])
         thorium[1] = int(thorium[1])
         thorium[4] = bool(thorium[3])
@@ -459,7 +459,7 @@ def set_reference_wheel(position=None):
 if rkvs.get('BMM:ref:outer') is None:
     xafs_ref.outer_position = 0.0
     error_msg('\t\t\t\tReference wheel is not aligned!')
-elif profile_configuration.getboolean('experiments', 'use_reference') is True:    
+elif profile_configuration['experiments']['use_reference'] is True:    
     set_reference_wheel(float(rkvs.get('BMM:ref:outer')))
 #    xafs_ref.outer_position   = float(rkvs.get('BMM:ref:outer'))
 #xafs_ref.inner_position = xafs_ref.outer_position + 26.5 # xafs_ref.outer_position + ~26.5
@@ -687,9 +687,9 @@ gmb.folder = BMMuser.workspace
 ###################################################################################################################################
 
 refldet = None
-if profile_configuration.getboolean('detectors', 'pilatus') is True:
+if profile_configuration['detectors']['pilatus'] is True:
     refldet = 'pilatus'
-if profile_configuration.getboolean('detectors', 'eiger') is True:
+if profile_configuration['detectors']['eiger'] is True:
     refldet = 'eiger'
 
 refl = None

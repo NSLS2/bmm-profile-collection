@@ -348,7 +348,7 @@ def bounds(base=0.5, coef=0.25, end='14k', edge=0.3):
 
 
 # def facility_md():
-#     nsls2_redis = profile_configuration.get('services', 'nsls2_redis')
+#     nsls2_redis = profile_configuration['services']['nsls2_redis']
 #     redis_client = redis.Redis(host=nsls2_redis)
 #     the_dict = RedisJSONDict(redis_client=redis_client, prefix='xas-')
 #     return the_dict

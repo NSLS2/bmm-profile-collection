@@ -430,7 +430,7 @@ class BMMDanteSingleTrigger(SingleTriggerV33, BMMDante):
         #self.channel8 = DanteChannel(self.prefix, 8)  # Abdul says it's a 7-element detector
 
     def set_rois(self, start, size):
-        bmm_redis = profile_configuration.get('services', 'bmm_redis')
+        bmm_redis = profile_configuration['services']['bmm_redis']
         rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
         for i in range(1,8):
             thischan = getattr(self, f'channel{i}')

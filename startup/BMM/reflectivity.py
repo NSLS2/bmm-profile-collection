@@ -10,10 +10,10 @@ from BMM.user_ns.base import profile_configuration
 from BMM.user_ns.motors import xafs_spare
 
 def it_in():
-    yield from mv(xafs_spare, profile_configuration.getfloat('experiments', 'it_in'))
+    yield from mv(xafs_spare, profile_configuration['experiments']['it_in'])
     
 def it_out():
-    yield from mv(xafs_spare, profile_configuration.getfloat('experiments', 'it_out'))
+    yield from mv(xafs_spare, profile_configuration['experiments']['it_out'])
     
 
 

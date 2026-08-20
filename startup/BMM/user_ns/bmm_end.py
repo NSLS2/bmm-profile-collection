@@ -33,7 +33,7 @@ from bmm_tools.devices.fmbo import FMBO_status
 
 from BMM.user_ns.base import profile_configuration, sd
 from BMM.desc_string  import set_desc_strings
-if profile_configuration.getboolean('miscellaneous', 'set_desc_strings'):
+if profile_configuration['miscellaneous']['set_desc_strings']:
     run_report('\t'+'setting motor description strings')
     set_desc_strings()
 
@@ -67,8 +67,8 @@ from BMM.user_ns.instruments import WITH_ENCLOSURE
 if WITH_ENCLOSURE is True:
     #from BMM.user_ns.motors import xafs_refy, xafs_refx
     run_report('\tAir Science enclosure')
-    xafs_samx = motor_by_name(profile_configuration.get('experiments', 'enclosure_x'))
-    xafs_samy = motor_by_name(profile_configuration.get('experiments', 'enclosure_y'))
+    xafs_samx = motor_by_name(profile_configuration['experiments']['enclosure_x'])
+    xafs_samy = motor_by_name(profile_configuration['experiments']['enclosure_y'])
     print(f'\t\t\tdefined xafs_samx/xafs_samy as {xafs_samx.name}/{xafs_samy.name}')
     
 
@@ -365,7 +365,7 @@ from BMM.raster import raster #, difference_data
 ################################################################################################################
                                                                                                            
 
-if profile_configuration.getboolean('experiments', 'use_larch') is True:
+if profile_configuration['experiments']['use_larch'] is True:
     run_report('\t'+'Larch')
     from BMM.larch_interface import Pandrosus, Kekropidai
     ## examples that only work at BMM...
@@ -414,6 +414,10 @@ if BMMuser.element is None:
 #########################################################################
                                                                     
       
+run_report('\t'+'query settings')
+from BMM.settings import settings
+
+
 run_report('\t'+'final setup: Xspress3')
 from BMM.user_ns.dwelltime import with_xspress3, use_7element, use_4element, use_1element
 from BMM.user_ns.detectors import xs4, xs1, xs7, xs
@@ -430,13 +434,13 @@ if BMMuser.element is not None and with_xspress3 is True: # make sure Xspress3 i
 
 run_report('\t'+'final setup: cameras')
 from BMM.user_ns.detectors import xascam, xrdcam, anacam
-if profile_configuration.getboolean('services', 'proposal_folders_available'):
+if profile_configuration['services']['proposal_folders_available']:
     xascam._root = os.path.join(BMMuser.folder, 'snapshots')
     xrdcam._root = os.path.join(BMMuser.folder, 'snapshots')
-#if profile_configuration.getboolean('cameras', 'anacam') is False or not is_re_worker_active():
+#if profile_configuration['cameras']['anacam'] is False or not is_re_worker_active():
 #    anacam._root = os.path.join(BMMuser.folder, 'snapshots')
 
-     
+
 run_report('\t'+'checking motor connections')
 from BMM.edge import all_connected
 if all_connected(True) is False:
@@ -454,7 +458,7 @@ if lmb  is not None: lmb.folder  = BMMuser.folder     # Linkam stage
 if lsmb is not None: lsmb.folder = BMMuser.folder     # LakeShore 331 temperature controller
 if gmb  is not None: gmb.folder  = BMMuser.folder     # generic motor grid
 
-if profile_configuration.getboolean('experiments', 'cms'):
+if profile_configuration['experiments']['cms']:
     run_report('\t'+'CMS experiment')
     from BMM.agent_plans import CMS_driven_measurement, populate_overnight_CMS_driven_experiments
 

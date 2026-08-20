@@ -29,11 +29,11 @@ from bmm_tools.tools.db import file_resource
 
 # #import redis
 # if not os.environ.get('AZURE_TESTING'):
-#     #redis_host = profile_configuration.get('services', 'bmm_redis')
-#     redis_host = profile_configuration.get('services', 'nsls2_redis')
-#     redis_port = profile_configuration.get('services', 'redis_port')
-#     redis_ssl  = profile_configuration.get('services', 'redis_ssl')
-#     redis_db   = profile_configuration.get('services', 'bmm_redis')
+#     #redis_host = profile_configuration['services']['bmm_redis']
+#     redis_host = profile_configuration['services']['nsls2_redis']
+#     redis_port = profile_configuration['services']['redis_port']
+#     redis_ssl  = profile_configuration['services']['redis_ssl']
+#     redis_db   = profile_configuration['services']['bmm_redis']
 # else:
 #     redis_host = '127.0.0.1'
 # class NoRedis():
@@ -196,7 +196,7 @@ def manage_files_from_kafka_messages(beamline_acronym):
 
             elif 'show_experimental_folder' in message:
                 fd = facility_dict()
-                print(os.path.join(profile_configuration.get('services', 'proposals'), fd['cycle'], fd['data_session']))
+                print(os.path.join(profile_configuration['services']['proposals'], fd['cycle'], fd['data_session']))
 
             elif 'describe_slack' in message:
                 describe_slack()

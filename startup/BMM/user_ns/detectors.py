@@ -24,15 +24,15 @@ except ImportError:
 run_report(__file__, text='detectors and cameras')
 
 
-if profile_configuration.getboolean('services', 'proposal_folders_available'):
+if profile_configuration['services']['proposal_folders_available']:
     from bmm_tools.devices.usb_camera import BMMUVCSingleTrigger
-    with_anacam = profile_configuration.getboolean('cameras', 'anacam') # True
-    with_cam1   = profile_configuration.getboolean('cameras', 'usb1')   # True
-    with_cam2   = profile_configuration.getboolean('cameras', 'usb2')   # True
-    with_webcam = profile_configuration.getboolean('cameras', 'webcam') # True
-    with_cam7   = profile_configuration.getboolean('cameras', 'cam7')   # True
-    with_cam8   = profile_configuration.getboolean('cameras', 'cam8')   # True
-    with_cam9   = profile_configuration.getboolean('cameras', 'cam9')   # True
+    with_anacam = profile_configuration['cameras']['anacam'] # True
+    with_cam1   = profile_configuration['cameras']['usb1']   # True
+    with_cam2   = profile_configuration['cameras']['usb2']   # True
+    with_webcam = profile_configuration['cameras']['webcam'] # True
+    with_cam7   = profile_configuration['cameras']['cam7']   # True
+    with_cam8   = profile_configuration['cameras']['cam8']   # True
+    with_cam9   = profile_configuration['cameras']['cam9']   # True
 else:
     cprint('[red1]\t\tProposal folders unavailable[/red1]')
     cprint('[red1]\t\tDisabling all cameras[/red1]')
@@ -179,7 +179,7 @@ except Exception as E:
 # even if the quadem is completely absent.
 from BMM.workspace import wa, TAB
 freakout = 0
-if profile_configuration.getboolean('electrometers', 'quadem') is True and quadem1 is None:
+if profile_configuration['electrometers']['quadem'] is True and quadem1 is None:
     freakout = 1
 if freakout == 1:
     error_msg(f'{TAB}*** Uh oh!  You have configured the quadem incorrectly.')
@@ -404,7 +404,7 @@ def prep_pilatus(pilatus):
 from BMM.user_ns.dwelltime import with_pilatus
 from BMM.user_ns.dcm import dcm
 if with_pilatus is True:
-    from bmm_tools.devices.pilatus import BMMPilatusSingleTrigger,  BMMPilatusTIFFSingleTrigger
+    from bmm_tools.devices.pilatus import BMMPilatusSingleTrigger, BMMPilatusTIFFSingleTrigger
     run_report('\t'+'Pilatus')
 
     pvbase = "XF:06BMB-ES{Det:PIL100k}:"
@@ -463,69 +463,74 @@ if with_pilatus is True:
 
 
 eiger = None
-    
+
+eiger_use_async = False
+
 from BMM.user_ns.dwelltime import with_eiger
 if with_eiger is True:
-    from BMM.eiger_async import BMMEiger, EigerDetector
-    from nslsii.ophyd_async.providers import NSLS2PathProvider
-    from ophyd_async.core import init_devices
-    
-    run_report('\t'+'Eiger')
 
+    run_report('\t'+'Eiger')
     pvbase = "XF:06BM-ES{Det-Eiger:1}"
 
+    if eiger_use_async is True:
 
-    for x in ('Pva1', 'HDF1', 'ROI1', 'ROI2', 'ROI3', 'ROI4', 'Stats1' , 'Stats2' , 'Stats3' , 'Stats4', 'ROIStat1',):  #'image1', 
-        EpicsSignal(f'{pvbase}{x}:EnableCallbacks', name='').put(1)
-        # turn on all useful common plugins
-        #    EpicsSignal('XF:06BM-ES{Det-Eiger:1}image1:EnableCallbacks', name='').put(1)
-        # and so on...
+        from BMM.eiger_async import BMMEiger, EigerDetector
+        from nslsii.ophyd_async.providers import NSLS2PathProvider
+        from ophyd_async.core import init_devices
 
-    ## following example of  https://github.com/NSLS2/cdi-profile-collection/blob/main/startup/30-area-detectors.py#L152
-    pp = NSLS2PathProvider(RE.md)
-    with init_devices():
-        eiger = EigerDetector(
-            prefix=pvbase, name="eiger1m-1", path_provider=pp
-        )
-    ## make sure stream mode is enabled for file saving
-#    await eiger.driver.stream_enable.set(True)
-#    await eiger.driver.data_source.set(2)
+        for x in ('Pva1', 'HDF1', 'ROI1', 'ROI2', 'ROI3', 'ROI4', 'Stats1' , 'Stats2' , 'Stats3' , 'Stats4', 'ROIStat1', 'image1',):
+            EpicsSignal(f'{pvbase}{x}:EnableCallbacks', name='').put(1)
+            # turn on all useful common plugins
+            #    EpicsSignal('XF:06BM-ES{Det-Eiger:1}image1:EnableCallbacks', name='').put(1)
+            # and so on...
+        for x in ('StreamEnable', 'DataSource'):
+            EpicsSignal(f'{pvbase}cam1::{x}', name='').put(1)
 
-    # from BMM.eiger import BMMEigerSingleTrigger
-    # ## make sure various plugins are turned on
-    # for x in ('Pva1', 'HDF1', 'ROI1', 'ROI2', 'ROI3', 'ROI4', 'Stats1' , 'Stats2' , 'Stats3' , 'Stats4', 'ROIStat1',):  #'image1', 
-    #     EpicsSignal(f'{pvbase}{x}:EnableCallbacks', name='').put(1)
-    #     # turn on all useful common plugins
-    #     #    EpicsSignal('XF:06BM-ES{Det-Eiger:1}image1:EnableCallbacks', name='').put(1)
-    #     # and so on...
-    # ## make sure stream mode is enabled for file saving
-    # for x in ('StreamEnable', 'DataSource'):
-    #     EpicsSignal(f'{pvbase}cam1::{x}', name='').put(1)
-        
-        
-    # eiger = BMMEigerSingleTrigger(pvbase, name="eiger4m-1", read_attrs=["hdf5"])
-    # eiger.stats.kind = "omitted"
-    # eiger.roi2.kind  = "hinted"
-    # eiger.roi3.kind  = "hinted"
-    # eiger.roi2.name  = "diffuse"
-    # eiger.roi3.name  = "specular"
-    # #if eiger.hdf5.run_time.get() < 0.1:
-    # #    eiger.hdf5.warmup()
+        ## following example of  https://github.com/NSLS2/cdi-profile-collection/blob/main/startup/30-area-detectors.py#L152
+        pp = NSLS2PathProvider(RE.md)
+        with init_devices():
+            eiger = EigerDetector(
+                prefix=pvbase, name="eiger1m-1", path_provider=pp
+            )
+        ## make sure stream mode is enabled for file saving
+        # await eiger.driver.stream_enable.set(True)
+        # await eiger.driver.data_source.set(2)
 
-    # ## starting ROI values
-    # roivalues = {'ROI2:MinX': 501,  'ROI2:SizeX': 501, 'ROI2:MinY': 501, 'ROI2:SizeY': 501,
-    #              'ROI3:MinX': 1501, 'ROI3:SizeX': 501, 'ROI3:MinY': 501, 'ROI3:SizeY': 501, }
-    # for k,v in roivalues.items():
-    #     EpicsSignal(f'{pvbase}{k}',  name='').put(v)
-    #     EpicsSignal(f'{pvbase}{k.replace("ROI", "ROIStat1:")}',  name='').put(v)
-    #     # this does 
-    #     #   EpicsSignal('XF:06BM-ES{Det-Eiger:1}ROI2:MinX',  name='').put(50)
-    #     #   EpicsSignal('XF:06BM-ES{Det-Eiger:1}ROIStat1:2:MinX',  name='').put(50)
-    #     # and so on...
-    # #EpicsSignal(f'{pvbase}ROIStat1:2:Use', name='').put(1)
-    # #EpicsSignal(f'{pvbase}ROIStat1:3:Use', name='').put(1)
+    else:
 
-    # eiger.hdf5.stage_sigs['num_capture'] = 1
+        from bmm_tools.devices.eiger import BMMEigerSingleTrigger
+        ## make sure various plugins are turned on
+        for x in ('Pva1', 'HDF1', 'ROI1', 'ROI2', 'ROI3', 'ROI4', 'Stats1' , 'Stats2' , 'Stats3' , 'Stats4', 'ROIStat1',):  #'image1', 
+            EpicsSignal(f'{pvbase}{x}:EnableCallbacks', name='').put(1)
+            # turn on all useful common plugins
+            #    EpicsSignal('XF:06BM-ES{Det-Eiger:1}image1:EnableCallbacks', name='').put(1)
+            # and so on...
+        ## make sure stream mode is enabled for file saving
+
+
+        eiger = BMMEigerSingleTrigger(pvbase, name="eiger1m-1", read_attrs=["hdf5"])
+        eiger.stats.kind = "omitted"
+        eiger.roi2.kind  = "hinted"
+        eiger.roi3.kind  = "hinted"
+        eiger.roi2.name  = "diffuse"
+        eiger.roi3.name  = "specular"
+        if eiger.hdf5.array_size.get().height == 0:
+            eiger.hdf5.warmup()
+
+        ## starting ROI values
+        roivalues = {'ROI2:MinX': 501,  'ROI2:SizeX': 501, 'ROI2:MinY': 501, 'ROI2:SizeY': 501,
+                     'ROI3:MinX': 1501, 'ROI3:SizeX': 501, 'ROI3:MinY': 501, 'ROI3:SizeY': 501, }
+        for k,v in roivalues.items():
+            EpicsSignal(f'{pvbase}{k}',  name='').put(v)
+            EpicsSignal(f'{pvbase}{k.replace("ROI", "ROIStat1:")}',  name='').put(v)
+            # this does 
+            #   EpicsSignal('XF:06BM-ES{Det-Eiger:1}ROI2:MinX',  name='').put(50)
+            #   EpicsSignal('XF:06BM-ES{Det-Eiger:1}ROIStat1:2:MinX',  name='').put(50)
+            # and so on...
+        #EpicsSignal(f'{pvbase}ROIStat1:2:Use', name='').put(1)
+        #EpicsSignal(f'{pvbase}ROIStat1:3:Use', name='').put(1)
+
+        eiger.hdf5.stage_sigs['num_capture'] = 1
 
     
 ####################################
@@ -711,7 +716,7 @@ def xspress3_set_detector(this=None):
         rkvs.set('BMM:xspress3', 7)
         return xs7
 
-primary = profile_configuration.getint('sdd', 'primary')  # primary SDD detector
+primary = profile_configuration['sdd']['primary']  # primary SDD detector
 if primary == 4 and 'xs3-7-1' in xs_app_dir.get():
     error_msg('\tYou have selected the 4-element detector as primary, but the 7-element IOC is running!')
     warning_msg('\tProceeding with the 7-element detector as primary.')

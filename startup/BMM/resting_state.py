@@ -100,7 +100,7 @@ def resting_state():
     ##if is_re_worker_active() is False:
     ##    matplotlib.use('Qt5Agg')
     resting_redis()
-    if profile_configuration.getboolean('sdd', 'xspress3') is True:
+    if profile_configuration['sdd']['xspress3'] is True:
         xs1 = user_ns['xs1']
         xs1.channel08.get_mcaroi(mcaroi_number=16).kind = 'hinted'
         xs1.channel08.get_mcaroi(mcaroi_number=16).total_rbv.kind = 'hinted'
@@ -153,7 +153,7 @@ def resting_state_plan():
     ##if is_re_worker_active() is False:
     ##    matplotlib.use('Qt5Agg')
     resting_redis()
-    if profile_configuration.getboolean('sdd', 'xspress3') is True:
+    if profile_configuration['sdd']['xspress3'] is True:
         xs1 = user_ns['xs1']
         xs1.channel08.get_mcaroi(mcaroi_number=16).kind = 'hinted'
         xs1.channel08.get_mcaroi(mcaroi_number=16).total_rbv.kind = 'hinted'

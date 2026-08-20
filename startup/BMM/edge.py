@@ -501,7 +501,7 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
 
         ## these two instruments involve hijacking the refx and refy motors for other purposes,
         ## so the reference stages should NOT be moved
-        if WITH_ENCLOSURE is True or WITH_SALTFURNACE is True or profile_configuration.getboolean("experiments", "use_reference") is False:
+        if WITH_ENCLOSURE is True or WITH_SALTFURNACE is True or profile_configuration["experiments"]["use_reference"] is False:
             no_ref = True
 
         cprint('[yellow2]bragg_small_move[/yellow2]')
@@ -516,7 +516,7 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
         yield from mv(dcm.bragg.acceleration, BMMuser.acc_fast)
 
         ## RIGHT HERE: set Pilatus threshold to energy - 2000 eV
-        if profile_configuration.getboolean('detectors', 'pilatus') is True:
+        if profile_configuration['detectors']['pilatus'] is True:
             pilatus.threshold_energy.put(energy+target-2000)
         
         ## verify that dcm.para has arrived in place.  if not, presume

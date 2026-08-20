@@ -24,7 +24,7 @@ from bmm_tools.tools.periodictable import Z_number, edge_number
 import pprint
 
 # import redis
-# bmm_redis = profile_configuration.get('services', 'bmm_redis')
+# bmm_redis = profile_configuration['services']['bmm_redis']
 # rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
 
 
@@ -964,7 +964,7 @@ class XRF():
         self.reset_rois()
 
     def reset_rois(self):
-        startup_dir = profile_configuration.get('services', 'startup')
+        startup_dir = profile_configuration['services']['startup']
         with open(os.path.join(startup_dir, 'rois.json'), 'r') as fl:
             js = fl.read()
         self.allrois = json.loads(js)

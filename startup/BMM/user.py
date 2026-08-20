@@ -803,8 +803,8 @@ class BMM_User(Borg):
             new_md = sync_experiment(gup,
                                      'bmm',
                                      verbose=False,
-                                     redis_db=profile_configuration.get('services', 'xas_redis'),
-                                     redis_ssl=profile_configuration.get('services', 'redis_ssl'))
+                                     redis_db=profile_configuration['services']['xas_redis'],
+                                     redis_ssl=profile_configuration['services']['redis_ssl'])
             bmm_tools.tools.md.common_md = new_md
             facility_dict = new_md
 
@@ -830,10 +830,10 @@ class BMM_User(Borg):
 
         if name in BMM_STAFF:
             user_folder = os.path.join(os.getenv('HOME'), 'Data', 'Staff', name)
-            user_workspace = os.path.join(profile_configuration.get('services', 'workspace'), 'Staff', name, date)
+            user_workspace = os.path.join(profile_configuration['services']['workspace'], 'Staff', name, date)
         else:
             user_folder = os.path.join(os.getenv('HOME'), 'Data', 'Visitors', name)
-            user_workspace = os.path.join(profile_configuration.get('services', 'workspace'), 'Visitors', name, date)
+            user_workspace = os.path.join(profile_configuration['services']['workspace'], 'Visitors', name, date)
         #if not os.path.isdir(user_folder):
         #    os.makedirs(user_folder)
         if not os.path.isdir(user_workspace):
@@ -842,7 +842,7 @@ class BMM_User(Borg):
             os.makedirs(os.path.join(user_workspace, 'templates'))
         self.workspace = user_workspace
 
-        if profile_configuration.getboolean('services', 'proposal_folders_available'):
+        if profile_configuration['services']['proposal_folders_available']:
             self.new_experiment(lustre_root, saf=saf, gup=gup, name=name)
         else:
             cprint('[red1]\t\tProposal folders unavailable[/red1]')
@@ -858,7 +858,7 @@ class BMM_User(Borg):
             # set correctly later in the startup process
             pass
 
-        if profile_configuration.getboolean('services', 'proposal_folders_available'):
+        if profile_configuration['services']['proposal_folders_available']:
             if kafka.file_exists(folder=proposal_base(), filename='.introduction_made', number=False) is False:
                 #self.welcome_experimenters()
                 kafka.message({'touch': os.path.join(proposal_base(), '.introduction_made')})
@@ -938,7 +938,7 @@ Remote desktop sharing: https://nsls2.github.io/bmm-beamline-manual/manage.html#
         print('PI            = %s' % self.name)
         print('Experimenters = %s' % '\n'.join(experimenters))
         print('Date          = %s' % self.date)
-        if profile_configuration.getboolean('services', 'proposal_folders_available'):
+        if profile_configuration['services']['proposal_folders_available']:
             print('Data folder   = %s' % proposal_base())
         else:
             cprint('Data folder   = %s' % '[grey58]proposal folders are unavailable[/grey58]')

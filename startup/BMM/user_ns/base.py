@@ -1,6 +1,7 @@
 import nslsii
 from nslsii.utils import open_redis_client
 import os, time, datetime, configparser
+import tomllib
 from collections import deque
 
 from event_model import pack_datum_page
@@ -25,20 +26,38 @@ except ImportError:
 ## the intent here is to return $HOME/.profile_collection/startup
 #startup_dir = os.path.split(os.path.split(os.path.split(__file__)[0])[0])[0]
 startup_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-
     
-cfile = os.path.join(startup_dir, "BMM_configuration.ini")
-profile_configuration = configparser.ConfigParser(interpolation=None)
+# cfile = os.path.join(startup_dir, "BMM_configuration.ini")
+# profile_configuration = configparser.ConfigParser(interpolation=None)
+# def reload_profile_configuration():
+#     profile_configuration.read_file(open(cfile))
+# reload_profile_configuration()
+    
+# os.environ['BLUESKY_KAFKA_BOOTSTRAP_SERVERS'] = profile_configuration.get('services', 'kafka')
+
+# WORKSPACE = profile_configuration.get('services', 'workspace')
+# PROPOSALS = profile_configuration.get('services', 'proposals')
+# BMM       = profile_configuration.get('services', 'bmm')
+
+cfile = os.path.join(startup_dir, "BMM_configuration.toml")
+
+profile_configuration = None
 def reload_profile_configuration():
-    profile_configuration.read_file(open(cfile))
-reload_profile_configuration()
+    with open(cfile, "rb") as f:
+        profile_configuration = tomllib.load(f)
+    return profile_configuration
+profile_configuration = reload_profile_configuration()
     
-os.environ['BLUESKY_KAFKA_BOOTSTRAP_SERVERS'] = profile_configuration.get('services', 'kafka')
+os.environ['BLUESKY_KAFKA_BOOTSTRAP_SERVERS'] = profile_configuration['services']['kafka']
 
-WORKSPACE = profile_configuration.get('services', 'workspace')
-PROPOSALS = profile_configuration.get('services', 'proposals')
-BMM       = profile_configuration.get('services', 'bmm')
-    
+WORKSPACE = profile_configuration['services']['workspace']
+PROPOSALS = profile_configuration['services']['proposals']
+BMM       = profile_configuration['services']['bmm']
+
+
+
+
+
 #print('just read config file', flush=True)
 
 
@@ -57,9 +76,9 @@ dummy = dummy_broker()
 
 use_kafka = True
 #print('about to call configure_base', flush=True)
-#print(f"URL: {profile_configuration.get('services', 'nsls2_redis')}")
-#print(f"Port: {profile_configuration.get('services', 'redis_port')}")
-#print(f"use_ssl: {profile_configuration.get('services', 'redis_ssl')}")
+#print(f"URL: {profile_configuration['services']['nsls2_redis']}")
+#print(f"Port: {profile_configuration['services']['redis_port']}")
+#print(f"use_ssl: {profile_configuration['services']['redis_ssl']}")
 
 if not is_re_worker_active():
     ip = get_ipython()
@@ -67,9 +86,9 @@ if not is_re_worker_active():
                           'bmm',
                           configure_logging=True,
                           publish_documents_with_kafka=use_kafka,
-                          redis_url=profile_configuration.get('services', 'nsls2_redis'),
-                          redis_port=profile_configuration.get('services', 'redis_port'),
-                          redis_ssl=profile_configuration.get('services', 'redis_ssl'),
+                          redis_url=profile_configuration['services']['nsls2_redis'],
+                          redis_port=profile_configuration['services']['redis_port'],
+                          redis_ssl=profile_configuration['services']['redis_ssl'],
                           redis_db=1
     )
     ip.log.setLevel('ERROR')
@@ -81,9 +100,9 @@ else:
                           dummy,
                           configure_logging=True,
                           publish_documents_with_kafka=True,
-                          redis_url=profile_configuration.get('services', 'nsls2_redis'),
-                          redis_port=profile_configuration.get('services', 'redis_port'),
-                          redis_ssl=profile_configuration.get('services', 'redis_ssl'),
+                          redis_url=profile_configuration['services']['nsls2_redis'],
+                          redis_port=profile_configuration['services']['redis_port'],
+                          redis_ssl=profile_configuration['services']['redis_ssl'],
                           redis_db=1
     )
     RE  = uns_dict['RE']
@@ -92,7 +111,7 @@ else:
     bec = uns_dict['bec']
 RE.unsubscribe(0)  # remove databroker, which was subscribed first by configure_base
 
-tiled_writing_client = from_uri(profile_configuration.get('services', 'tiled'),
+tiled_writing_client = from_uri(profile_configuration['services']['tiled'],
                                 api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_BMM"])
 tiled_writing_client.context.http_client.headers['tiled-qos'] = 'acquisition'
 
@@ -119,9 +138,9 @@ RE.subscribe(create_datum_page_cb)
 
 # this prefix needs to be the same (but with a dash) as the call to sync_experiment in user.py
 
-#RE.md = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
-#                          profile_configuration.get('services', 'redis_port'),
-#                          profile_configuration.get('services', 'redis_ssl'),
+#RE.md = open_redis_client(profile_configuration['services']['nsls2_redis'],
+#                          profile_configuration['services']['redis_port'],
+#                          profile_configuration['services']['redis_ssl'],
 #                          redis_db=1)
 bmm_tools.tools.md.common_re = RE
 bmm_tools.tools.md.common_md = RE.md
@@ -144,8 +163,8 @@ if not is_re_worker_active():
     cprint('[cyan]Connecting to Tiled: bmm_catalog, db[/cyan]')
     from tiled.client import from_profile, from_uri
     bmm_catalog = from_profile('bmm')
+    #bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
     bmm_catalog.context.http_client.headers['tiled-qos'] = 'acquisition'
-    ##bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
     db = Broker(bmm_catalog)
 
 

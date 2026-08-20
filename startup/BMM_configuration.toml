@@ -1,0 +1,291 @@
+[electrometers]
+quadem                  = true
+quadem_description      = "make QuadEM available for use with ion chambers or other current measurements"
+
+iy                      = false
+iy_description          = "have electron yield detector on line and using channel 4 of the QuadEM"
+
+pips                    = false
+pips_description        = "PIPS on channel 4 of the QuadEM"
+
+diode                   = false
+diode_description       = "PIN Diode for reflectivity experiments on channel 3 of QuadEM"
+
+ic0                     = true
+ic0_description         = "use integrated ion chamber 0 for I0, false means to use ch1 of the quadem"
+
+ic1                     = true
+ic1_description         = "use integrated ion chamber 1 for It, false means to use ch2 of the quadem"
+
+ic2                     = true
+ic2_description         = "use integrated ion chamber 2 for Ir, false means to use ch3 of the quadem"
+
+dualem                  = false
+dualem_description      = "use dualem IC prototype (deprecated, almost certainly want this to be false)"
+
+
+################################################################################
+
+
+[sdd]
+struck                  = false
+struck_description      = "use OG Struck system for fluorescence, deprecated and unlikely to function without effort"
+
+xspress3                = true
+xspress3_description    = "use the Xspress3X fluorescence readout system, almost certainly want this to be true"
+
+primary                 = 7
+primary_description     = "specify which detector is the primary detector: 1- 4- or 7-element"
+
+4element                = false
+4element_description    = "set true to enable the 4 element detector"
+
+1element                = true
+1element_description    = "set true to enable the 1 element detector"
+
+7element                = true
+7element_description    = "set true to enable the 7 element detector"
+
+
+################################################################################
+
+
+
+# detectors that are not ion chambers/electrometers nor SDDs
+[detectors]
+pilatus                 = false
+pilatus_description     = "set true to enable Pilatus 100K as an available detector"
+
+eiger                   = false
+eiger_description       = "set true to enable Eiger2 4M as an available detector"
+
+dante                   = false
+dante_description       = "set true to enable Dante readout at xf06bm-edxd1 as an available detector"
+
+
+################################################################################
+
+
+[cameras]
+anacam                  = false
+anacam_description      = "set to true to record analog pinhole camera  <good night, old friend>"
+
+cam8                    = true
+cam8_description        = "set to true to record Mako cam8"
+
+cam9                    = true
+cam9_description        = "set to true to record Mako cam9"
+
+cam7                    = true
+cam7_description        = "set to true to record Prosilica/diamond screen cam4"
+
+webcam                  = true
+webcam_description      = "set to true to record Axis webcam (cam6) XAS camera"
+
+xrdcam                  = false
+xrdcam_description      = "set to true to record Axis webcam (cam5) XRD camera"
+
+usb1                    = false
+usb1_description        = "set to true to record USB camera 1 (usb cameras are deprecated)"
+
+usb2                    = false
+usb2_description        = "set to true to record USB camera 2 (usb cameras are deprecated)"
+
+
+################################################################################
+
+
+
+## special configuration as required for particular user experiments
+[experiments]
+lakeshore                  = false
+lakeshore_description      = "LakeShore 331 for use with Displex cryostat, typically offline when not in use"
+
+linkam                     = true
+linkam_description         = "Linkam T96 controller, typically online even when not in use"
+
+enclosure                  = false
+enclosure_description      = "AirScience enclosure for radiological experiments with sample XY inside enclosure"
+
+enclosure_x                = "xafs_spare"
+enclosure_x_description    = "name of X axis motor inside enclosure"
+
+enclosure_y                = "xafs_refy"
+enclosure_y_description    = "name of Y axis motor inside enclosure"
+
+displex                    = false
+displex_description        = "when using the Displex, need to change the velocity and acceleration of xafs_y"
+
+saltfurnace                = false
+saltfurnace_description    = "the University of Wisconsin molten salt furnace using the 1 element and Soller slit"
+
+hint_potassium             = false
+hint_potassium_description = "in molten salt experiments it is helpful hint the potassium ROI for all channels"
+
+# radiological samples on alternate reference wheel
+#   0 = outer / 1 = inner
+#   slot number
+#   element symbol
+#   chemical formula of reference
+#   is present
+radiological              = false
+radiological_description  = "radiological samples on alternate reference wheel, see xafs_ref.mapping"
+
+u_ref                     = "1 1 U UO2(NO3)2.nH2O True"
+u_ref_description         = "location and stoichiometry of U reference"
+
+th_ref                    = "1 14 Th Th(NO3)4 False"
+th_ref_description        = "location and stoichiometry of Th reference"
+
+tc_ref                    = "1 10 Tc TcO4 False"
+tc_ref_description        = "location and stoichiometry of Tc reference"
+
+cms                       = true
+cms_description           = "set to true when doing a multi-modal experiment with CMS"
+
+use_reference             = true
+use_reference_description = "set to false when using the reference stages for another purpose"
+
+use_larch                 = false
+use_larch_description     = "set to true to process data or work on the ML model"
+
+it_in                     = 67
+it_in_description         = "reflectivity configuration, position of It in beam"
+
+it_out                    = 107
+it_out_description        = "reflectivity configuration, position of It out of beam"
+
+
+
+################################################################################
+
+
+[services]
+bmm                                     = "/nsls2/data/bmm"
+bmm_description                         = "path to the NSF-mounted BMM data folder"
+
+proposals                               = "/nsls2/data/bmm/proposals"
+proposals_description                   = "path to the BMM proposal folder"
+
+pass_api                                = "https://api.nsls2.bnl.gov/v1/proposal"
+pass_api_description                    = "NSLS-II API for information from PASS and about beamlines"
+
+#nsls2_redis                            = info.bmm.nsls2.bnl.gov   DEPRECATED
+nsls2_redis                             = "xf06bm-bmm-redis1.nsls2.bnl.gov"
+nsls2_redis_description                 = "BMM redis server"
+
+redis_port                              = 6380
+redis_port_description                  = "BMM redis server port number"
+
+redis_ssl                               = true
+redis_ssl_description                   = "set to true to require ssl for redis"
+
+xas_redis                               = 1
+xas_redis_description                   = "redis database number for XAS RE.md"
+
+xrd_redis                               = 2
+xrd_redis_description                   = "redis database number for XRD RE.md"
+
+bmm_redis                               = 3
+bmm_redis_description                   = "redis database number for BMM state information"
+
+kafka                                   = "kafka1.nsls2.bnl.gov:9092"
+kafka_description                       = "kafka server and port number"
+
+tiled                                   = "https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/raw"
+tiled_description                       = "Tiled server for the writing client"
+
+qs                                      = "https://qserver.nsls2.bnl.gov/bmm"
+qs_description                          = "Queue Server virtual machine address"
+
+startup                                 = "/nsls2/data/bmm/shared/config/bluesky/profile_collection/startup"
+startup_description                     = "profile location"
+
+workspace                               = "/home/xf06bm/Workspace"
+workspace_description                   = "local workspace folder"
+
+qskeys                                  = "/nsls2/data/bmm/shared/config/agent_runtime"
+qskeys_description                      = "location of API keys for http and queue servers"
+
+proposal_folders_available              = true
+proposal_folders_available_description  = "set to false to start profile even if proposal folders are not available, cameras and some detectors will not be available"
+
+
+
+
+################################################################################
+
+
+
+[slack]
+## old BMM channels
+use_bmm                    = false
+use_bmm_description        = "set to true to use old BMM Slack workspace"
+
+slack_secret               = "/nsls2/data/bmm/XAS/secrets/slack_secret"
+slack_secret_description   = "location of Slack secret file for use with old BMM Slack workspace "
+
+image_uploader             = "/nsls2/data/bmm/XAS/secrets/image_uploader_token"
+image_uploader_description = "image uploader token  for use with old BMM Slack workspace "
+
+## new NSLS2 channels
+use_nsls2                  = true
+use_nsls2_description      = "set to true to use NSLS-II Slack workspaces + proposal channels"
+
+bmmbot_secret              = "/nsls2/data/bmm/XAS/secrets/bmmbot_secret"
+bmmbot_secret_description  = "secret file for BMMbot interaction with proposal channels"
+
+
+
+################################################################################
+
+
+[slack_qs]
+## old BMM channels
+use_bmm                    = false
+use_bmm_description        = "set to true to use old BMM Slack workspace"
+
+slack_secret               = "/etc/slack/slack_secret"
+slack_secret_description   = "location of Slack secret file for use with old BMM Slack workspace "
+
+image_uploader             = "/etc/slack/image_uploader_token"
+image_uploader_description = "image uploader token  for use with old BMM Slack workspace "
+
+## new NSLS2 channels
+use_nsls2                  = true
+use_nsls2_description      = "set to true to use NSLS-II Slack workspaces + proposal channels"
+
+#bmmbot_secret             = /opt/bluesky/things/bmmbot_secret
+bmmbot_secret              = "/nsls2/data/bmm/XAS/secrets/bmmbot_secret"
+bmmbot_secret_description  = "secret file for BMMbot interaction with proposal channels"
+
+
+################################################################################
+
+
+[dcm]
+calibration_position             = "reference"
+calibration_position_description = "position of foils: reference (default), transmission"
+
+startwith                        = "Fe"
+startwith_description            = "element to begin calibration sequence, usually Fe"
+
+roll_111                         = -0.3650
+roll_111_description             = "position of dcm.roll for the 111 mono (Feb 16, 2026)"
+
+roll_311                         = -18.1595
+roll_311_description             = "position of dcm.roll for the 311 mono (Feb 16, 2026)"
+
+
+
+
+################################################################################
+
+
+
+[miscellaneous]
+set_desc_strings              = false
+set_desc_strings_description  = "set to true when needing to run set_desc_strings(), e.g. if CSS motor labels need to change"
+
+with_m1                       = false
+with_m1_description           = "set to true to make ophyd objects for m1 (collimating mirror, front end, DANGEROUS!)"

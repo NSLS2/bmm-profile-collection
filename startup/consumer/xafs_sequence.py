@@ -9,7 +9,7 @@ from slack import img_to_slack, post_to_slack
 from tools import experiment_folder, profile_configuration, rkvs
 
 # import redis
-# bmm_redis = profile_configuration.get('services', 'bmm_redis')
+# bmm_redis = profile_configuration['services']['bmm_redis']
 # rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
 
 class XAFSSequence():

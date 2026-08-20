@@ -14,28 +14,28 @@ run_report(__file__, text='dwelltime + selecting detectors for use')
 # False to exclude a detector from consideration in bsui
 
 # Ion chambers
-with_quadem    = profile_configuration.getboolean('electrometers', 'quadem') # True            # available for Iy and other signals
-with_iy        = profile_configuration.getboolean('electrometers', 'iy')     # False           # electron yield
-with_pips      = profile_configuration.getboolean('electrometers', 'pips')   # False           # PIPS
-with_diode     = profile_configuration.getboolean('electrometers', 'diode')  # False          # reflectivity PIN diode
-with_ic0       = profile_configuration.getboolean('electrometers', 'ic0')    # True            # new I0 chamber
-with_ic1       = profile_configuration.getboolean('electrometers', 'ic1')    # True            # new It chamber
-with_ic2       = profile_configuration.getboolean('electrometers', 'ic2')    # True            # new Ir chamber
-with_dualem    = profile_configuration.getboolean('electrometers', 'dualem') # False           # deprecated, prototype
+with_quadem    = profile_configuration['electrometers']['quadem'] # True            # available for Iy and other signals
+with_iy        = profile_configuration['electrometers']['iy']     # False           # electron yield
+with_pips      = profile_configuration['electrometers']['pips']   # False           # PIPS
+with_diode     = profile_configuration['electrometers']['diode']  # False           # reflectivity PIN diode
+with_ic0       = profile_configuration['electrometers']['ic0']    # True            # new I0 chamber
+with_ic1       = profile_configuration['electrometers']['ic1']    # True            # new It chamber
+with_ic2       = profile_configuration['electrometers']['ic2']    # True            # new Ir chamber
+with_dualem    = profile_configuration['electrometers']['dualem'] # False           # deprecated, prototype
 
 # fluorescence detectors and readout systems
-with_struck    = False # profile_configuration.getboolean('sdd', 'struck')   # False           # deprecated OG fluorescence read out
-with_xspress3  = profile_configuration.getboolean('sdd', 'xspress3') # True
-use_4element   = profile_configuration.getboolean('sdd', '4element') # True
-use_1element   = profile_configuration.getboolean('sdd', '1element') # True
-use_7element   = profile_configuration.getboolean('sdd', '7element') # False
+with_struck    = False # profile_configuration['sdd']['struck']   # False           # deprecated OG fluorescence read out
+with_xspress3  = profile_configuration['sdd']['xspress3'] # True
+use_4element   = profile_configuration['sdd']['4element'] # True
+use_1element   = profile_configuration['sdd']['1element'] # True
+use_7element   = profile_configuration['sdd']['7element'] # False
 
 # area detectors
-with_pilatus   = profile_configuration.getboolean('detectors', 'pilatus') # False
-with_eiger     = profile_configuration.getboolean('detectors', 'eiger')   # False
+with_pilatus   = profile_configuration['detectors']['pilatus'] # False
+with_eiger     = profile_configuration['detectors']['eiger']   # False
 
 # edxd through Dante
-with_dante     = profile_configuration.getboolean('detectors', 'dante') # False
+with_dante     = profile_configuration['detectors']['dante'] # False
 
 def active_detectors_report():
     print(f'{with_quadem      = }')

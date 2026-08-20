@@ -5,33 +5,33 @@ from nslsii.utils import open_redis_client
 from redis_json_dict import RedisJSONDict
 
 #-------- fetch Slack configuration --------------------------------
-use_nsls2_slack = profile_configuration.getboolean('slack', 'use_nsls2')
-use_bmm_slack = profile_configuration.getboolean('slack', 'use_bmm')
+use_nsls2_slack = profile_configuration['slack']['use_nsls2']
+use_bmm_slack   = profile_configuration['slack']['use_bmm']
 
 from bmm_tools.slack.bmmbot import BMMbot
 bmmbot = BMMbot()
-bmmbot._bmmbot_secret = profile_configuration.get('slack', 'bmmbot_secret')
-# bmmbot._redis_client = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
-#                                          profile_configuration.get('services', 'redis_port'),
-#                                          profile_configuration.get('services', 'redis_ssl'),
+bmmbot._bmmbot_secret = profile_configuration['slack']['bmmbot_secret']
+# bmmbot._redis_client = open_redis_client(profile_configuration['services']['nsls2_redis'],
+#                                          profile_configuration['services']['redis_port'],
+#                                          profile_configuration['services']['redis_ssl'],
 #                                          redis_db=1)
 with open("/etc/bluesky/redis.secret") as f:
     secret = f.read().strip()
-rc = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'),
-                 port=profile_configuration.get('services', 'redis_port'),
-                 ssl=profile_configuration.get('services', 'redis_port'),
+rc = redis.Redis(host=profile_configuration['services']['nsls2_redis'],
+                 port=profile_configuration['services']['redis_port'],
+                 ssl=profile_configuration['services']['redis_port'],
                  password=secret,
                  db=1)
 bmmbot._redis_client = RedisJSONDict(rc, prefix='')
 
-bmmbot._pass_api = profile_configuration.get('services', 'pass_api') + "/{pass_id}/slack-channels"
+bmmbot._pass_api = profile_configuration['services']['pass_api'] + "/{pass_id}/slack-channels"
 bmmbot.refresh_channel()
 
 #-------------------------------------------------------------------
 
 
 #-------- soon to be deprecated Slack config -----------------------
-slack_secret = profile_configuration.get('slack', 'slack_secret')
+slack_secret = profile_configuration['slack']['slack_secret']
 import json
 from urllib import request, parse
 from slack_sdk import WebClient
@@ -81,7 +81,7 @@ def post_to_slack(text, rid=None):
 def img_to_slack(imagefile, title='', measurement='xafs'):
     ## BMM's own Slack channel, soon to be deprecated
     if use_bmm_slack:
-        token_file = os.path.join(profile_configuration.get('slack', 'image_uploader'))
+        token_file = os.path.join(profile_configuration['slack']['image_uploader'])
         try:
             with open(token_file, "r") as f:
                 token = f.read().replace('\n','')

@@ -8,10 +8,10 @@ from nslsii.utils import open_redis_client
 
 
 if not os.environ.get('AZURE_TESTING'):
-    redis_host = profile_configuration.get('services', 'nsls2_redis')
-    redis_port = profile_configuration.get('services', 'redis_port')
-    redis_ssl  = profile_configuration.get('services', 'redis_ssl')
-    redis_db   = profile_configuration.get('services', 'bmm_redis')
+    redis_host = profile_configuration['services']['nsls2_redis']
+    redis_port = profile_configuration['services']['redis_port']
+    redis_ssl  = profile_configuration['services']['redis_ssl']
+    redis_db   = profile_configuration['services']['bmm_redis']
 else:
     redis_host = '127.0.0.1'
 
@@ -31,7 +31,7 @@ try:
 except:
     rkvs = NoRedis()
 LUSTRE_ROOT = '/nsls2/data'
-LUSTRE_ROOT_BMM = profile_configuration.get('services', 'bmm')
+LUSTRE_ROOT_BMM = profile_configuration['services']['bmm']
 SECRETS = os.path.join(LUSTRE_ROOT_BMM, 'XAS', 'secrets')
 SECRET_FILES = ('slack_secret', 'image_uploader_token', 'bmmbot_secret')
 REDISVAR="BMM:scan:type"
@@ -146,7 +146,7 @@ def check_profile_branch():
     here = os.getcwd()
     #os.chdir(os.path.dirname(startup_dir))
     try:
-        os.chdir(profile_configuration.get('services', 'startup'))
+        os.chdir(profile_configuration['services']['startup'])
     except:
         # apparently on queueserver VM
         os.chdir('/opt/bluesky/profile_collection/startup')
@@ -173,7 +173,7 @@ def initialize_data_directories():
     Create any missing directories.
 
     '''
-    workspace = profile_configuration.get('services', 'workspace')
+    workspace = profile_configuration['services']['workspace']
     check_directory(workspace, 'workspace')
     for sub in ('Staff', 'Visitors'):
         folder = f'{workspace}/{sub}'

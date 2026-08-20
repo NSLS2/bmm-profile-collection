@@ -1,5 +1,8 @@
 """
 Ophyd Async implementation for Eiger detector.
+
+see https://github.com/NSLS2/cditools/blob/main/src/cditools/eiger_async.py and
+https://github.com/NSLS2/cdi-profile-collection/blob/main/startup/30-area-detectors.py#L152
 """
 
 from __future__ import annotations

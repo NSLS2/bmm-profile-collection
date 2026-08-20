@@ -26,17 +26,20 @@ pattern1 = r'\b(' + '|'.join(sorted(ELEMENTS, key=lambda x: -len(x))) + r')1\b'
 element_regex1 = re.compile(pattern1)
 
 startup_dir = os.path.dirname(os.path.dirname(__file__))
-cfile = os.path.join(startup_dir, "BMM_configuration.ini")
-profile_configuration = configparser.ConfigParser(interpolation=None)
-profile_configuration.read_file(open(cfile))
+# cfile = os.path.join(startup_dir, "BMM_configuration.ini")
+# profile_configuration = configparser.ConfigParser(interpolation=None)
+# profile_configuration.read_file(open(cfile))
+cfile = os.path.join(startup_dir, "BMM_configuration.toml")
+with open(cfile, "rb") as f:
+    profile_configuration = tomllib.load(f)
 
 
-BMM = profile_configuration.get('services', 'bmm')
-PROPOSALS = profile_configuration.get('services', 'proposals')
+BMM = profile_configuration['services']['bmm']
+PROPOSALS = profile_configuration['services']['proposals']
 
 import redis
 from redis_json_dict import RedisJSONDict
-nsls2_redis = profile_configuration.get('services', 'nsls2_redis')
+nsls2_redis = profile_configuration['services']['nsls2_redis']
 redis_client = redis.Redis(host=nsls2_redis)
 
 
@@ -46,13 +49,13 @@ class NoRedis():
     def get(self, thing):
         return None
 
-#bmm_redis = profile_configuration.get('services', 'bmm_redis')
+#bmm_redis = profile_configuration['services']['bmm_redis']
 #rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
 try:
-    rkvs = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
-                             profile_configuration.get('services', 'redis_port'),
-                             profile_configuration.get('services', 'redis_ssl'),
-                             redis_db=profile_configuration.get('services', 'bmm_redis'))
+    rkvs = open_redis_client(profile_configuration['services']['nsls2_redis'],
+                             profile_configuration['services']['redis_port'],
+                             profile_configuration['services']['redis_ssl'],
+                             redis_db=profile_configuration['services']['bmm_redis'])
 except:
     rkvs = NoRedis()
 
@@ -67,16 +70,16 @@ def facility_dict(endstation='XAS'):
     with open("/etc/bluesky/redis.secret") as f:
         secret = f.read().strip()
     if (endstation == 'XAS'):
-        rc = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'),
-                         port=profile_configuration.get('services', 'redis_port'),
-                         ssl=profile_configuration.get('services', 'redis_port'),
+        rc = redis.Redis(host=profile_configuration['services']['nsls2_redis'],
+                         port=profile_configuration['services']['redis_port'],
+                         ssl=profile_configuration['services']['redis_port'],
                          password=secret,
                          db=1)
         facility_dict = RedisJSONDict(rc, prefix='')
     else:
-        rc = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'),
-                         port=profile_configuration.get('services', 'redis_port'),
-                         ssl=profile_configuration.get('services', 'redis_port'),
+        rc = redis.Redis(host=profile_configuration['services']['nsls2_redis'],
+                         port=profile_configuration['services']['redis_port'],
+                         ssl=profile_configuration['services']['redis_port'],
                          password=secret,
                          db=2)
         facility_dict = RedisJSONDict(rc, prefix='')

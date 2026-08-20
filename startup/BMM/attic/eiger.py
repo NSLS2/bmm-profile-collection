@@ -12,14 +12,17 @@ from ophyd.areadetector.base import EpicsSignalWithRBV
 from ophyd.areadetector.filestore_mixins import resource_factory, FileStoreHDF5, FileStoreTIFF, FileStoreIterativeWrite, FileStorePluginBase
 from ophyd.areadetector.plugins import HDF5Plugin_V33, TIFFPlugin_V33, StatsPlugin_V33
 
-from BMM import user_ns as user_ns_module
-user_ns = vars(user_ns_module)
-md = user_ns["RE"].md
+# from BMM import user_ns as user_ns_module
+# user_ns = vars(user_ns_module)
+# md = user_ns["RE"].md
+import bmm_tools.tools.md       # obtain a profile's value for RE.md
+md = bmm_tools.tools.md.common_md
 
 from nslsii.ad33 import SingleTriggerV33
 from ophyd import Component as C
 
-from BMM.user_ns.base import PROPOSALS
+#from BMM.user_ns.base import PROPOSALS
+PROPOSALS = '/nsls2/data/bmm/proposals'
 
 from bmm_tools.tools.messages  import *  # error_msg et al. + boxedtext
 from bmm_tools.devices.pilatus import BMMFileStoreHDF5, BMMHDF5Plugin

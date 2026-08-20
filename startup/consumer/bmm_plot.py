@@ -14,7 +14,7 @@ from tools import profile_configuration, element_regex1, element_regex8, rkvs
 
 
 # import redis
-# bmm_redis = profile_configuration.get('services', 'bmm_redis')
+# bmm_redis = profile_configuration['services']['bmm_redis']
 # rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
 
 def finished(record):
@@ -558,7 +558,7 @@ def xrfat(**kwargs):
                 label = f'{el} Kβ3 ROI'
                 ax.axvline(x = xraylib.LineEnergy(z, xraylib.L1M3_LINE)*1000, color = roicolor, linewidth=1, label=label)
 
-        startup_dir = profile_configuration.get('services', 'startup')        
+        startup_dir = profile_configuration['services']['startup']        
         with open(os.path.join(startup_dir, 'rois.json'), 'r') as fl:
             js = fl.read()
         allrois = json.loads(js)

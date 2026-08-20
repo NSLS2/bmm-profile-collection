@@ -217,7 +217,7 @@ def reference(target=None):
 
 
 def determine_reference():
-    if profile_configuration.getboolean('experiments', 'use_reference') is False:
+    if profile_configuration['experiments']['use_reference'] is False:
         return 'None'
     xafs_ref  = user_ns['xafs_ref']
     xafs_refx = user_ns['xafs_refx']
@@ -269,7 +269,7 @@ def show_reference_wheel():
 
         boxedtext(text, title=f"Reference wheel, {which} ring", color='yellow')
 
-    if profile_configuration.getboolean('experiments', 'radiological') is True:
+    if profile_configuration['experiments']['radiological'] is True:
         text = ''
         for key in profile_configuration['experiments'].keys():
             if '_ref' not in key or key == 'use_reference':
@@ -277,7 +277,7 @@ def show_reference_wheel():
             elem = key.split('_')[0].capitalize()
             if elem == user_ns['BMMuser'].element:
                 elem = f'[yellow1]{elem}[/yellow1]'
-            data = profile_configuration.get('experiments', key).split()
+            data = profile_configuration['experiments'][key].split()
             ring = 'outer'
             if int(data[0]) == 1:
                 ring = 'inner'

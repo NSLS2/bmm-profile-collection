@@ -288,7 +288,7 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
                 m3.xu,           float(MODEDATA['m3_xu'][mode]),
                 m3.xd,           float(MODEDATA['m3_xd'][mode]), ]
 
-     if profile_configuration.getboolean('experiments', 'use_reference') is False:
+     if profile_configuration['experiments']['use_reference'] is False:
           no_ref = False
           reference = None
      if reference is not None:
@@ -352,10 +352,10 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
 
      if mode == 'XRD':
           print('For XRD mode, move to post 2/2026 position for dcm.roll.')
-          yield from mv(dcm.roll, 4.532) # profile_configuration.getfloat('dcm', f'roll_{dcm._crystal}')) # 
+          yield from mv(dcm.roll, 4.532) # profile_configuration['dcm'][f'roll_{dcm._crystal}']) # 
      else:
           print('For all XAS modes, move to post 2/2026 position for dcm.roll.')
-          yield from  mv(dcm.roll, profile_configuration.getfloat('dcm', f'roll_{dcm._crystal}'))
+          yield from  mv(dcm.roll, profile_configuration['dcm'][f'roll_{dcm._crystal}'])
           
      if mode in ('D', 'E', 'F') and user_ns['slits3'].vsize.position < 0.4:
           print('Slit height appears to be set for focused beam.  Opening slits.')
@@ -634,13 +634,13 @@ def change_xtals(xtal=None):
      yield from sleep(1.0) 
      if xtal == 'Si(111)':
           yield from mv(dcm.pitch, 1.3,
-                        dcm.roll,  profile_configuration.getfloat('dcm', 'roll_111'),
+                        dcm.roll,  profile_configuration['dcm']['roll_111'],
                         dcm.x,     0.5    )
           #dcm._crystal = '111'
           dcm.set_crystal('111')  # set d-spacing and bragg offset
      elif xtal == 'Si(311)':
           yield from mv(dcm.pitch, 3.9195,
-                        dcm.roll,  profile_configuration.getfloat('dcm', 'roll_311'),
+                        dcm.roll,  profile_configuration['dcm']['roll_311'],
                         dcm.x,     65.3    )
           #dcm._crystal = '311'
           dcm.set_crystal('311')  # set d-spacing and bragg offset

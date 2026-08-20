@@ -888,15 +888,15 @@ def xafs(inifile=None, **kwargs):
 
             bold_msg('Measuring and recording dark current')            
             yield from dark_current()
-            if profile_configuration.getboolean('electrometers', 'ic0'):
+            if profile_configuration['electrometers']['ic0']:
                 md['Detector']['I0_dark'] = ic0.get_current_offsets()[0]      # first ion chamber
             else:
                 md['Detector']['I0_dark'] = quadem1.get_current_offsets()[0]  # first channel of black box QuadEM
-            if profile_configuration.getboolean('electrometers', 'ic1'):
+            if profile_configuration['electrometers']['ic1']:
                 md['Detector']['It_dark'] = ic1.get_current_offsets()[0]      # second ion chamber
             else:
                 md['Detector']['It_dark'] = quadem1.get_current_offsets()[1]  # second channel of black box QuadEM
-            if profile_configuration.getboolean('electrometers', 'ic2'):
+            if profile_configuration['electrometers']['ic2']:
                 md['Detector']['Ir_dark'] = ic2.get_current_offsets()[0]      # third ion chamber 
             else:
                 md['Detector']['Ir_dark'] = quadem1.get_current_offsets()[2]  # third channel of black box QuadEM
@@ -917,7 +917,7 @@ def xafs(inifile=None, **kwargs):
                            'sample': sample,
                            'reference_material': refmat,
                            'fluo_detector': fluo_detector,
-                           'with_diode' : profile_configuration.getboolean('electrometers', 'diode')})
+                           'with_diode' : profile_configuration['electrometers']['diode']})
             
             for i in range(p['start'], p['start']+p['nscans'], 1):
                 cnt += 1

@@ -80,7 +80,7 @@ class BMMXspress3HDF5Plugin(Xspress3HDF5Plugin):
 
     @property
     def root_path_str(self):
-        if profile_configuration.getboolean('services', 'proposal_folders_available'):
+        if profile_configuration['services']['proposal_folders_available']:
             root_path = f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/xspress3-1/"
         else:
             ## the current proposal folders are not available, set this to a specific folder where it is OK to write random things
@@ -396,7 +396,7 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
         '''Hint the ROI currently in use for XAS
         '''
         BMMuser = user_ns['BMMuser']
-        hint_potassium = profile_configuration.getboolean('experiments', 'hint_potassium')  # special consideration for molten salt experiments
+        hint_potassium = profile_configuration['experiments']['hint_potassium']  # special consideration for molten salt experiments
         for channel in self.iterate_channels():
             for mcaroi in channel.iterate_mcarois():
                 if self.slots[mcaroi.mcaroi_number-1] == BMMuser.element:
@@ -419,7 +419,7 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
         '''Hint multiple ROIs for XAS use
         '''
         BMMuser = user_ns['BMMuser']
-        hint_potassium = profile_configuration.getboolean('experiments', 'hint_potassium')  # special consideration for molten salt experiments
+        hint_potassium = profile_configuration['experiments']['hint_potassium']  # special consideration for molten salt experiments
         for channel in self.iterate_channels():
             for mcaroi in channel.iterate_mcarois():
                 if self.slots[mcaroi.mcaroi_number-1] in roilist:

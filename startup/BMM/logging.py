@@ -112,8 +112,8 @@ def BMM_log_info(message):
 
 ## small effort to obfuscate the web hook URL, which is secret-ish.  See:
 ##   https://api.slack.com/messaging/webhooks#create_a_webhook
-use_bmm_slack = profile_configuration.getboolean('slack', 'use_bmm')
-slack_secret = profile_configuration.get('slack', 'slack_secret')
+use_bmm_slack = profile_configuration['slack']['use_bmm']
+slack_secret = profile_configuration['slack']['slack_secret']
 try:
     with open(slack_secret, "r") as f:
         default_slack_channel = f.read().replace('\n','')
@@ -121,12 +121,12 @@ except:
     error_msg('\t\t\tslack_secret file not found!')
 
 
-use_bmm_slack = profile_configuration.getboolean('slack', 'use_bmm')
-use_nsls2_slack = profile_configuration.getboolean('slack', 'use_nsls2')
+use_bmm_slack   = profile_configuration['slack']['use_bmm']
+use_nsls2_slack = profile_configuration['slack']['use_nsls2']
 if is_re_worker_active:
-    bmmbot_secret = profile_configuration.get('slack_qs', 'bmmbot_secret')
+    bmmbot_secret = profile_configuration['slack_qs']['bmmbot_secret']
 else:    
-    bmmbot_secret = profile_configuration.get('slack', 'bmmbot_secret')
+    bmmbot_secret = profile_configuration['slack']['bmmbot_secret']
 
     
 def post_to_slack(text):
