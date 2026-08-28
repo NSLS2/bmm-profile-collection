@@ -1,6 +1,7 @@
 import numpy as np
 from blop import RangeDOF, Objective, Agent, OutcomeConstraint
 from blop.protocols import EvaluationFunction
+from bluesky.preprocessors import inject_md_wrapper
 from ax.api.protocols import IMetric
 from tiled.client.container import Container
 import pickle
@@ -51,6 +52,45 @@ intensity_constraint = OutcomeConstraint("x >= 1000000", x=intensity_metric) # T
 outcome_constraints = [
     intensity_constraint
 ]
+
+def _device_name(device) -> str:
+    return getattr(device, "name", str(device))
+
+
+def _optimization_metadata(energy: str, reference_scan_uid: str = None) -> dict:
+    try:
+        beamline_energy = float(dcm.energy.readback.get())
+    except Exception:
+        beamline_energy = float(dcm.energy.position)
+
+    return {
+        "Beamline": {
+            "energy": beamline_energy,
+        },
+        "BMM_agent": {
+            "agent": "blop",
+            "plan_name": "search_for_optimal_positions",
+            "requested_energy": energy,
+            "reference_scan_uid": reference_scan_uid,
+            "dofs": [
+                {
+                    "name": _device_name(dof),
+                    "actuator": _device_name(dof.actuator),
+                    "bounds": list(dof.bounds),
+                    "parameter_type": getattr(dof, "parameter_type", None),
+                }
+                for dof in dofs
+            ],
+            "sensors": [_device_name(sensor) for sensor in (cam8, ic0)],
+            "objectives": [objective.name for objective in objectives],
+            "outcome_constraints": [str(constraint) for constraint in outcome_constraints],
+        },
+    }
+
+
+def optimization_metadata_wrapper(plan, energy: str, reference_scan_uid: str = None):
+    md = _optimization_metadata(energy, reference_scan_uid=reference_scan_uid)
+    return inject_md_wrapper(plan, md)
 
 # use this function in bsui for sanity checking
 def compute_stats(uid: str):
@@ -153,7 +193,8 @@ def search_for_optimal_positions(energies: list[str], reference_scan_uid: str, e
         # TODO is this the generation strategy we want?
         agent.ax_client.configure_generation_strategy(initialization_budget=1, initialize_with_center=False)
 
-        yield from agent.optimize(20)
+        max_iter = 20
+        yield from optimization_metadata_wrapper(agent.optimize(max_iter), energy, reference_scan_uid, max_iter)
 
         best_points = agent.get_best_points()
 
