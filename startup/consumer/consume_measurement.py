@@ -49,7 +49,7 @@ aw.logger = logger
 be_verbose = True
 doing = None
 
-from bmm_live import LineScan, XAFSScan, XRF, AreaScan, XRR
+from bmm_live import LineScan, XAFSScan, XRF, AreaScan, XRR, mythen_plot
 ls  = LineScan()
 ls.logger = logger
 xs  = XAFSScan()
@@ -98,7 +98,7 @@ def plot_from_kafka_messages(beamline_acronym):
                                           'xrfat', 'linescan', 'xafsscan', 'timescan', 'xrf', 'areascan', 'close',
                                           'logger', 'refresh_slack', 'show_metadata',
                                           'peakfit', 'stepfit', 'rectanglefit', 'reset_rois',
-                                          'backend', 'xrr', 'xrr_alignment', 'xrr_calibration_plot')) :
+                                          'backend', 'xrr', 'xrr_alignment', 'xrr_calibration_plot', 'mythen_plot')) :
                 if be_verbose is True:
                     print(f'\n[{datetime.datetime.now().isoformat(timespec="seconds")}]\n{pprint.pformat(message, compact=True)}')
                 else:
@@ -191,6 +191,10 @@ def plot_from_kafka_messages(beamline_acronym):
             elif 'xrf' in message:
                 if message['xrf'] == 'plot':
                     xrf.plot(catalog=bmm_catalog, **message)
+                elif message['xrf'] == 'quickplot':
+                    xrf.quickplot(add=message['add'], only=message['only'],
+                                  energy=message['energy'], el=message['element'], ed=message['edge'],
+                                  roi_min=message['roi_min'], roi_size=message['roi_size'])
                 elif message['xrf'] == 'write':
                     xrf.to_xdi(catalog=bmm_catalog, uid=message['uid'], filename=message['filename'])
                     
@@ -211,6 +215,8 @@ def plot_from_kafka_messages(beamline_acronym):
                 xrr.calibration_plot(catalog=bmm_catalog, uid=message['uid'], motor=message['motor'],
                                      detector=message['detector'], stub=message['stub'])
 
+            elif 'mythen_plot' in message:
+                mythen_plot(roi=message['roi'], xmin=message['xmin'], xmax=message['xmax'])
                     
             elif 'reset_rois' in message:
                 xrf.reset_rois()

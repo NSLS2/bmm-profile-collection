@@ -183,23 +183,23 @@ def kill_mirror_jacks():
 
 ## XAFS table
 print(f'{TAB}XAFS table motor group')
-xt = xafs_table = XAFSTable('XF:06BMA-BI{XAFS-Ax:Tbl_', name='xafs_table', mirror_length=1160,  mirror_width=558)
+xt = xafs_table = XAFSTable('XF:06BMA-BI{XAFS-Ax:Tbl_', name='xafs_table', table_length=1160,  table_width=558)
 wait_for_connection(xafs_table)
 
 if xafs_table.connected is True:
     xafs_yu  = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_YU}Mtr',  name='xafs_yu')
-    xafs_ydo = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_YDO}Mtr', name='xafs_ydo')
-    xafs_ydi = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_YDI}Mtr', name='xafs_ydi')
+    #xafs_ydo = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_YDO}Mtr', name='xafs_ydo')
+    xafs_yd = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_YDI}Mtr', name='xafs_yd')
     #xafs_xu  = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_XU}Mtr',  name='xafs_xu')
     #xafs_xd  = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_XD}Mtr',  name='xafs_xd')
 else:
     xafs_yu     = SynAxis(name='xafs_yu')
-    xafs_ydo    = SynAxis(name='xafs_ydo')
-    xafs_ydi    = SynAxis(name='xafs_ydi')
-    xafs_xu     = SynAxis(name='xafs_xu')
-    xafs_xd     = SynAxis(name='xafs_xd')
+    #xafs_ydo    = SynAxis(name='xafs_ydo')
+    xafs_yd     = SynAxis(name='xafs_yd')
+    #xafs_xu     = SynAxis(name='xafs_xu')
+    #xafs_xd     = SynAxis(name='xafs_xd')
     
-xafs_motors.extend([xafs_yu, xafs_ydo, xafs_ydi]) #, xafs_xu, xafs_xd])
+xafs_motors.extend([xafs_yu, xafs_yd]) #, xafs_ydi, xafs_xu, xafs_xd])
 
 print(f'{TAB}Examine XAFS motor groups')
 examine_xafs_motor_group(xafs_motors)

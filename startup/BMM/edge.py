@@ -48,10 +48,10 @@ def show_edges():
 
 def all_connected(with_m2=False):
     motors = [dm3_bct,
-              xafs_yu, xafs_ydo, xafs_ydi,
+              xafs_yu, xafs_yd, # xafs_ydo, 
               m3_yu, m3_ydo, m3_ydi, m3_xu, m3_xd,]
     if with_m2 is True:
-        motors.extend([m2_yu, m2_ydo, m2_ydi])
+        motors.extend([m2_yu,  m2_ydi]) # m2_ydo,
     ok = True
     for m in motors:
         if m.connected is False:
@@ -89,7 +89,7 @@ def wiggle_mirrors():
             
 def arrived_in_mode(mode=None):
     motors = [dm3_bct,
-              xafs_yu, xafs_ydo, xafs_ydi,
+              xafs_yu, xafs_yd, # xafs_ydo,
               m2_yu, m2_ydo, m2_ydi, #m2_xu, m2_xd,
               m3_yu, m3_ydo, m3_ydi, m3_xu, m3_xd,]
     ok = True
@@ -135,7 +135,7 @@ def m2_lateral_position(energy=None):
 
 def xafs_table_ok():
     bad_position = 150
-    if xafs_yu.position > bad_position or xafs_ydi.position > bad_position or xafs_ydo.position > bad_position:
+    if xafs_yu.position > bad_position or xafs_yd.position > bad_position:
         return False
     return True
 
@@ -325,7 +325,7 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
 
             
         if xafs_table_ok is False:
-            error_msg('XAFS table positions looks strange.  Check user_offset values for xafs_yu, xafs_ydi, and xafs_ydo.')
+            error_msg('XAFS table positions looks strange.  Check user_offset values for xafs_yu, xafs_yd.')
             bold_msg('Quitting change_edge() macro....\n')
             yield from null()
             freakout = 1

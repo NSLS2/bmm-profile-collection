@@ -1,7 +1,6 @@
 from ophyd import QuadEM, Component as Cpt, EpicsSignalWithRBV, Signal, DerivedSignal, EpicsSignal
 from ophyd.quadem import QuadEMPort
 
-from numpy import log, exp
 from bluesky.plan_stubs import mv, sleep
 
 from BMM.logging import BMM_log_info

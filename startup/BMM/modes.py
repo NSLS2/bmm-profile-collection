@@ -58,6 +58,7 @@ def read_mode_data():
          axis['XRD']     = row[19].value
          axis['XRD_REP'] = row[20].value
          bl[alias] = axis
+     del bl['xafs_ydo']         # clean up unneeded entry
      return bl
 
 MODEDATA = read_mode_data();
@@ -68,7 +69,7 @@ MODEDATA = read_mode_data();
 
 def motors_in_position(mode=None):
     all_of_them = ['dm3_bct',
-                   'xafs_yu', 'xafs_ydo', 'xafs_ydi',
+                   'xafs_yu', 'xafs_yd', # xafs_ydo
                    'm2_yu', 'm2_ydo', 'm2_ydi', #'m2_xu', 'm2_xd',
                    'm3_yu', 'm3_ydo', 'm3_ydi', 'm3_xu', 'm3_xd',]
     ok = True
@@ -143,8 +144,8 @@ def table_height(mode=None, by=None, pitch=None):
                          xafs_table.ydi, float(pitch))
      elif mode in ('A', 'B', 'C', 'D', 'E', 'F', 'XRD'):
           yield from mv(xafs_table.yu,   float(MODEDATA['xafs_yu'][mode]),
-                        xafs_table.ydo,  float(MODEDATA['xafs_ydo'][mode]),
-                        xafs_table.ydi,  float(MODEDATA['xafs_ydi'][mode]))
+                        #xafs_table.ydo,  float(MODEDATA['xafs_ydo'][mode]),
+                        xafs_table.yd,  float(MODEDATA['xafs_yd'][mode]))
      else:
           print('Doing nothing.  Do table_height?? for explanation')
           yield from null()
@@ -158,8 +159,7 @@ def verify_limits(targets):
  
        base = [dm3_bct,         float(MODEDATA['dm3_bct'][mode]),
                xafs_table.yu,   float(MODEDATA['xafs_yu'][mode]),
-               xafs_table.ydo,  float(MODEDATA['xafs_ydo'][mode]),
-               xafs_table.ydi,  float(MODEDATA['xafs_ydi'][mode]),
+               xafs_table.yd,   float(MODEDATA['xafs_yd'][mode]),
                ...
               ]
 
@@ -279,8 +279,8 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
      base = [dm3_bct,         float(MODEDATA['dm3_bct'][mode]),
 
              xafs_table.yu,   float(MODEDATA['xafs_yu'][mode]),
-             xafs_table.ydo,  float(MODEDATA['xafs_ydo'][mode]),
-             xafs_table.ydi,  float(MODEDATA['xafs_ydi'][mode]),]
+             #xafs_table.ydo,  float(MODEDATA['xafs_ydo'][mode]),
+             xafs_table.yd,  float(MODEDATA['xafs_yd'][mode]),]
 
      mirror3 = [m3.yu,           float(MODEDATA['m3_yu'][mode]),
                 m3.ydo,          float(MODEDATA['m3_ydo'][mode]),
@@ -497,9 +497,9 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
 def mode():
     print('Motor positions:')
     for m in ('dm3_bct',
-              'xafs_yu', 'xafs_ydo', 'xafs_ydi',
-              'm2_yu', 'm2_ydo',
-              'm2_ydi', 'm2_bender', 'm3_yu', 'm3_ydo', 'm3_ydi', 'm3_xu', 'm3_xd',
+              'xafs_yu', 'xafs_yd', # 'xafs_ydo',
+              'm2_yu', 'm2_ydo', 'm2_ydi', 'm2_bender',
+              'm3_yu', 'm3_ydo', 'm3_ydi', 'm3_xu', 'm3_xd',
               'dm3_slits_t', 'dm3_slits_b', 'dm3_slits_i', 'dm3_slits_o'):
         mot = user_ns[m]
         print('\t%-12s:\t%.3f' % (mot.name, mot.user_readback.get()))

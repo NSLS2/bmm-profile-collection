@@ -56,7 +56,7 @@ primary_description     = "specify which detector is the primary detector: 1- 4-
 pilatus                 = false
 pilatus_description     = "set true to enable Pilatus 100K as an available detector"
 
-eiger                   = false
+eiger                   = true
 eiger_description       = "set true to enable Eiger2 4M as an available detector"
 
 dante                   = false

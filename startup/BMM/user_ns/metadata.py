@@ -29,8 +29,8 @@ user_ns['sd'].baseline = [xafs_x, xafs_y, xafs_pitch, xafs_roll, xafs_wheel, xaf
                           #m1.yu, m1.ydo, m1.ydi, m1.xu, m1.xd, m1.vertical, m1.lateral, m1.pitch, m1.roll, m1.yaw,
                           m2.yu, m2.ydo, m2.ydi, m2.xu, m2.xd, m2.vertical, m2.lateral, m2.pitch, m2.roll, m2.yaw, m2_bender,
                           m3.yu, m3.ydo, m3.ydi, m3.xu, m3.xd, m3.vertical, m3.lateral, m3.pitch, m3.roll, m3.yaw,
-                          xafs_table.yu, xafs_table.ydo, xafs_table.ydi, # xafs_xu , xafs_xd,
-                          xafs_table.vertical, xafs_table.pitch, xafs_table.roll, 
+                          xafs_table.yu, xafs_table.yd, # xafs_table.ydi, # xafs_xu , xafs_xd,
+                          xafs_table.vertical, xafs_table.pitch, # xafs_table.roll, 
 ]
 
 #sd.baseline = ()

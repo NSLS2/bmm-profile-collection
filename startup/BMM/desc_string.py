@@ -65,9 +65,9 @@ def set_desc_strings():
     toss = EpicsSignal('XF:06BMA-BI{XAFS-Ax:Tbl_YU}Mtr.DESC', name='toss')
     toss.put('xafs_yu')
     toss = EpicsSignal('XF:06BMA-BI{XAFS-Ax:Tbl_YDO}Mtr.DESC', name='toss')
-    toss.put('xafs_ydo')
+    toss.put('(unused)')
     toss = EpicsSignal('XF:06BMA-BI{XAFS-Ax:Tbl_YDI}Mtr.DESC', name='toss')
-    toss.put('xafs_ydi')
+    toss.put('xafs_yd')
 
     
     ## motors on MC09 + two axes on MC07/MC08 that have fried amplifiers
