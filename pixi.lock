@@ -7721,6 +7721,7 @@ packages:
   license_family: BSD
   purls:
   - pkg:pypi/scikit-image?source=hash-mapping
+  run_exports: {}
   size: 18546003
   timestamp: 1766684359934
 - conda: https://conda.anaconda.org/conda-forge/linux-64/scikit-learn-1.8.0-np2py312h3226591_1.conda

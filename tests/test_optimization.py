@@ -18,8 +18,11 @@ from BMM.optimization import (
     ImageEvaluation,
     SurrogateModelDashCallback,
     _optimization_metadata,
+    _full_width_half_maximum,
+    _preprocess_image,
     _write_energy_map,
     compute_image_stats,
+    compute_stats,
     get_energy_alignment_profile,
     make_energy_alignment_agent,
     optimization_metadata_wrapper,
@@ -30,13 +33,39 @@ from BMM.optimization import (
 class Field:
     def __init__(self, value):
         self.value = value
+        self.read_count = 0
 
     def read(self):
+        self.read_count += 1
         return self.value
 
 
-def run_with_fields(**fields):
-    return {"primary": {"data": {name: Field(value) for name, value in fields.items()}}}
+class Run(dict):
+    metadata: dict
+
+
+def run_with_fields(*, metadata=None, **fields):
+    run = Run(
+        {"primary": {"data": {name: Field(value) for name, value in fields.items()}}}
+    )
+    run.metadata = {} if metadata is None else metadata
+    return run
+
+
+def gaussian_image(
+    center_x=18.0,
+    center_y=12.0,
+    sigma_x=3.0,
+    sigma_y=1.5,
+):
+    y, x = np.indices((31, 41))
+    return 100 * np.exp(
+        -0.5
+        * (
+            ((x - center_x) / sigma_x) ** 2
+            + ((y - center_y) / sigma_y) ** 2
+        )
+    )
 
 
 @pytest.fixture
@@ -50,7 +79,7 @@ def make_profile_and_resources():
         parameters = BeamEvaluationConfig(
             image_field="image",
             intensity_field="i0",
-            crop_region=(0, 2),
+            x_crop=(4, 37),
         )
         profile = replace(
             PER_ENERGY_ALIGNMENT,
@@ -69,7 +98,7 @@ def make_profile_and_resources():
         )
         resources = EnergyAlignmentResources(
             catalog=(
-                {"reference": run_with_fields(image=np.ones((1, 2, 2)))}
+                {"reference": run_with_fields(image=gaussian_image())}
                 if catalog is None
                 else catalog
             ),
@@ -88,31 +117,169 @@ def make_profile_and_resources():
     return factory
 
 
-def test_compute_image_stats_uses_configured_crop():
+def test_full_width_half_maximum_interpolates_crossings():
+    coordinates = np.array([10.0, 10.25, 10.5, 10.75, 11.0])
+    profile = np.array([0.0, 1.0, 2.0, 1.0, 0.0])
+
+    assert _full_width_half_maximum(profile, coordinates, axis="x") == 0.5
+
+    for invalid_profile in (
+        np.array([2.0, 1.0, 0.0, 0.0, 0.0]),
+        np.zeros(5),
+    ):
+        with pytest.raises(
+            ValueError,
+            match="Cannot compute x FWHM: peak is not bracketed at half maximum",
+        ):
+            _full_width_half_maximum(invalid_profile, coordinates, axis="x")
+
+
+def test_compute_image_stats_preprocesses_in_native_coordinates():
     parameters = BeamEvaluationConfig(
         image_field="image",
         intensity_field="i0",
-        crop_region=(2, 5),
+        x_crop=(8, 29),
+        y_crop=(4, 21),
+        upscale_factor=4,
     )
-    image = np.zeros((3, 7))
-    image[:, 1] = 100
-    image[:, 4] = 2
+    image = gaussian_image()
+    image[12, 7] = 10_000
+    image[3, 18] = 20_000
 
     stats = compute_image_stats(image, parameters)
 
-    assert stats.lateral_position == 4
-    assert stats.cropped_intensity == 6
+    assert stats.centroid_x == pytest.approx(18, abs=0.05)
+    assert stats.centroid_y == pytest.approx(12, abs=0.05)
+    assert np.isfinite([stats.fwhm_x, stats.fwhm_y]).all()
+    assert stats.fwhm_x > stats.fwhm_y > 0
+
+    changed_distractors = image.copy()
+    changed_distractors[12, 7] = 30_000
+    changed_distractors[3, 18] = 40_000
+    assert compute_image_stats(changed_distractors, parameters) == stats
+
+    scale_two_stats = compute_image_stats(
+        image,
+        replace(parameters, upscale_factor=2),
+    )
+    for metric in ("fwhm_x", "fwhm_y", "centroid_x", "centroid_y"):
+        assert getattr(scale_two_stats, metric) == pytest.approx(
+            getattr(stats, metric), abs=0.25
+        )
+
+    processed, x_coordinates, y_coordinates = _preprocess_image(image, parameters)
+    assert processed.shape == (68, 84)
+    assert np.diff(x_coordinates) == pytest.approx(0.25)
+    assert np.diff(y_coordinates) == pytest.approx(0.25)
+    assert x_coordinates.mean() == pytest.approx(18)
+    assert y_coordinates.mean() == pytest.approx(12)
 
 
-def test_compute_image_stats_rejects_frame_stack():
-    parameters = BeamEvaluationConfig(
-        image_field="image",
-        intensity_field="i0",
-        crop_region=(0, 5),
+@pytest.mark.parametrize(
+    ("image", "parameters", "message"),
+    [
+        pytest.param(
+            np.ones((2, 31, 41)),
+            BeamEvaluationConfig("image", "i0", (8, 29), (4, 21)),
+            "ambiguous 3-D shape",
+            id="frame-stack",
+        ),
+        pytest.param(
+            gaussian_image(),
+            BeamEvaluationConfig("image", "i0", (8, 8), (4, 21)),
+            "Invalid x crop",
+            id="empty-x-crop",
+        ),
+        pytest.param(
+            gaussian_image(),
+            BeamEvaluationConfig("image", "i0", (8, 42), (4, 21)),
+            "Invalid x crop",
+            id="out-of-bounds-x-crop",
+        ),
+        pytest.param(
+            gaussian_image(),
+            BeamEvaluationConfig("image", "i0", (8, 29), (-1, 21)),
+            "Invalid y crop",
+            id="negative-y-crop",
+        ),
+        pytest.param(
+            gaussian_image(),
+            BeamEvaluationConfig("image", "i0", (8, 29), (4, 32)),
+            "Invalid y crop",
+            id="out-of-bounds-y-crop",
+        ),
+        pytest.param(
+            np.full((31, 41), np.nan),
+            BeamEvaluationConfig("image", "i0", (8, 29), (4, 21)),
+            "Image contains non-finite or negative pixels",
+            id="non-finite-pixels",
+        ),
+        pytest.param(
+            -gaussian_image(),
+            BeamEvaluationConfig("image", "i0", (8, 29), (4, 21)),
+            "Image contains non-finite or negative pixels",
+            id="negative-pixels",
+        ),
+        pytest.param(
+            np.ones((31, 41)),
+            BeamEvaluationConfig("image", "i0", (8, 29), (4, 21)),
+            "Image has no positive signal after Otsu thresholding",
+            id="constant-image",
+        ),
+        pytest.param(
+            gaussian_image(center_x=8),
+            BeamEvaluationConfig("image", "i0", (8, 29), (4, 21)),
+            "Cannot compute x FWHM: peak is not bracketed at half maximum",
+            id="beam-at-crop-boundary",
+        ),
+    ],
+)
+def test_compute_image_stats_rejects_invalid_input(image, parameters, message):
+    with pytest.raises(ValueError, match=message):
+        compute_image_stats(image, parameters)
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"blur_sigma": 0}, "blur_sigma must be finite and positive"),
+        ({"blur_sigma": np.inf}, "blur_sigma must be finite and positive"),
+        (
+            {"upscale_factor": True},
+            "upscale_factor must be a non-boolean integer of at least 2",
+        ),
+        (
+            {"upscale_factor": 1},
+            "upscale_factor must be a non-boolean integer of at least 2",
+        ),
+    ],
+)
+def test_compute_image_stats_rejects_invalid_config(changes, message):
+    parameters = BeamEvaluationConfig("image", "i0", (8, 29), (4, 21))
+
+    with pytest.raises(ValueError, match=message):
+        compute_image_stats(gaussian_image(), replace(parameters, **changes))
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        "fwhm_x",
+        "fwhm_y",
+        "centroid_x",
+        "centroid_y",
+        "centroid_distance",
+        "intensity",
+    ],
+)
+def test_profile_accepts_image_evaluation_outcomes(outcome):
+    profile = replace(
+        PER_ENERGY_ALIGNMENT,
+        name=f"{outcome}-objective",
+        objectives=(Objective(name=outcome, minimize=True),),
     )
 
-    with pytest.raises(ValueError, match="ambiguous 3-D shape"):
-        compute_image_stats(np.ones((2, 3, 5)), parameters)
+    assert get_energy_alignment_profile(profile) is profile
 
 
 def test_profile_rejects_unsupported_evaluation_outcome():
@@ -126,32 +293,228 @@ def test_profile_rejects_unsupported_evaluation_outcome():
         get_energy_alignment_profile(profile)
 
 
-def test_image_evaluation_returns_one_outcome_per_suggestion():
+def make_image_evaluator():
     parameters = BeamEvaluationConfig(
         image_field="image",
         intensity_field="i0",
-        crop_region=(1, 5),
+        x_crop=(4, 37),
     )
-    reference = np.zeros((1, 2, 6))
-    reference[0, :, 2] = 5
-    acquired = np.zeros((2, 2, 6))
-    acquired[0, :, 3] = 2
-    acquired[1, :, 1] = 3
-    catalog = {
-        "reference": run_with_fields(image=reference),
-        "acquired": run_with_fields(image=acquired),
-    }
-    evaluator = ImageEvaluation(catalog, "reference", parameters)
+    catalog = {"reference": run_with_fields(image=gaussian_image())}
+    return ImageEvaluation(catalog, "reference", parameters), catalog
+
+
+def test_image_evaluation_pairs_acquisition_metadata_with_suggestions():
+    evaluator, catalog = make_image_evaluator()
+    first_image = gaussian_image(center_y=14, sigma_y=2)
+    second_image = gaussian_image(center_x=20, sigma_x=4)
+    acquired_images = np.stack((second_image, first_image))
+    acquired_intensities = np.array([2_500_000.0, 1_250_000.0])
+    catalog["acquired"] = run_with_fields(
+        metadata={
+            "start": {
+                "blop_suggestions": [{"_id": "second"}, {"_id": "first"}]
+            }
+        },
+        image=acquired_images,
+        i0=acquired_intensities,
+    )
 
     outcomes = evaluator(
         "acquired",
         [{"_id": "first"}, {"_id": "second"}],
     )
 
-    assert outcomes == [
-        {"_id": "first", "lateral_distance": 1, "intensity": 4.0},
-        {"_id": "second", "lateral_distance": 1, "intensity": 6.0},
+    assert [outcome["_id"] for outcome in outcomes] == ["first", "second"]
+    assert [outcome["intensity"] for outcome in outcomes] == [
+        1_250_000.0,
+        2_500_000.0,
     ]
+    metric_names = {
+        "fwhm_x",
+        "fwhm_y",
+        "centroid_x",
+        "centroid_y",
+        "centroid_distance",
+        "intensity",
+    }
+    assert set(outcomes[0]) == {"_id", *metric_names}
+    assert all(
+        type(outcome[metric]) is float
+        for outcome in outcomes
+        for metric in metric_names
+    )
+    assert outcomes[0]["centroid_distance"] == pytest.approx(2, abs=0.05)
+    assert outcomes[1]["centroid_distance"] == pytest.approx(2, abs=0.05)
+    assert outcomes[0]["fwhm_y"] > outcomes[1]["fwhm_y"]
+    assert outcomes[1]["fwhm_x"] > outcomes[0]["fwhm_x"]
+    assert not np.allclose(
+        acquired_images.sum(axis=(1, 2)),
+        acquired_intensities,
+    )
+    assert catalog["reference"]["primary"]["data"]["image"].read_count == 1
+    assert catalog["acquired"]["primary"]["data"]["image"].read_count == 1
+    assert catalog["acquired"]["primary"]["data"]["i0"].read_count == 1
+
+
+def test_image_evaluation_skips_catalog_when_there_are_no_suggestions():
+    evaluator, _ = make_image_evaluator()
+
+    class UnreadableCatalog:
+        def __getitem__(self, key):
+            raise AssertionError(f"Unexpected catalog read for {key!r}")
+
+    evaluator.tiled_client = UnreadableCatalog()
+
+    assert evaluator("unused", []) == []
+
+
+@pytest.mark.parametrize(
+    "intensity_data",
+    [1_250_000.0, np.array([1_250_000.0])],
+    ids=["scalar", "singleton"],
+)
+def test_image_evaluation_accepts_one_scalar_ion_reading(intensity_data):
+    evaluator, catalog = make_image_evaluator()
+    catalog["acquired"] = run_with_fields(
+        image=gaussian_image(center_x=19)[np.newaxis, ...],
+        i0=intensity_data,
+    )
+
+    outcomes = evaluator("acquired", [{"_id": "only"}])
+
+    assert outcomes[0]["intensity"] == 1_250_000.0
+
+
+@pytest.mark.parametrize(
+    ("metadata", "message"),
+    [
+        ({}, "Batch evaluation requires blop_suggestions metadata"),
+        (
+            {
+                "start": {
+                    "blop_suggestions": [{"_id": "first"}, {"_id": "other"}]
+                }
+            },
+            "metadata IDs do not match supplied suggestion IDs",
+        ),
+        (
+            {
+                "start": {
+                    "blop_suggestions": [{"_id": "first"}, {"_id": "first"}]
+                }
+            },
+            "metadata contains duplicate _id values",
+        ),
+    ],
+    ids=["missing", "mismatched", "duplicate"],
+)
+def test_image_evaluation_rejects_invalid_batch_metadata(metadata, message):
+    evaluator, catalog = make_image_evaluator()
+    catalog["acquired"] = run_with_fields(
+        metadata=metadata,
+        image=np.stack((gaussian_image(), gaussian_image(center_x=20))),
+        i0=np.array([1_250_000.0, 2_500_000.0]),
+    )
+
+    with pytest.raises(ValueError, match=message):
+        evaluator("acquired", [{"_id": "first"}, {"_id": "second"}])
+
+
+def test_image_evaluation_validates_single_suggestion_metadata_id():
+    evaluator, catalog = make_image_evaluator()
+    catalog["acquired"] = run_with_fields(
+        metadata={"start": {"blop_suggestions": [{"_id": "other"}]}},
+        image=gaussian_image(),
+        i0=1_250_000.0,
+    )
+
+    with pytest.raises(ValueError, match="metadata IDs do not match"):
+        evaluator("acquired", [{"_id": "only"}])
+
+
+@pytest.mark.parametrize(
+    ("images", "intensities", "field"),
+    [
+        (
+            np.stack((gaussian_image(),)),
+            np.array([1_250_000.0, 2_500_000.0]),
+            "image",
+        ),
+        (
+            np.stack((gaussian_image(), gaussian_image(center_x=20))),
+            np.array([1_250_000.0]),
+            "i0",
+        ),
+        (
+            np.stack((gaussian_image(), gaussian_image(center_x=20))),
+            np.ones((2, 2)),
+            "i0",
+        ),
+    ],
+    ids=["image-count", "ion-count", "non-scalar-ion-samples"],
+)
+def test_image_evaluation_rejects_mismatched_payload_shapes(
+    images,
+    intensities,
+    field,
+):
+    evaluator, catalog = make_image_evaluator()
+    catalog["acquired"] = run_with_fields(
+        metadata={
+            "start": {
+                "blop_suggestions": [{"_id": "first"}, {"_id": "second"}]
+            }
+        },
+        image=images,
+        i0=intensities,
+    )
+
+    with pytest.raises(ValueError, match="Received 2 suggestions") as exc_info:
+        evaluator("acquired", [{"_id": "first"}, {"_id": "second"}])
+    assert repr(field) in str(exc_info.value)
+
+
+@pytest.mark.parametrize("invalid_intensity", [np.nan, np.inf, -np.inf])
+def test_image_evaluation_rejects_non_finite_ion_readings(invalid_intensity):
+    evaluator, catalog = make_image_evaluator()
+    catalog["acquired"] = run_with_fields(
+        metadata={
+            "start": {
+                "blop_suggestions": [{"_id": "first"}, {"_id": "second"}]
+            }
+        },
+        image=np.stack((gaussian_image(), gaussian_image(center_x=20))),
+        i0=np.array([1_250_000.0, invalid_intensity]),
+    )
+
+    with pytest.raises(ValueError, match="finite scalar values"):
+        evaluator("acquired", [{"_id": "first"}, {"_id": "second"}])
+
+
+def test_compute_stats_reports_catalog_ion_reading(
+    make_profile_and_resources,
+    capsys,
+):
+    run = run_with_fields(image=gaussian_image(), i0=np.array([1_250_000.0]))
+    profile, resources = make_profile_and_resources(catalog={"acquired": run})
+
+    stats = compute_stats("acquired", profile=profile, resources=resources)
+
+    output = capsys.readouterr().out
+    assert stats.centroid_x == pytest.approx(18, abs=0.05)
+    for metric in ("fwhm_x", "fwhm_y", "centroid_x", "centroid_y"):
+        assert f"{metric}=" in output
+    assert "intensity=1250000.0" in output
+    assert run["primary"]["data"]["image"].read_count == 1
+    assert run["primary"]["data"]["i0"].read_count == 1
+
+
+def test_compute_stats_rejects_non_scalar_ion_reading(make_profile_and_resources):
+    run = run_with_fields(image=gaussian_image(), i0=np.array([1.0, 2.0]))
+    profile, resources = make_profile_and_resources(catalog={"acquired": run})
+
+    with pytest.raises(ValueError, match="one finite scalar"):
+        compute_stats("acquired", profile=profile, resources=resources)
 
 
 def test_agent_factory_returns_fresh_agents(make_profile_and_resources):
@@ -185,7 +548,7 @@ def test_metadata_uses_profile_and_live_resources(make_profile_and_resources):
     assert agent_metadata["iterations"] == 2
     assert agent_metadata["dofs"][0]["name"] == "motor"
     assert agent_metadata["sensors"] == ["camera"]
-    assert agent_metadata["objectives"] == ["lateral_distance"]
+    assert agent_metadata["objectives"] == ["centroid_distance"]
 
 
 def test_metadata_wrapper_injects_start_document(make_profile_and_resources):
@@ -224,11 +587,11 @@ def test_dash_callback_builds_app(make_profile_and_resources):
 
     callback = SurrogateModelDashCallback(agent)
     callback.event({"data": {"motor": 0.25}})
-    figure = callback.compute_figure("motor", "motor", "lateral_distance")
+    figure = callback.compute_figure("motor", "motor", "centroid_distance")
     app = callback.build_app()
 
     assert callback.dof_names == ["motor"]
-    assert callback.objective_names == ["lateral_distance"]
+    assert callback.objective_names == ["centroid_distance"]
     assert callback.version == 1
     assert "two different DOFs" in figure.layout.annotations[0].text
     assert app.layout is not None
@@ -249,23 +612,15 @@ def test_search_reuses_reference_evaluation(
     make_profile_and_resources,
     monkeypatch,
 ):
-    class CountingField(Field):
-        def __init__(self, value):
-            super().__init__(value)
-            self.read_count = 0
-
-        def read(self):
-            self.read_count += 1
-            return super().read()
 
     class FakeAgent:
         def optimize(self, iterations):
             yield from null()
 
         def get_best_points(self):
-            return [(0, {"motor": 0.0}, {"lateral_distance": (0.0, 0.0)})]
+            return [(0, {"motor": 0.0}, {"centroid_distance": (0.0, 0.0)})]
 
-    reference_image = CountingField(np.ones((1, 2, 2)))
+    reference_image = Field(gaussian_image())
     catalog = {"reference": {"primary": {"data": {"image": reference_image}}}}
 
     def change_edge(*args, **kwargs):
