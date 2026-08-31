@@ -8,12 +8,12 @@ from pathlib import Path
 import pickle
 import threading
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from ax.api.protocols import IMetric
-from blop import (
+from blop import default_acquire
+from blop.ax import (
     Agent,
-    default_acquire,
     DOF,
     Objective,
     OutcomeConstraint,
@@ -23,6 +23,7 @@ from blop import (
 from blop.protocols import AcquisitionPlan, Actuator, EvaluationFunction, Sensor
 from bluesky.callbacks import CallbackBase
 from bluesky.plan_stubs import checkpoint, move_per_step, null, trigger_and_read
+from bluesky.plans import count
 from bluesky.preprocessors import (
     finalize_wrapper,
     inject_md_wrapper,
@@ -710,6 +711,17 @@ class ImageEvaluation:
         return outcomes
 
 
+def acquire_target_position(sensors: Sequence[Readable]) -> MsgGenerator[str]:
+    """Record supplied sensor values and DOF positions at the target state."""
+    return (
+        yield from count(
+            sensors,
+            num=1,
+            md={"plan_name": "acquire_target_position"},
+        )
+    )
+
+
 @plan
 def scan_energy(
     detectors: Sequence[Readable],
@@ -819,9 +831,8 @@ def _write_energy_map(
 
 def search_for_optimal_positions(
     energies: list[str],
-    reference_scan_uid: str,
-    energy_map_filename: str | Path | None = None,
     *,
+    energy_map_filename: str | Path | None = None,
     profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
 ) -> MsgGenerator[dict[str, Any]]:
@@ -833,7 +844,22 @@ def search_for_optimal_positions(
 
     def main_plan() -> MsgGenerator[dict[str, Any]]:
         energy_map: dict[str, Any] = {}
-        evaluation_function: EvaluationFunction | None = None
+        if not energies:
+            return energy_map
+
+        target_readables: list[Readable] = [
+            resolved_resources.sensors[name] for name in resolved_profile.sensors
+        ]
+        target_readables.extend(
+            cast(Readable, dof.actuator)
+            for dof in _bind_dofs(resolved_resources, resolved_profile)
+        )
+        reference_scan_uid = yield from acquire_target_position(target_readables)
+        evaluation_function = ImageEvaluation(
+            resolved_resources.catalog,
+            reference_scan_uid=reference_scan_uid,
+            parameters=resolved_profile.evaluation,
+        )
         resolved_resources.prompt_state.prompt = False
 
         for energy in energies:
@@ -845,12 +871,6 @@ def search_for_optimal_positions(
                 mirror=energy_change.mirror,
             )
 
-            if evaluation_function is None:
-                evaluation_function = ImageEvaluation(
-                    resolved_resources.catalog,
-                    reference_scan_uid=reference_scan_uid,
-                    parameters=resolved_profile.evaluation,
-                )
             agent = make_energy_alignment_agent(
                 reference_scan_uid,
                 profile=resolved_profile,
