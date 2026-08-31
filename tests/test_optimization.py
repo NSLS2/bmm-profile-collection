@@ -11,7 +11,8 @@ import pytest
 
 import BMM.optimization as optimization_module
 from BMM.optimization import (
-    CAMERA_CENTERING,
+    ENERGY_ALIGNMENT_PROFILES,
+    PER_ENERGY_ALIGNMENT,
     BeamEvaluationConfig,
     EnergyAlignmentResources,
     ImageEvaluation,
@@ -35,11 +36,7 @@ class Field:
 
 
 def run_with_fields(**fields):
-    return {
-        "primary": {
-            "data": {name: Field(value) for name, value in fields.items()}
-        }
-    }
+    return {"primary": {"data": {name: Field(value) for name, value in fields.items()}}}
 
 
 @pytest.fixture
@@ -56,7 +53,7 @@ def make_profile_and_resources():
             crop_region=(0, 2),
         )
         profile = replace(
-            CAMERA_CENTERING,
+            PER_ENERGY_ALIGNMENT,
             name="test",
             sensors=("camera",),
             dofs=(
@@ -68,7 +65,7 @@ def make_profile_and_resources():
                 ),
             ),
             evaluation=parameters,
-            optimization=replace(CAMERA_CENTERING.optimization, iterations=2),
+            optimization=replace(PER_ENERGY_ALIGNMENT.optimization, iterations=2),
         )
         resources = EnergyAlignmentResources(
             catalog=(
@@ -120,7 +117,7 @@ def test_compute_image_stats_rejects_frame_stack():
 
 def test_profile_rejects_unsupported_evaluation_outcome():
     profile = replace(
-        CAMERA_CENTERING,
+        PER_ENERGY_ALIGNMENT,
         name="unsupported-outcome",
         objectives=(Objective(name="beam_width", minimize=True),),
     )
@@ -238,9 +235,7 @@ def test_dash_callback_builds_app(make_profile_and_resources):
 
 
 def test_energy_map_write_is_atomic_and_pickle_compatible(tmp_path):
-    energy_map = {
-        "Fe": [(0, {"motor": 0.25}, {"intensity": (10.0, 0.0)})]
-    }
+    energy_map = {"Fe": [(0, {"motor": 0.25}, {"intensity": (10.0, 0.0)})]}
     filename = tmp_path / "energy-map.pickle"
 
     _write_energy_map(filename, energy_map)
@@ -271,9 +266,7 @@ def test_search_reuses_reference_evaluation(
             return [(0, {"motor": 0.0}, {"lateral_distance": (0.0, 0.0)})]
 
     reference_image = CountingField(np.ones((1, 2, 2)))
-    catalog = {
-        "reference": {"primary": {"data": {"image": reference_image}}}
-    }
+    catalog = {"reference": {"primary": {"data": {"image": reference_image}}}}
 
     def change_edge(*args, **kwargs):
         yield from null()
@@ -315,8 +308,8 @@ def test_search_restores_prompt_after_failure():
     prompt_state = SimpleNamespace(prompt=True)
     resources = EnergyAlignmentResources(
         catalog={},
-        actuators={dof.actuator: object() for dof in CAMERA_CENTERING.dofs},
-        sensors={sensor: object() for sensor in CAMERA_CENTERING.sensors},
+        actuators={dof.actuator: object() for dof in PER_ENERGY_ALIGNMENT.dofs},
+        sensors={sensor: object() for sensor in PER_ENERGY_ALIGNMENT.sensors},
         change_edge_plan=failing_change_edge,
         prompt_state=prompt_state,
     )

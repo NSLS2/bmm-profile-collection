@@ -115,8 +115,8 @@ _BEAM_EVALUATION = BeamEvaluationConfig(
     crop_region=(900, 1040),
 )
 
-CAMERA_CENTERING = EnergyAlignmentProfile(
-    name="camera-centering",
+PER_ENERGY_ALIGNMENT = EnergyAlignmentProfile(
+    name="per-energy-alignment",
     sensors=("camera", "i0"),
     dofs=_ALIGNMENT_DOFS,
     objectives=(Objective(name="lateral_distance", minimize=True),),
@@ -134,25 +134,8 @@ CAMERA_CENTERING = EnergyAlignmentProfile(
     ),
 )
 
-MAXIMUM_INTENSITY = EnergyAlignmentProfile(
-    name="maximum-intensity",
-    sensors=("camera", "i0"),
-    dofs=_ALIGNMENT_DOFS,
-    objectives=(Objective(name="intensity", minimize=False),),
-    outcome_constraints=(),
-    evaluation=_BEAM_EVALUATION,
-    optimization=OptimizationConfig(
-        iterations=20,
-        initialization_budget=1,
-        initialize_with_center=False,
-    ),
-)
-
 ENERGY_ALIGNMENT_PROFILES: Mapping[str, EnergyAlignmentProfile] = MappingProxyType(
-    {
-        CAMERA_CENTERING.name: CAMERA_CENTERING,
-        MAXIMUM_INTENSITY.name: MAXIMUM_INTENSITY,
-    }
+    {PER_ENERGY_ALIGNMENT.name: PER_ENERGY_ALIGNMENT}
 )
 
 
@@ -204,7 +187,7 @@ def _optimization_metadata(
     energy: str,
     reference_scan_uid: str | None = None,
     *,
-    profile: str | EnergyAlignmentProfile = CAMERA_CENTERING.name,
+    profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
 ) -> dict[str, Any]:
     resolved_profile = get_energy_alignment_profile(profile)
@@ -254,7 +237,7 @@ def optimization_metadata_wrapper(
     energy: str,
     reference_scan_uid: str | None = None,
     *,
-    profile: str | EnergyAlignmentProfile = CAMERA_CENTERING.name,
+    profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
 ):
     """Inject profile and live beamline metadata into every optimization run."""
@@ -407,7 +390,7 @@ def compute_image_stats(
 def compute_stats(
     uid: str,
     *,
-    profile: str | EnergyAlignmentProfile = CAMERA_CENTERING.name,
+    profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
 ) -> BeamStats:
     """Print camera and ion-chamber statistics for a completed run."""
@@ -480,7 +463,7 @@ class ImageEvaluation:
 def make_energy_alignment_agent(
     reference_scan_uid: str,
     *,
-    profile: str | EnergyAlignmentProfile = CAMERA_CENTERING.name,
+    profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
     evaluation_function: EvaluationFunction | None = None,
 ) -> Agent:
@@ -530,7 +513,7 @@ def search_for_optimal_positions(
     reference_scan_uid: str,
     energy_map_filename: str | Path | None = None,
     *,
-    profile: str | EnergyAlignmentProfile = CAMERA_CENTERING.name,
+    profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
 ) -> MsgGenerator[dict[str, Any]]:
     """Optimize motor positions at each energy using a named or custom profile."""
