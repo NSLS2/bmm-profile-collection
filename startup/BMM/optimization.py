@@ -21,13 +21,13 @@ from blop import (
 )
 from blop.protocols import AcquisitionPlan, Actuator, EvaluationFunction, Sensor
 from bluesky.callbacks import CallbackBase
-from bluesky.plan_stubs import null, one_nd_step, trigger_and_read
+from bluesky.plan_stubs import checkpoint, move_per_step, null, trigger_and_read
 from bluesky.preprocessors import (
     finalize_wrapper,
     inject_md_wrapper,
     set_run_key_wrapper,
 )
-from bluesky.protocols import Readable
+from bluesky.protocols import Movable, Readable
 from bluesky.utils import MsgGenerator, plan
 from event_model import Event, RunStart, RunStop
 import numpy as np
@@ -470,25 +470,33 @@ class ImageEvaluation:
 @plan
 def scan_energy(
     detectors: Sequence[Readable],
+    step: Mapping[Movable, Any],
+    pos_cache: dict[Movable, Any],
     *,
     change_edge_plan: Callable[..., MsgGenerator[None]],
     energy_readable: Readable,
     elements: Sequence[str],
     energy_change: EnergyChangeConfig = EnergyChangeConfig(),
 ) -> MsgGenerator[None]:
-    """Acquire each configured element edge at the current suggested position."""
-    devices = [*detectors, energy_readable]
+    """Change edge, restore the suggestion, and acquire at every element."""
+    motors = tuple(step)
+    devices = [*detectors, *motors, energy_readable]
+
     for element in elements:
-        # change_edge may open tuning runs; keep them separate from the data run.
+        yield from checkpoint()
+        # Keep any optional change_edge scans separate from the data run.
         yield from set_run_key_wrapper(
             change_edge_plan(
                 element,
                 focus=energy_change.focus,
                 no_hslits=energy_change.no_hslits,
                 mirror=energy_change.mirror,
+                tune=False,
+                preserve_dcm_roll=True,
             ),
             "change_edge",
         )
+        yield from move_per_step(step, pos_cache)
         yield from trigger_and_read(devices)
 
 
@@ -507,14 +515,11 @@ def make_energy_scan_acquisition_plan(
     return partial(
         default_acquire,
         per_step=partial(
-            one_nd_step,
-            take_reading=partial(
-                scan_energy,
-                change_edge_plan=change_edge_plan,
-                energy_readable=energy_readable,
-                elements=element_names,
-                energy_change=energy_change,
-            ),
+            scan_energy,
+            change_edge_plan=change_edge_plan,
+            energy_readable=energy_readable,
+            elements=element_names,
+            energy_change=energy_change,
         ),
     )
 

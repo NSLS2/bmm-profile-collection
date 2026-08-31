@@ -1,11 +1,11 @@
 from dataclasses import replace
 import pickle
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from blop import Objective, RangeDOF
 from bluesky import RunEngine
 from bluesky.plan_stubs import close_run, mv, null, open_run
-from bluesky.plans import count
 import numpy as np
 from ophyd.sim import SynAxis, SynSignal
 import pytest
@@ -181,12 +181,20 @@ def test_energy_scan_acquisition_runs_full_grid_per_suggestion():
         func=lambda: 10 * motor.position + energy.position,
     )
     edge_energies = {"Fe": 7112.0, "Cu": 8979.0}
+    edge_motor_positions = {"Fe": -0.9, "Cu": 0.9}
     edge_changes = []
 
     def change_edge(element, **kwargs):
         edge_changes.append((element, kwargs))
-        yield from mv(energy, edge_energies[element])
-        yield from count([energy], 1, md={"purpose": "change-edge"})
+        if kwargs["preserve_dcm_roll"]:
+            yield from mv(energy, edge_energies[element])
+        else:
+            yield from mv(
+                energy,
+                edge_energies[element],
+                motor,
+                edge_motor_positions[element],
+            )
 
     elements = ["Fe", "Cu"]
     acquisition_plan = make_energy_scan_acquisition_plan(
@@ -203,50 +211,50 @@ def test_energy_scan_acquisition_runs_full_grid_per_suggestion():
     run_engine = RunEngine({}, call_returns_result=True)
     run_engine.subscribe(lambda name, doc: documents.append((name, doc)))
 
-    result = run_engine(acquisition_plan(suggestions, [motor], [detector]))
+    with patch.object(motor, "set", wraps=motor.set) as set_motor:
+        result = run_engine(acquisition_plan(suggestions, [motor], [detector]))
 
     starts = [doc for name, doc in documents if name == "start"]
-    [start] = [doc for doc in starts if doc.get("run_key") == "default_acquire"]
-    edge_starts = [doc for doc in starts if doc.get("purpose") == "change-edge"]
-    assert len(edge_starts) == 4
+    assert len(starts) == 1
+    [start] = starts
+    assert start["run_key"] == "default_acquire"
     assert result.plan_result == start["uid"]
-    assert {doc["run_start"] for name, doc in documents if name == "stop"} == {
-        doc["uid"] for doc in starts
-    }
-    descriptor_runs = {
-        doc["uid"]: doc["run_start"]
-        for name, doc in documents
-        if name == "descriptor"
-    }
-    descriptors = [
-        doc
-        for name, doc in documents
-        if name == "descriptor" and doc["run_start"] == start["uid"]
-    ]
+    assert len([doc for name, doc in documents if name == "stop"]) == 1
+    descriptors = [doc for name, doc in documents if name == "descriptor"]
     assert [descriptor["name"] for descriptor in descriptors] == ["primary"]
 
-    events = [
-        doc
-        for name, doc in documents
-        if name == "event" and descriptor_runs[doc["descriptor"]] == start["uid"]
-    ]
+    events = [doc for name, doc in documents if name == "event"]
     assert len(events) == 4
     routed_positions = [
         suggestion["motor"] for suggestion in start["blop_suggestions"]
     ]
+    assert [call.args[0] for call in set_motor.call_args_list] == pytest.approx(
+        routed_positions
+    )
     assert [element for element, _ in edge_changes] == ["Fe", "Cu"] * 2
     assert all(
-        options == {"focus": True, "no_hslits": True, "mirror": False}
+        options
+        == {
+            "focus": True,
+            "no_hslits": True,
+            "mirror": False,
+            "tune": False,
+            "preserve_dcm_roll": True,
+        }
         for _, options in edge_changes
     )
     for index, position in enumerate(routed_positions):
         block = events[index * 2 : (index + 1) * 2]
-        assert [event["data"]["motor"] for event in block] == [position, position]
+        assert [event["data"]["motor"] for event in block] == pytest.approx(
+            [position, position]
+        )
         assert [event["data"]["energy"] for event in block] == [7112.0, 8979.0]
-        assert [event["data"]["detector"] for event in block] == [
-            10 * position + 7112.0,
-            10 * position + 8979.0,
-        ]
+        assert [event["data"]["detector"] for event in block] == pytest.approx(
+            [
+                10 * position + 7112.0,
+                10 * position + 8979.0,
+            ]
+        )
 
 
 def test_energy_scan_acquisition_rejects_empty_element_list():
@@ -274,12 +282,20 @@ def test_agent_optimization_nests_energy_scan_acquisition(
         func=lambda: motor.position + energy.position,
     )
     edge_energies = {"Fe": 7112.0, "Cu": 8979.0}
+    edge_motor_positions = {"Fe": -0.9, "Cu": 0.9}
     edge_changes = []
 
     def change_edge(element, **kwargs):
         edge_changes.append((element, kwargs))
-        yield from mv(energy, edge_energies[element])
-        yield from count([energy], 1, md={"purpose": "change-edge"})
+        if kwargs["preserve_dcm_roll"]:
+            yield from mv(energy, edge_energies[element])
+        else:
+            yield from mv(
+                energy,
+                edge_energies[element],
+                motor,
+                edge_motor_positions[element],
+            )
 
     resources = replace(
         resources,
@@ -319,23 +335,36 @@ def test_agent_optimization_nests_energy_scan_acquisition(
     run_engine(agent.optimize(1))
 
     starts = [doc for name, doc in documents if name == "start"]
-    [outer_start] = [doc for doc in starts if doc.get("run_key") == "optimize"]
-    [inner_start] = [
-        doc for doc in starts if doc.get("run_key") == "default_acquire"
-    ]
-    edge_starts = [doc for doc in starts if doc.get("purpose") == "change-edge"]
-    assert len(edge_starts) == 2
+    assert [start["run_key"] for start in starts] == ["optimize", "default_acquire"]
+    outer_start, inner_start = starts
     assert outer_start["uid"] != inner_start["uid"]
     stops = [doc for name, doc in documents if name == "stop"]
-    assert {stop["run_start"] for stop in stops} == {start["uid"] for start in starts}
-    assert [stop["run_start"] for stop in stops[-2:]] == [
+    assert [stop["run_start"] for stop in stops] == [
         inner_start["uid"],
         outer_start["uid"],
     ]
 
     assert edge_changes == [
-        ("Fe", {"focus": True, "no_hslits": True, "mirror": False}),
-        ("Cu", {"focus": True, "no_hslits": True, "mirror": False}),
+        (
+            "Fe",
+            {
+                "focus": True,
+                "no_hslits": True,
+                "mirror": False,
+                "tune": False,
+                "preserve_dcm_roll": True,
+            },
+        ),
+        (
+            "Cu",
+            {
+                "focus": True,
+                "no_hslits": True,
+                "mirror": False,
+                "tune": False,
+                "preserve_dcm_roll": True,
+            },
+        ),
     ]
     assert evaluation_calls == [
         (inner_start["uid"], inner_start["blop_suggestions"])
@@ -352,10 +381,9 @@ def test_agent_optimization_nests_energy_scan_acquisition(
         if name == "event"
         and descriptor_runs[doc["descriptor"]] == inner_start["uid"]
     ]
-    assert [event["data"]["motor"] for event in inner_events] == [
-        suggestion["motor"],
-        suggestion["motor"],
-    ]
+    assert [event["data"]["motor"] for event in inner_events] == pytest.approx(
+        [suggestion["motor"], suggestion["motor"]]
+    )
     assert [event["data"]["energy"] for event in inner_events] == [
         7112.0,
         8979.0,
