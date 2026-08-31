@@ -354,7 +354,7 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
 
      report(f'Moving from mode {current_mode} to mode {mode}', slack=True)
 
-    if not preserve_dcm_roll:
+     if not preserve_dcm_roll:
           if mode == 'XRD':
                print('For XRD mode, move to post 2/2026 position for dcm.roll.')
                yield from mv(dcm.roll, 4.532) # profile_configuration.getfloat('dcm', f'roll_{dcm._crystal}')) #

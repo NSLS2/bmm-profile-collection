@@ -1,9 +1,8 @@
 from dataclasses import replace
 import pickle
 from types import SimpleNamespace
-from unittest.mock import patch
 
-from blop import Objective, RangeDOF
+from blop.ax import Objective, RangeDOF
 from bluesky import RunEngine
 from bluesky.plan_stubs import close_run, mv, null, open_run
 import numpy as np
@@ -13,9 +12,11 @@ import pytest
 import BMM.optimization as optimization_module
 from BMM.optimization import (
     ENERGY_ALIGNMENT_PROFILES,
+    ENERGY_RANGE_ALIGNMENT,
     PER_ENERGY_ALIGNMENT,
     BeamEvaluationConfig,
     EnergyAlignmentResources,
+    EnergyRangeEvaluation,
     ImageEvaluation,
     SurrogateModelDashCallback,
     _optimization_metadata,
@@ -26,6 +27,7 @@ from BMM.optimization import (
     compute_stats,
     get_energy_alignment_profile,
     make_energy_alignment_agent,
+    make_energy_range_alignment_agent,
     make_energy_scan_acquisition_plan,
     optimization_metadata_wrapper,
     search_for_optimal_positions,
@@ -117,6 +119,89 @@ def make_profile_and_resources():
         return profile, resources
 
     return factory
+
+
+def make_range_profile_and_resources(*, energy_readable=True):
+    parameters = BeamEvaluationConfig(
+        image_field="image",
+        intensity_field="i0",
+        blur_sigma=None,
+        upscale_factor=None,
+    )
+    profile = replace(
+        ENERGY_RANGE_ALIGNMENT,
+        name="test-range",
+        evaluation=parameters,
+        optimization=replace(ENERGY_RANGE_ALIGNMENT.optimization, iterations=1),
+    )
+    energy = SynAxis(name="energy")
+    dcm_roll = SynAxis(name="dcm_roll")
+    m2_yaw = SynAxis(name="m2_yaw")
+    m2_lateral = SynAxis(name="m2_lateral")
+    edge_changes = []
+    edge_energies = {"Fe": 7112.0, "Cu": 8979.0, "Zn": 9659.0}
+
+    def change_edge(element, **kwargs):
+        edge_changes.append((element, kwargs))
+        yield from mv(
+            energy,
+            edge_energies[element],
+            dcm_roll,
+            -99.0,
+            m2_yaw,
+            -99.0,
+            m2_lateral,
+            -99.0,
+        )
+
+    def camera_image():
+        return gaussian_image(center_x=17.0 if energy.position == 7112.0 else 19.0)
+
+    def i0_value():
+        return 1_250_000.0 if energy.position == 7112.0 else 2_500_000.0
+
+    catalog = {"reference": run_with_fields(image=gaussian_image(center_x=18.0))}
+    resources = EnergyAlignmentResources(
+        catalog=catalog,
+        actuators={
+            "dcm_roll": dcm_roll,
+            "m2_yaw": m2_yaw,
+            "m2_lateral": m2_lateral,
+        },
+        sensors={
+            "camera": SynSignal(name="camera", func=camera_image),
+            "i0": SynSignal(name="i0", func=i0_value),
+        },
+        change_edge_plan=change_edge,
+        prompt_state=SimpleNamespace(prompt=True),
+        energy_readable=energy if energy_readable else None,
+    )
+    return profile, resources, edge_changes
+
+
+def materialize_default_acquire_runs(catalog):
+    starts = {}
+    descriptor_runs = {}
+    events = {}
+
+    def subscriber(name, doc):
+        if name == "start" and doc.get("run_key") == "default_acquire":
+            starts[doc["uid"]] = doc
+            events[doc["uid"]] = []
+        elif name == "descriptor" and doc.get("run_start") in starts:
+            descriptor_runs[doc["uid"]] = doc["run_start"]
+        elif name == "event" and doc["descriptor"] in descriptor_runs:
+            events[descriptor_runs[doc["descriptor"]]].append(doc["data"])
+        elif name == "stop" and doc.get("run_start") in starts:
+            uid = doc["run_start"]
+            run_events = events[uid]
+            catalog[uid] = run_with_fields(
+                metadata={"start": starts[uid]},
+                image=np.stack([event["camera"] for event in run_events]),
+                i0=np.array([event["i0"] for event in run_events]),
+            )
+
+    return subscriber
 
 
 def test_full_width_half_maximum_interpolates_crossings():
@@ -310,6 +395,43 @@ def test_profile_accepts_image_evaluation_outcomes(outcome):
     assert get_energy_alignment_profile(profile) is profile
 
 
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        "centroid_x_offset_mean_um",
+        "centroid_x_std_um",
+        "centroid_x_span_um",
+        "centroid_x_rmse_um",
+        "fwhm_x_mean_um",
+        "fwhm_x_std_um",
+        "fwhm_x_rms_um",
+        "centroid_x_rmse_normalized",
+        "fwhm_x_rms_normalized",
+        "intensity_min",
+        "intensity_mean",
+    ],
+)
+def test_profile_accepts_energy_scan_outcomes(outcome):
+    profile = replace(
+        ENERGY_RANGE_ALIGNMENT,
+        name=f"{outcome}-objective",
+        objectives=(Objective(name=outcome, minimize=True),),
+    )
+
+    assert get_energy_alignment_profile(profile) is profile
+
+
+def test_profile_rejects_outcomes_from_wrong_evaluator():
+    profile = replace(
+        PER_ENERGY_ALIGNMENT,
+        name="wrong-evaluator-outcome",
+        objectives=(Objective(name="centroid_x_rmse_normalized", minimize=True),),
+    )
+
+    with pytest.raises(ValueError, match="single-image"):
+        get_energy_alignment_profile(profile)
+
+
 def test_profile_rejects_unsupported_evaluation_outcome():
     profile = replace(
         PER_ENERGY_ALIGNMENT,
@@ -329,6 +451,193 @@ def make_image_evaluator():
     )
     catalog = {"reference": run_with_fields(image=gaussian_image())}
     return ImageEvaluation(catalog, "reference", parameters), catalog
+
+
+def make_energy_range_evaluator(*, energy_count=2, micrometers_per_pixel=10.0):
+    parameters = BeamEvaluationConfig(
+        image_field="image",
+        intensity_field="i0",
+        blur_sigma=None,
+        upscale_factor=None,
+    )
+    catalog = {"reference": run_with_fields(image=gaussian_image(center_x=18.0))}
+    return (
+        EnergyRangeEvaluation(
+            catalog,
+            "reference",
+            parameters,
+            energy_count=energy_count,
+            micrometers_per_pixel=micrometers_per_pixel,
+        ),
+        catalog,
+        parameters,
+    )
+
+
+def test_energy_range_evaluation_aggregates_energy_block_metrics():
+    evaluator, catalog, parameters = make_energy_range_evaluator()
+    reference_image = catalog["reference"]["primary"]["data"]["image"]
+    first_image = gaussian_image(center_x=17.0, sigma_x=2.0)
+    second_image = gaussian_image(center_x=19.0, sigma_x=4.0)
+    catalog["acquired"] = run_with_fields(
+        image=np.stack((first_image, second_image)),
+        i0=np.array([1_250_000.0, 2_500_000.0]),
+    )
+
+    [outcome] = evaluator("acquired", [{"_id": "scan"}])
+
+    metric_names = {
+        "centroid_x_offset_mean_um",
+        "centroid_x_std_um",
+        "centroid_x_span_um",
+        "centroid_x_rmse_um",
+        "fwhm_x_mean_um",
+        "fwhm_x_std_um",
+        "fwhm_x_rms_um",
+        "centroid_x_rmse_normalized",
+        "fwhm_x_rms_normalized",
+        "intensity_min",
+        "intensity_mean",
+    }
+    assert set(outcome) == {"_id", *metric_names}
+    assert all(type(outcome[metric]) is float for metric in metric_names)
+    assert outcome["_id"] == "scan"
+    assert outcome["centroid_x_offset_mean_um"] == pytest.approx(0.0, abs=1e-10)
+    assert outcome["centroid_x_std_um"] == pytest.approx(10.0, abs=1e-10)
+    assert outcome["centroid_x_span_um"] == pytest.approx(20.0, abs=1e-10)
+    assert outcome["centroid_x_rmse_um"] == pytest.approx(10.0, abs=1e-10)
+    assert outcome["centroid_x_rmse_normalized"] == pytest.approx(0.2, abs=1e-10)
+    fwhm_um = np.array(
+        [
+            compute_image_stats(first_image, parameters).fwhm_x,
+            compute_image_stats(second_image, parameters).fwhm_x,
+        ]
+    ) * 10.0
+    reference_fwhm_um = (
+        compute_image_stats(reference_image.value, parameters).fwhm_x * 10.0
+    )
+    assert outcome["fwhm_x_mean_um"] == pytest.approx(float(np.mean(fwhm_um)))
+    assert outcome["fwhm_x_std_um"] == pytest.approx(float(np.std(fwhm_um)))
+    assert outcome["fwhm_x_rms_um"] == pytest.approx(
+        float(np.sqrt(np.mean(fwhm_um**2)))
+    )
+    assert outcome["fwhm_x_rms_normalized"] == pytest.approx(
+        float(np.sqrt(np.mean(fwhm_um**2))) / reference_fwhm_um
+    )
+    assert outcome["intensity_min"] == 1_250_000.0
+    assert outcome["intensity_mean"] == 1_875_000.0
+    assert reference_image.read_count == 1
+    assert catalog["acquired"]["primary"]["data"]["image"].read_count == 1
+    assert catalog["acquired"]["primary"]["data"]["i0"].read_count == 1
+
+
+def test_energy_range_evaluation_reorders_two_suggestion_energy_blocks():
+    evaluator, catalog, _ = make_energy_range_evaluator()
+    catalog["acquired"] = run_with_fields(
+        metadata={
+            "start": {"blop_suggestions": [{"_id": "second"}, {"_id": "first"}]}
+        },
+        image=np.stack(
+            (
+                gaussian_image(center_x=20.0),
+                gaussian_image(center_x=21.0),
+                gaussian_image(center_x=16.0),
+                gaussian_image(center_x=18.0),
+            )
+        ),
+        i0=np.array([2_000_000.0, 2_200_000.0, 1_100_000.0, 1_300_000.0]),
+    )
+
+    outcomes = evaluator(
+        "acquired",
+        [{"_id": "first"}, {"_id": "second"}],
+    )
+
+    assert [outcome["_id"] for outcome in outcomes] == ["first", "second"]
+    assert outcomes[0]["centroid_x_offset_mean_um"] == pytest.approx(-10.0)
+    assert outcomes[0]["intensity_min"] == 1_100_000.0
+    assert outcomes[0]["intensity_mean"] == 1_200_000.0
+    assert outcomes[1]["centroid_x_offset_mean_um"] == pytest.approx(25.0)
+    assert outcomes[1]["intensity_min"] == 2_000_000.0
+    assert outcomes[1]["intensity_mean"] == 2_100_000.0
+
+
+@pytest.mark.parametrize(
+    ("metadata", "message"),
+    [
+        ({}, "Batch evaluation requires blop_suggestions metadata"),
+        (
+            {"start": {"blop_suggestions": [{"_id": "first"}, {"_id": "other"}]}},
+            "metadata IDs do not match supplied suggestion IDs",
+        ),
+        (
+            {"start": {"blop_suggestions": [{"_id": "first"}, {"_id": "first"}]}},
+            "metadata IDs do not match supplied suggestion IDs",
+        ),
+    ],
+    ids=["missing", "mismatched", "duplicate"],
+)
+def test_energy_range_evaluation_rejects_invalid_batch_metadata(metadata, message):
+    evaluator, catalog, _ = make_energy_range_evaluator()
+    catalog["acquired"] = run_with_fields(
+        metadata=metadata,
+        image=np.stack([gaussian_image() for _ in range(4)]),
+        i0=np.full(4, 1_250_000.0),
+    )
+
+    with pytest.raises(ValueError, match=message):
+        evaluator("acquired", [{"_id": "first"}, {"_id": "second"}])
+
+
+@pytest.mark.parametrize(
+    ("images", "intensities", "field"),
+    [
+        (np.stack([gaussian_image() for _ in range(3)]), np.full(4, 1.0), "image"),
+        (np.stack([gaussian_image() for _ in range(4)]), np.full(3, 1.0), "i0"),
+        (np.stack([gaussian_image() for _ in range(4)]), np.ones((4, 1)), "i0"),
+    ],
+    ids=["image-count", "ion-count", "non-scalar-ion-samples"],
+)
+def test_energy_range_evaluation_rejects_mismatched_payload_shapes(
+    images,
+    intensities,
+    field,
+):
+    evaluator, catalog, _ = make_energy_range_evaluator()
+    catalog["acquired"] = run_with_fields(
+        metadata={
+            "start": {"blop_suggestions": [{"_id": "first"}, {"_id": "second"}]}
+        },
+        image=images,
+        i0=intensities,
+    )
+
+    with pytest.raises(ValueError, match="Received 2 suggestions with 2") as exc_info:
+        evaluator("acquired", [{"_id": "first"}, {"_id": "second"}])
+    assert repr(field) in str(exc_info.value)
+
+
+@pytest.mark.parametrize("energy_count", [1, 0, True, 1.5])
+def test_energy_range_evaluation_rejects_invalid_energy_count(energy_count):
+    with pytest.raises(ValueError, match="energy_count"):
+        make_energy_range_evaluator(energy_count=energy_count)
+
+
+@pytest.mark.parametrize("micrometers_per_pixel", [0, -1, np.nan, np.inf, True, "10"])
+def test_energy_range_evaluation_rejects_invalid_camera_scale(micrometers_per_pixel):
+    with pytest.raises(ValueError, match="micrometers_per_pixel"):
+        make_energy_range_evaluator(micrometers_per_pixel=micrometers_per_pixel)
+
+
+def test_energy_range_evaluation_propagates_per_image_analysis_errors():
+    evaluator, catalog, _ = make_energy_range_evaluator()
+    catalog["acquired"] = run_with_fields(
+        image=np.stack((gaussian_image(), np.zeros((31, 41)))),
+        i0=np.array([1_250_000.0, 1_250_000.0]),
+    )
+
+    with pytest.raises(ValueError, match="positive signal"):
+        evaluator("acquired", [{"_id": "scan"}])
 
 
 def test_image_evaluation_pairs_acquisition_metadata_with_suggestions():
@@ -552,6 +861,138 @@ def test_agent_factory_returns_fresh_agents(make_profile_and_resources):
     assert second.acquisition_plan is None
 
 
+def test_per_energy_agent_factory_rejects_energy_scan_profile(make_profile_and_resources):
+    _, resources = make_profile_and_resources()
+
+    with pytest.raises(ValueError, match="single-image profile"):
+        make_energy_alignment_agent(
+            "reference", profile=ENERGY_RANGE_ALIGNMENT, resources=resources
+        )
+
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"configuration_name": "  "}, "configuration_name"),
+        ({"elements": ["Fe"]}, "at least two"),
+        ({"micrometers_per_pixel": 0.0}, "micrometers_per_pixel"),
+        ({"profile": PER_ENERGY_ALIGNMENT}, "energy-scan profile"),
+    ],
+    ids=["blank-configuration", "short-elements", "bad-scale", "wrong-profile"],
+)
+def test_energy_range_agent_factory_rejects_invalid_inputs(kwargs, message):
+    profile, resources, _ = make_range_profile_and_resources()
+    arguments = {
+        "elements": ["Fe", "Cu"],
+        "configuration_name": "si111-xas",
+        "micrometers_per_pixel": 10.0,
+        "profile": profile,
+        "resources": resources,
+    }
+    arguments.update(kwargs)
+
+    with pytest.raises(ValueError, match=message):
+        make_energy_range_alignment_agent("reference", **arguments)
+
+
+def test_energy_range_agent_factory_rejects_missing_energy_readable():
+    profile, resources, _ = make_range_profile_and_resources(energy_readable=False)
+
+    with pytest.raises(ValueError, match="energy_readable"):
+        make_energy_range_alignment_agent(
+            "reference",
+            ["Fe", "Cu"],
+            configuration_name="si111-xas",
+            micrometers_per_pixel=10.0,
+            profile=profile,
+            resources=resources,
+        )
+
+
+def test_energy_range_agent_factory_samples_manual_suggestion_end_to_end():
+    profile, resources, edge_changes = make_range_profile_and_resources()
+    agent = make_energy_range_alignment_agent(
+        "reference",
+        ["Fe", "Cu"],
+        configuration_name="si111-xas",
+        micrometers_per_pixel=10.0,
+        xrd=True,
+        profile=profile,
+        resources=resources,
+    )
+    second_agent = make_energy_range_alignment_agent(
+        "reference",
+        ["Fe", "Fe", "Cu"],
+        configuration_name="si311-xas",
+        micrometers_per_pixel=5.0,
+        profile=profile,
+        resources=resources,
+    )
+    documents = []
+    run_engine = RunEngine({}, call_returns_result=True)
+    run_engine.subscribe(materialize_default_acquire_runs(resources.catalog))
+    run_engine.subscribe(lambda name, doc: documents.append((name, doc)))
+
+    run_engine(
+        agent.sample_suggestions(
+            [{"dcm_roll": 0.1, "m2_yaw": 0.2, "m2_lateral": 0.3}]
+        )
+    )
+
+    assert agent is not second_agent
+    assert agent.acquisition_plan is not second_agent.acquisition_plan
+    assert agent.evaluation_function.energy_count == 2
+    assert second_agent.evaluation_function.energy_count == 3
+    assert agent.evaluation_function.micrometers_per_pixel == 10.0
+    assert second_agent.evaluation_function.micrometers_per_pixel == 5.0
+    assert [element for element, _ in edge_changes] == ["Fe", "Cu"]
+    assert all(
+        options["xrd"] is True
+        and options["bender"] is True
+        and options["tune"] is False
+        and options["preserve_dcm_roll"] is True
+        for _, options in edge_changes
+    )
+
+    acquisition_start = next(
+        doc
+        for name, doc in documents
+        if name == "start" and doc["run_key"] == "default_acquire"
+    )
+    assert acquisition_start["BMM_agent"] == {
+        "plan_name": "energy_range_alignment",
+        "profile": "test-range",
+        "configuration": "si111-xas",
+        "elements": ["Fe", "Cu"],
+        "xrd": True,
+        "reference_scan_uid": "reference",
+        "micrometers_per_pixel": 10.0,
+    }
+    descriptor_runs = {
+        doc["uid"]: doc["run_start"]
+        for name, doc in documents
+        if name == "descriptor"
+    }
+    acquisition_events = [
+        doc
+        for name, doc in documents
+        if name == "event"
+        and descriptor_runs[doc["descriptor"]] == acquisition_start["uid"]
+    ]
+    assert len(acquisition_events) == 2
+
+    [(trial_index, parameters, outcomes)] = agent.get_best_points()
+    assert trial_index == 0
+    assert parameters == {"dcm_roll": 0.1, "m2_yaw": 0.2, "m2_lateral": 0.3}
+    assert outcomes["centroid_x_rmse_um"][0] == pytest.approx(10.0)
+    assert outcomes["centroid_x_std_um"][0] == pytest.approx(10.0)
+    assert outcomes["centroid_x_span_um"][0] == pytest.approx(20.0)
+    assert outcomes["centroid_x_rmse_normalized"][0] == pytest.approx(0.2)
+    assert outcomes["fwhm_x_rms_normalized"][0] == pytest.approx(1.0)
+    assert outcomes["intensity_min"][0] == 1_250_000.0
+    assert outcomes["intensity_mean"][0] == 1_875_000.0
+
 def test_energy_scan_acquisition_runs_full_grid_per_suggestion():
     motor = SynAxis(name="motor")
     energy = SynAxis(name="energy")
@@ -565,15 +1006,12 @@ def test_energy_scan_acquisition_runs_full_grid_per_suggestion():
 
     def change_edge(element, **kwargs):
         edge_changes.append((element, kwargs))
-        if kwargs["preserve_dcm_roll"]:
-            yield from mv(energy, edge_energies[element])
-        else:
-            yield from mv(
-                energy,
-                edge_energies[element],
-                motor,
-                edge_motor_positions[element],
-            )
+        yield from mv(
+            energy,
+            edge_energies[element],
+            motor,
+            edge_motor_positions[element],
+        )
 
     elements = ["Fe", "Cu"]
     acquisition_plan = make_energy_scan_acquisition_plan(
@@ -590,8 +1028,7 @@ def test_energy_scan_acquisition_runs_full_grid_per_suggestion():
     run_engine = RunEngine({}, call_returns_result=True)
     run_engine.subscribe(lambda name, doc: documents.append((name, doc)))
 
-    with patch.object(motor, "set", wraps=motor.set) as set_motor:
-        result = run_engine(acquisition_plan(suggestions, [motor], [detector]))
+    result = run_engine(acquisition_plan(suggestions, [motor], [detector]))
 
     starts = [doc for name, doc in documents if name == "start"]
     assert len(starts) == 1
@@ -607,9 +1044,6 @@ def test_energy_scan_acquisition_runs_full_grid_per_suggestion():
     routed_positions = [
         suggestion["motor"] for suggestion in start["blop_suggestions"]
     ]
-    assert [call.args[0] for call in set_motor.call_args_list] == pytest.approx(
-        routed_positions
-    )
     assert [element for element, _ in edge_changes] == ["Fe", "Cu"] * 2
     assert all(
         options
@@ -617,6 +1051,8 @@ def test_energy_scan_acquisition_runs_full_grid_per_suggestion():
             "focus": True,
             "no_hslits": True,
             "mirror": False,
+            "xrd": False,
+            "bender": True,
             "tune": False,
             "preserve_dcm_roll": True,
         }
@@ -650,10 +1086,66 @@ def test_energy_scan_acquisition_rejects_empty_element_list():
     assert edge_changes == []
 
 
+def test_energy_scan_acquisition_merges_fixed_metadata():
+    motor = SynAxis(name="motor")
+    energy = SynAxis(name="energy")
+
+    def change_edge(element, **kwargs):
+        yield from mv(energy, 7112.0)
+
+    acquisition_plan = make_energy_scan_acquisition_plan(
+        change_edge,
+        energy,
+        ["Fe"],
+        metadata={
+            "purpose": "fixed-purpose",
+            "BMM_agent": {
+                "plan_name": "energy_range_alignment",
+                "profile": "energy-range-alignment",
+                "configuration": "si111-xas",
+                "elements": ["Fe"],
+                "xrd": False,
+                "reference_scan_uid": "reference",
+                "micrometers_per_pixel": 10.0,
+            },
+        },
+    )
+    documents = []
+    run_engine = RunEngine({}, call_returns_result=True)
+    run_engine.subscribe(lambda name, doc: documents.append((name, doc)))
+
+    run_engine(
+        acquisition_plan(
+            [{"motor": 0.0, "_id": "only"}],
+            [motor],
+            [],
+            md={"purpose": "caller-purpose", "operator": "test"},
+        )
+    )
+
+    start = next(doc for name, doc in documents if name == "start")
+    assert start["operator"] == "test"
+    assert start["purpose"] == "fixed-purpose"
+    assert start["BMM_agent"] == {
+        "plan_name": "energy_range_alignment",
+        "profile": "energy-range-alignment",
+        "configuration": "si111-xas",
+        "elements": ["Fe"],
+        "xrd": False,
+        "reference_scan_uid": "reference",
+        "micrometers_per_pixel": 10.0,
+    }
+    assert start["blop_suggestions"] == [{"motor": 0.0, "_id": "only"}]
+
+
 def test_agent_optimization_nests_energy_scan_acquisition(
     make_profile_and_resources,
 ):
     profile, resources = make_profile_and_resources()
+    profile = replace(
+        profile,
+        energy_change=replace(profile.energy_change, xrd=True, bender=False),
+    )
     motor = resources.actuators["motor"]
     energy = SynAxis(name="energy")
     camera = SynSignal(
@@ -730,6 +1222,8 @@ def test_agent_optimization_nests_energy_scan_acquisition(
                 "focus": True,
                 "no_hslits": True,
                 "mirror": False,
+                "xrd": True,
+                "bender": False,
                 "tune": False,
                 "preserve_dcm_roll": True,
             },
@@ -740,6 +1234,8 @@ def test_agent_optimization_nests_energy_scan_acquisition(
                 "focus": True,
                 "no_hslits": True,
                 "mirror": False,
+                "xrd": True,
+                "bender": False,
                 "tune": False,
                 "preserve_dcm_roll": True,
             },
@@ -863,12 +1359,19 @@ def test_search_reuses_reference_evaluation(
     reference_image = Field(gaussian_image())
     catalog = {"reference": {"primary": {"data": {"image": reference_image}}}}
 
-    def change_edge(*args, **kwargs):
+    edge_changes = []
+
+    def change_edge(element, **kwargs):
+        edge_changes.append((element, kwargs))
         yield from null()
 
     profile, resources = make_profile_and_resources(
         catalog=catalog,
         change_edge_plan=change_edge,
+    )
+    profile = replace(
+        profile,
+        energy_change=replace(profile.energy_change, xrd=True, bender=False),
     )
     evaluation_functions = []
     fake_agent = FakeAgent()
@@ -893,6 +1396,28 @@ def test_search_reuses_reference_evaluation(
 
     assert evaluation_functions[0] is evaluation_functions[1]
     assert reference_image.read_count == 1
+    assert edge_changes == [
+        (
+            "Fe",
+            {
+                "focus": True,
+                "no_hslits": True,
+                "mirror": False,
+                "xrd": True,
+                "bender": False,
+            },
+        ),
+        (
+            "Cu",
+            {
+                "focus": True,
+                "no_hslits": True,
+                "mirror": False,
+                "xrd": True,
+                "bender": False,
+            },
+        ),
+    ]
 
 
 def test_search_restores_prompt_after_failure():

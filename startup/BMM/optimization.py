@@ -8,12 +8,12 @@ from pathlib import Path
 import pickle
 import threading
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from ax.api.protocols import IMetric
-from blop import (
+from blop import default_acquire
+from blop.ax import (
     Agent,
-    default_acquire,
     DOF,
     Objective,
     OutcomeConstraint,
@@ -56,6 +56,7 @@ class EnergyAlignmentResources:
     change_edge_plan: Callable[..., MsgGenerator[None]]
     prompt_state: PromptState
     read_energy: Callable[[], float] | None = None
+    energy_readable: Readable | None = None
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,8 @@ class EnergyChangeConfig:
     focus: bool = True
     no_hslits: bool = True
     mirror: bool = False
+    xrd: bool = False
+    bender: bool = True
 
 
 @dataclass(frozen=True)
@@ -93,6 +96,7 @@ class EnergyAlignmentProfile:
     outcome_constraints: tuple[OutcomeConstraint, ...]
     evaluation: BeamEvaluationConfig
     optimization: OptimizationConfig
+    evaluation_kind: Literal["single-image", "energy-scan"]
     energy_change: EnergyChangeConfig = EnergyChangeConfig()
 
 
@@ -107,6 +111,27 @@ class BeamStats:
 _IMAGE_EVALUATION_OUTCOMES = frozenset(
     {"fwhm_x", "fwhm_y", "centroid_x", "centroid_y", "centroid_distance", "intensity"}
 )
+_ENERGY_SCAN_EVALUATION_OUTCOMES = frozenset(
+    {
+        "centroid_x_offset_mean_um",
+        "centroid_x_std_um",
+        "centroid_x_span_um",
+        "centroid_x_rmse_um",
+        "fwhm_x_mean_um",
+        "fwhm_x_std_um",
+        "fwhm_x_rms_um",
+        "centroid_x_rmse_normalized",
+        "fwhm_x_rms_normalized",
+        "intensity_min",
+        "intensity_mean",
+    }
+)
+_EVALUATION_OUTCOMES_BY_KIND = MappingProxyType(
+    {
+        "single-image": _IMAGE_EVALUATION_OUTCOMES,
+        "energy-scan": _ENERGY_SCAN_EVALUATION_OUTCOMES,
+    }
+)
 
 _ALIGNMENT_DOFS = (
     RangeDOF(
@@ -116,7 +141,7 @@ _ALIGNMENT_DOFS = (
     ),
     RangeDOF(
         actuator="m2_yaw",
-        bounds=(-2, 2),
+        bounds=(-1, 2),
         parameter_type="float",
     ),
     RangeDOF(
@@ -150,10 +175,39 @@ PER_ENERGY_ALIGNMENT = EnergyAlignmentProfile(
         initialization_budget=1,
         initialize_with_center=False,
     ),
+    evaluation_kind="single-image",
+)
+
+ENERGY_RANGE_ALIGNMENT = EnergyAlignmentProfile(
+    name="energy-range-alignment",
+    sensors=("camera", "i0"),
+    dofs=_ALIGNMENT_DOFS,
+    objectives=ScalarizedObjective(
+        "position + focus",
+        minimize=True,
+        position="centroid_x_rmse_normalized",
+        focus="fwhm_x_rms_normalized",
+    ),
+    outcome_constraints=(
+        OutcomeConstraint(
+            "i0 >= 1000000",
+            i0=IMetric(name="intensity_min"),
+        ),
+    ),
+    evaluation=_BEAM_EVALUATION,
+    optimization=OptimizationConfig(
+        iterations=20,
+        initialization_budget=1,
+        initialize_with_center=False,
+    ),
+    evaluation_kind="energy-scan",
 )
 
 ENERGY_ALIGNMENT_PROFILES: Mapping[str, EnergyAlignmentProfile] = MappingProxyType(
-    {PER_ENERGY_ALIGNMENT.name: PER_ENERGY_ALIGNMENT}
+    {
+        PER_ENERGY_ALIGNMENT.name: PER_ENERGY_ALIGNMENT,
+        ENERGY_RANGE_ALIGNMENT.name: ENERGY_RANGE_ALIGNMENT,
+    }
 )
 
 
@@ -314,11 +368,19 @@ def _validate_profile(profile: EnergyAlignmentProfile) -> None:
         raise ValueError(f"Profile {profile.name!r} must define at least one objective")
     configured_outcomes = set(_objective_names(profile.objectives))
     configured_outcomes.update(_constraint_names(profile.outcome_constraints))
-    unsupported_outcomes = configured_outcomes - _IMAGE_EVALUATION_OUTCOMES
+    try:
+        supported_outcomes = _EVALUATION_OUTCOMES_BY_KIND[profile.evaluation_kind]
+    except KeyError as exc:
+        choices = ", ".join(sorted(_EVALUATION_OUTCOMES_BY_KIND))
+        raise ValueError(
+            f"Profile {profile.name!r} uses unsupported evaluation kind "
+            f"{profile.evaluation_kind!r}; choose from {choices}"
+        ) from exc
+    unsupported_outcomes = configured_outcomes - supported_outcomes
     if unsupported_outcomes:
         raise ValueError(
-            f"Profile {profile.name!r} uses outcomes not produced by "
-            f"ImageEvaluation: {sorted(unsupported_outcomes)!r}"
+            f"Profile {profile.name!r} uses outcomes not produced by the "
+            f"{profile.evaluation_kind!r} evaluator: {sorted(unsupported_outcomes)!r}"
         )
     if any(dof.actuator is None for dof in profile.dofs):
         raise ValueError(f"Profile {profile.name!r} cannot use unbound, name-only DOFs")
@@ -363,6 +425,7 @@ def load_bmm_energy_alignment_resources() -> EnergyAlignmentResources:
         change_edge_plan=change_edge,
         prompt_state=BMMuser,
         read_energy=read_energy,
+        energy_readable=dcm.energy,
     )
 
 
@@ -568,33 +631,104 @@ def compute_stats(
     evaluation = resolved_profile.evaluation
     data = run["primary"]["data"]
     image = data[evaluation.image_field].read()
-    intensity_data = np.asarray(data[evaluation.intensity_field].read())
-    scalar_intensity = intensity_data.squeeze()
-    if scalar_intensity.ndim != 0:
-        raise ValueError(
-            f"{evaluation.intensity_field!r} data must contain one finite scalar; "
-            f"received shape {intensity_data.shape!r}"
-        )
-    try:
-        intensity = float(scalar_intensity)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            f"{evaluation.intensity_field!r} data must contain one finite scalar"
-        ) from exc
+    intensity_data = np.asarray(data[evaluation.intensity_field].read()).squeeze()
+    if intensity_data.shape != ():
+        raise ValueError(f"{evaluation.intensity_field!r} data must be one finite scalar")
+    intensity = float(intensity_data)
     if not np.isfinite(intensity):
-        raise ValueError(
-            f"{evaluation.intensity_field!r} data must contain one finite scalar"
-        )
-
+        raise ValueError(f"{evaluation.intensity_field!r} data must be one finite scalar")
     stats = compute_image_stats(image, evaluation)
     print(
-        f"fwhm_x={stats.fwhm_x}, "
-        f"fwhm_y={stats.fwhm_y}, "
-        f"centroid_x={stats.centroid_x}, "
-        f"centroid_y={stats.centroid_y}, "
+        f"fwhm_x={stats.fwhm_x} fwhm_y={stats.fwhm_y} "
+        f"centroid_x={stats.centroid_x} centroid_y={stats.centroid_y} "
         f"intensity={intensity}"
     )
     return stats
+
+
+def _read_image_measurements(
+    tiled_client: Container,
+    uid: str,
+    suggestions: Sequence[Mapping[str, Any]],
+    parameters: BeamEvaluationConfig,
+    *,
+    measurements_per_suggestion: int,
+) -> list[tuple[Mapping[str, Any], np.ndarray, np.ndarray]]:
+    """Read and order image/I0 samples for one completed acquisition run."""
+    if not suggestions:
+        return []
+    if (
+        isinstance(measurements_per_suggestion, bool)
+        or not isinstance(measurements_per_suggestion, Integral)
+        or measurements_per_suggestion < 1
+    ):
+        raise ValueError("measurements_per_suggestion must be a positive integer")
+
+    suggestion_count = len(suggestions)
+    measurements_per_suggestion = int(measurements_per_suggestion)
+    measurement_count = suggestion_count * measurements_per_suggestion
+    run = tiled_client[uid]
+    data = run["primary"]["data"]
+    acquired_images = np.asarray(data[parameters.image_field].read())
+    intensity_data = np.asarray(data[parameters.intensity_field].read())
+
+    def shape_error(field: str, values: np.ndarray) -> ValueError:
+        return ValueError(
+            f"Received {suggestion_count} suggestions with "
+            f"{measurements_per_suggestion} measurements each but {field!r} data "
+            f"has shape {values.shape!r}"
+        )
+
+    if measurement_count == 1:
+        image_samples = acquired_images[np.newaxis, ...]
+    else:
+        if acquired_images.ndim == 0 or acquired_images.shape[0] != measurement_count:
+            raise shape_error(parameters.image_field, acquired_images)
+        image_samples = acquired_images
+
+    try:
+        converted_intensity_data = intensity_data.astype(np.float64, copy=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{parameters.intensity_field!r} data must be numeric") from exc
+    if measurement_count == 1:
+        intensities = np.atleast_1d(converted_intensity_data.squeeze())
+    else:
+        intensities = converted_intensity_data
+    if intensities.shape != (measurement_count,):
+        raise shape_error(parameters.intensity_field, intensity_data)
+    if not np.isfinite(intensities).all():
+        raise ValueError(
+            f"{parameters.intensity_field!r} data must contain finite values"
+        )
+
+    suggestion_ids = [suggestion["_id"] for suggestion in suggestions]
+    if suggestion_count == 1:
+        acquired_ids = suggestion_ids
+    else:
+        try:
+            acquired_ids = [
+                suggestion["_id"]
+                for suggestion in run.metadata["start"]["blop_suggestions"]
+            ]
+        except (AttributeError, KeyError, TypeError) as exc:
+            raise ValueError("Batch evaluation requires blop_suggestions metadata") from exc
+        if (
+            len(acquired_ids) != suggestion_count
+            or len(set(acquired_ids)) != suggestion_count
+            or len(set(suggestion_ids)) != suggestion_count
+            or set(acquired_ids) != set(suggestion_ids)
+        ):
+            raise ValueError(
+                "blop_suggestions metadata IDs do not match supplied suggestion IDs"
+            )
+
+    paired_by_id = {}
+    for index, suggestion_id in enumerate(acquired_ids):
+        start = index * measurements_per_suggestion
+        stop = start + measurements_per_suggestion
+        paired_by_id[suggestion_id] = (image_samples[start:stop], intensities[start:stop])
+
+    return [(suggestion, *paired_by_id[suggestion["_id"]]) for suggestion in suggestions]
 
 
 class ImageEvaluation:
@@ -626,71 +760,17 @@ class ImageEvaluation:
         self.reference_centroid_y = reference_stats.centroid_y
 
     def __call__(self, uid: str, suggestions: list[dict]) -> list[dict]:
-        if not suggestions:
-            return []
+        measurements = _read_image_measurements(
+            self.tiled_client,
+            uid,
+            suggestions,
+            self.parameters,
+            measurements_per_suggestion=1,
+        )
 
-        count = len(suggestions)
-        run = self.tiled_client[uid]
-        data = run["primary"]["data"]
-        acquired_images = np.asarray(data[self.parameters.image_field].read())
-        intensity_data = np.asarray(data[self.parameters.intensity_field].read())
-
-        def shape_error(field: str, values: np.ndarray) -> ValueError:
-            return ValueError(
-                f"Received {count} suggestions but {field!r} data has shape "
-                f"{values.shape!r}"
-            )
-
-        if count == 1:
-            images = (acquired_images,)
-        else:
-            if acquired_images.ndim == 0 or acquired_images.shape[0] != count:
-                raise shape_error(self.parameters.image_field, acquired_images)
-            images = acquired_images
-
-        try:
-            intensities = np.atleast_1d(
-                intensity_data.astype(np.float64, copy=False).squeeze()
-            )
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"{self.parameters.intensity_field!r} data must be numeric"
-            ) from exc
-        if intensities.shape != (count,):
-            raise shape_error(self.parameters.intensity_field, intensity_data)
-        if not np.isfinite(intensities).all():
-            raise ValueError(
-                f"{self.parameters.intensity_field!r} data must contain finite values"
-            )
-
-        suggestion_ids = [suggestion["_id"] for suggestion in suggestions]
-        if count == 1:
-            acquired_ids = suggestion_ids
-        else:
-            try:
-                acquired_ids = [
-                    suggestion["_id"]
-                    for suggestion in run.metadata["start"]["blop_suggestions"]
-                ]
-            except (AttributeError, KeyError, TypeError) as exc:
-                raise ValueError(
-                    "Batch evaluation requires blop_suggestions metadata"
-                ) from exc
-            if len(acquired_ids) != count or set(acquired_ids) != set(suggestion_ids):
-                raise ValueError(
-                    "blop_suggestions metadata IDs do not match supplied suggestion IDs"
-                )
-
-        paired_by_id = {
-            suggestion_id: (image, float(intensity))
-            for suggestion_id, image, intensity in zip(
-                acquired_ids, images, intensities, strict=True
-            )
-        }
         outcomes = []
-        for suggestion in suggestions:
-            image, intensity = paired_by_id[suggestion["_id"]]
-            stats = compute_image_stats(image, self.parameters)
+        for suggestion, images, intensities in measurements:
+            stats = compute_image_stats(images[0], self.parameters)
             outcomes.append(
                 {
                     "_id": suggestion["_id"],
@@ -704,7 +784,106 @@ class ImageEvaluation:
                             self.reference_centroid_y - stats.centroid_y,
                         )
                     ),
-                    "intensity": intensity,
+                    "intensity": float(intensities[0]),
+                }
+            )
+        return outcomes
+
+
+def _validate_micrometers_per_pixel(micrometers_per_pixel: float) -> float:
+    if (
+        isinstance(micrometers_per_pixel, bool)
+        or not isinstance(micrometers_per_pixel, Real)
+        or not np.isfinite(micrometers_per_pixel)
+        or micrometers_per_pixel <= 0
+    ):
+        raise ValueError("micrometers_per_pixel must be finite and positive")
+    return float(micrometers_per_pixel)
+
+
+class EnergyRangeEvaluation:
+    """Aggregate image statistics across one suggestion's energy scan."""
+
+    def __init__(
+        self,
+        tiled_client: Container,
+        reference_scan_uid: str,
+        parameters: BeamEvaluationConfig,
+        *,
+        energy_count: int,
+        micrometers_per_pixel: float,
+    ):
+        if (
+            isinstance(energy_count, bool)
+            or not isinstance(energy_count, Integral)
+            or energy_count < 2
+        ):
+            raise ValueError("energy_count must be a non-boolean integer of at least 2")
+        self.tiled_client = tiled_client
+        self.reference_scan_uid = reference_scan_uid
+        self.parameters = parameters
+        self.energy_count = int(energy_count)
+        self.micrometers_per_pixel = _validate_micrometers_per_pixel(
+            micrometers_per_pixel
+        )
+
+        reference_run = self.tiled_client[reference_scan_uid]
+        reference_image = reference_run["primary"]["data"][
+            parameters.image_field
+        ].read()
+        reference_stats = compute_image_stats(reference_image, parameters)
+        self.reference_centroid_x = reference_stats.centroid_x
+        self.reference_fwhm_x_um = (
+            reference_stats.fwhm_x * self.micrometers_per_pixel
+        )
+        if not np.isfinite(self.reference_fwhm_x_um) or self.reference_fwhm_x_um <= 0:
+            raise ValueError("Reference horizontal FWHM must be finite and positive")
+
+    def __call__(self, uid: str, suggestions: list[dict]) -> list[dict]:
+        measurements = _read_image_measurements(
+            self.tiled_client,
+            uid,
+            suggestions,
+            self.parameters,
+            measurements_per_suggestion=self.energy_count,
+        )
+
+        outcomes = []
+        for suggestion, images, intensities in measurements:
+            stats = [compute_image_stats(image, self.parameters) for image in images]
+            centroid_offsets_um = np.array(
+                [
+                    (image_stats.centroid_x - self.reference_centroid_x)
+                    * self.micrometers_per_pixel
+                    for image_stats in stats
+                ],
+                dtype=np.float64,
+            )
+            fwhm_x_um = np.array(
+                [
+                    image_stats.fwhm_x * self.micrometers_per_pixel
+                    for image_stats in stats
+                ],
+                dtype=np.float64,
+            )
+            centroid_x_rmse_um = float(np.sqrt(np.mean(centroid_offsets_um**2)))
+            fwhm_x_rms_um = float(np.sqrt(np.mean(fwhm_x_um**2)))
+            outcomes.append(
+                {
+                    "_id": suggestion["_id"],
+                    "centroid_x_offset_mean_um": float(np.mean(centroid_offsets_um)),
+                    "centroid_x_std_um": float(np.std(centroid_offsets_um)),
+                    "centroid_x_span_um": float(np.ptp(centroid_offsets_um)),
+                    "centroid_x_rmse_um": centroid_x_rmse_um,
+                    "fwhm_x_mean_um": float(np.mean(fwhm_x_um)),
+                    "fwhm_x_std_um": float(np.std(fwhm_x_um)),
+                    "fwhm_x_rms_um": fwhm_x_rms_um,
+                    "centroid_x_rmse_normalized": float(centroid_x_rmse_um / 50.0),
+                    "fwhm_x_rms_normalized": float(
+                        fwhm_x_rms_um / self.reference_fwhm_x_um
+                    ),
+                    "intensity_min": float(np.min(intensities)),
+                    "intensity_mean": float(np.mean(intensities)),
                 }
             )
         return outcomes
@@ -734,11 +913,15 @@ def scan_energy(
                 focus=energy_change.focus,
                 no_hslits=energy_change.no_hslits,
                 mirror=energy_change.mirror,
+                xrd=energy_change.xrd,
+                bender=energy_change.bender,
                 tune=False,
                 preserve_dcm_roll=True,
             ),
             "change_edge",
         )
+        for motor in motors:
+            pos_cache[motor] = object()
         yield from move_per_step(step, pos_cache)
         yield from trigger_and_read(devices)
 
@@ -749,22 +932,65 @@ def make_energy_scan_acquisition_plan(
     elements: Sequence[str],
     *,
     energy_change: EnergyChangeConfig = EnergyChangeConfig(),
+    metadata: Mapping[str, Any] | None = None,
 ) -> AcquisitionPlan:
     """Compose Blop's default acquisition with an inner element-edge scan."""
     element_names = tuple(elements)
     if not element_names:
         raise ValueError("Energy scan requires at least one element")
-
-    return partial(
-        default_acquire,
-        per_step=partial(
-            scan_energy,
-            change_edge_plan=change_edge_plan,
-            energy_readable=energy_readable,
-            elements=element_names,
-            energy_change=energy_change,
-        ),
+    fixed_metadata = dict(metadata or {})
+    per_step = partial(
+        scan_energy,
+        change_edge_plan=change_edge_plan,
+        energy_readable=energy_readable,
+        elements=element_names,
+        energy_change=energy_change,
     )
+
+    def acquisition_plan(
+        suggestions: Sequence[Mapping],
+        actuators: Sequence[Actuator],
+        sensors: Sequence[Sensor] | None = None,
+        md: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> MsgGenerator[str]:
+        run_metadata = dict(md or {})
+        run_metadata.update(fixed_metadata)
+        return (
+            yield from default_acquire(
+                suggestions,
+                actuators,
+                sensors,
+                md=run_metadata,
+                per_step=per_step,
+                **kwargs,
+            )
+        )
+
+    return acquisition_plan
+
+
+def _build_energy_alignment_agent(
+    profile: EnergyAlignmentProfile,
+    resources: EnergyAlignmentResources,
+    evaluation_function: EvaluationFunction,
+    acquisition_plan: AcquisitionPlan | None,
+) -> Agent:
+    """Construct and configure the underlying Blop agent."""
+    _validate_resources(resources, profile)
+    agent = Agent(
+        sensors=[resources.sensors[name] for name in profile.sensors],
+        dofs=_bind_dofs(resources, profile),
+        objectives=profile.objectives,
+        evaluation_function=evaluation_function,
+        acquisition_plan=acquisition_plan,
+        outcome_constraints=profile.outcome_constraints,
+    )
+    agent.ax_client.configure_generation_strategy(
+        initialization_budget=profile.optimization.initialization_budget,
+        initialize_with_center=profile.optimization.initialize_with_center,
+    )
+    return agent
 
 
 def make_energy_alignment_agent(
@@ -775,8 +1001,13 @@ def make_energy_alignment_agent(
     evaluation_function: EvaluationFunction | None = None,
     acquisition_plan: AcquisitionPlan | None = None,
 ) -> Agent:
-    """Construct a fresh Blop agent from a reusable alignment profile."""
+    """Construct a fresh per-energy Blop agent from a reusable profile."""
     resolved_profile = get_energy_alignment_profile(profile)
+    if resolved_profile.evaluation_kind != "single-image":
+        raise ValueError(
+            "make_energy_alignment_agent requires a single-image profile; "
+            "use make_energy_range_alignment_agent for energy-scan profiles"
+        )
     resolved_resources = _resolve_resources(resources)
     _validate_resources(resolved_resources, resolved_profile)
     if evaluation_function is None:
@@ -785,20 +1016,75 @@ def make_energy_alignment_agent(
             reference_scan_uid=reference_scan_uid,
             parameters=resolved_profile.evaluation,
         )
+    return _build_energy_alignment_agent(
+        resolved_profile,
+        resolved_resources,
+        evaluation_function,
+        acquisition_plan,
+    )
 
-    agent = Agent(
-        sensors=[resolved_resources.sensors[name] for name in resolved_profile.sensors],
-        dofs=_bind_dofs(resolved_resources, resolved_profile),
-        objectives=resolved_profile.objectives,
-        evaluation_function=evaluation_function,
-        acquisition_plan=acquisition_plan,
-        outcome_constraints=resolved_profile.outcome_constraints,
+
+def make_energy_range_alignment_agent(
+    reference_scan_uid: str,
+    elements: Sequence[str],
+    *,
+    configuration_name: str,
+    micrometers_per_pixel: float,
+    xrd: bool = False,
+    profile: str | EnergyAlignmentProfile = ENERGY_RANGE_ALIGNMENT.name,
+    resources: EnergyAlignmentResources | None = None,
+) -> Agent:
+    """Construct a fresh range-optimization agent for one beamline configuration."""
+    configuration = configuration_name.strip()
+    if not configuration:
+        raise ValueError("configuration_name must not be blank")
+    element_names = tuple(elements)
+    if len(element_names) < 2:
+        raise ValueError("Energy range alignment requires at least two element entries")
+    scale = _validate_micrometers_per_pixel(micrometers_per_pixel)
+
+    resolved_profile = get_energy_alignment_profile(profile)
+    if resolved_profile.evaluation_kind != "energy-scan":
+        raise ValueError(
+            "make_energy_range_alignment_agent requires an energy-scan profile; "
+            "use make_energy_alignment_agent for single-image profiles"
+        )
+    resolved_resources = _resolve_resources(resources)
+    _validate_resources(resolved_resources, resolved_profile)
+    if resolved_resources.energy_readable is None:
+        raise ValueError("Energy range alignment requires an energy_readable resource")
+
+    evaluation_function = EnergyRangeEvaluation(
+        resolved_resources.catalog,
+        reference_scan_uid=reference_scan_uid,
+        parameters=resolved_profile.evaluation,
+        energy_count=len(element_names),
+        micrometers_per_pixel=scale,
     )
-    agent.ax_client.configure_generation_strategy(
-        initialization_budget=resolved_profile.optimization.initialization_budget,
-        initialize_with_center=resolved_profile.optimization.initialize_with_center,
+    energy_change = replace(resolved_profile.energy_change, xrd=xrd)
+    acquisition_plan = make_energy_scan_acquisition_plan(
+        resolved_resources.change_edge_plan,
+        resolved_resources.energy_readable,
+        element_names,
+        energy_change=energy_change,
+        metadata={
+            "BMM_agent": {
+                "plan_name": "energy_range_alignment",
+                "profile": resolved_profile.name,
+                "configuration": configuration,
+                "elements": list(element_names),
+                "xrd": xrd,
+                "reference_scan_uid": reference_scan_uid,
+                "micrometers_per_pixel": scale,
+            }
+        },
     )
-    return agent
+    return _build_energy_alignment_agent(
+        resolved_profile,
+        resolved_resources,
+        evaluation_function,
+        acquisition_plan,
+    )
 
 
 def _write_energy_map(
@@ -827,6 +1113,11 @@ def search_for_optimal_positions(
 ) -> MsgGenerator[dict[str, Any]]:
     """Optimize motor positions at each energy using a named or custom profile."""
     resolved_profile = get_energy_alignment_profile(profile)
+    if resolved_profile.evaluation_kind != "single-image":
+        raise ValueError(
+            "search_for_optimal_positions requires a single-image profile; "
+            "use make_energy_range_alignment_agent for energy-scan profiles"
+        )
     resolved_resources = _resolve_resources(resources)
     _validate_resources(resolved_resources, resolved_profile)
     previous_prompt = resolved_resources.prompt_state.prompt
@@ -843,6 +1134,8 @@ def search_for_optimal_positions(
                 focus=energy_change.focus,
                 no_hslits=energy_change.no_hslits,
                 mirror=energy_change.mirror,
+                xrd=energy_change.xrd,
+                bender=energy_change.bender,
             )
 
             if evaluation_function is None:
