@@ -194,7 +194,7 @@ def quick_change(el, focus=False, edge='K', target=300., reference=False):
                            bender=True, insist=False, no_ref=not reference, no_hslits=True)
     
 def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True, tune=True, target=300.,
-                xrd=False, bender=True, insist=False, no_ref=False, no_hslits=False):
+                xrd=False, bender=True, insist=False, no_ref=False, no_hslits=False, preserve_dcm_roll=False):
     '''Change edge energy by:
     1. Moving the DCM above the edge energy
     2. Moving the photon delivery system to the correct mode
@@ -231,6 +231,8 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
     no_hslits : boolean, optional
         when True, skip the adjustment of horizontal slit size [False]
         (this was implemented for the quick_change() function)
+    preserve_dcm_roll : boolean, optional
+        when True, leave dcm.roll at its current position [False]
 
 
     Examples
@@ -261,7 +263,8 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
 
     '''
 
-    def main_plan(el, focus, edge, energy, slits, mirror, tune, target, xrd, bender, insist, no_ref, no_hslits):
+    def main_plan(el, focus, edge, energy, slits, mirror, tune, target, xrd, bender, insist, no_ref, no_hslits,
+                  preserve_dcm_roll):
         el = el.capitalize()
         ######################################################################
         # this is a tool for verifying a macro.  this replaces an xafsmod scan  #
@@ -504,7 +507,8 @@ Maybe the beam has dumped, Maybe there is a motor controller problem.  Check scr
             dcm.bragg_small_move(direction=-1, verbose=True)
         yield from wiggle_bct()
         yield from mv(dcm.bragg.acceleration, BMMuser.acc_slow)
-        yield from change_mode(mode=mode, prompt=False, edge=energy+target, reference=el, bender=bender, insist=insist, no_ref=no_ref)
+        yield from change_mode(mode=mode, prompt=False, edge=energy+target, reference=el, bender=bender,
+                               insist=insist, no_ref=no_ref, preserve_dcm_roll=preserve_dcm_roll)
         yield from mv(dcm.bragg.acceleration, BMMuser.acc_fast)
 
         ## RIGHT HERE: set Pilatus threshold to energy - 2000 eV
@@ -661,6 +665,8 @@ Maybe the beam has dumped, Maybe there is a motor controller problem.  Check scr
     #dcm_pitch, dcm_perp = user_ns["dcm_pitch"], user_ns["dcm_perp"]
     #dcm_roll, dcm_bragg = user_ns["dcm_roll"], user_ns["dcm_bragg"]
     dm3_bct, slits3 = user_ns['dm3_bct'], user_ns['slits3']
-    yield from finalize_wrapper(main_plan(el, focus, edge, energy, slits, mirror, tune, target, xrd, bender, insist, no_ref, no_hslits),
-                                cleanup_plan())
+    yield from finalize_wrapper(
+        main_plan(el, focus, edge, energy, slits, mirror, tune, target, xrd, bender, insist, no_ref, no_hslits,
+                  preserve_dcm_roll),
+        cleanup_plan())
     user_ns['RE'].msg_hook = BMM_msg_hook
