@@ -36,6 +36,7 @@ matplotlib-base = ">=3.10"
 nslsii = "==0.11.9"
 gpytorch = "*"
 botorch = "*"
+dash = ">=3,<4"
 
 [feature.profile.pypi-dependencies]
 emojis = "*"
@@ -59,6 +60,12 @@ sync-experiment = { cmd = "sync-experiment -s -b bmm -p {{proposal}} -d {{databa
 plotmanager = "/home/xf06bm/.ipython/profile_collection/startup/consumer/bin/run-plotmanager"
 filemanager = "startup/consumer/bin/run-filemanager"
 
+[feature.test.dependencies]
+pytest = ">=8,<9"
+
+[feature.test.tasks]
+test = "pytest"
+
 [feature.qs.dependencies ]
 "bluesky-httpserver" = "*"
 
@@ -73,6 +80,7 @@ qs-server = "uvicorn --host localhost --port 60610 bluesky_httpserver.server:app
 [environments]
 terminal = {features=["profile", "terminal"], solve-group="profile"}
 qs = {features=["profile", "qs"], solve-group="profile"}
+test = {features=["profile", "test"], solve-group="profile"}
 
 [dependencies]
 inflection = ">=0.5.1,<0.6"
