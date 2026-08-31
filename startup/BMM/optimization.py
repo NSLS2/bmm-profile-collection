@@ -489,8 +489,8 @@ def _full_width_half_maximum(
         raise ValueError(error)
     half_maximum = peak / 2
 
-    left_below = np.flatnonzero(profile[:peak_index] <= half_maximum)
-    right_below = np.flatnonzero(profile[peak_index + 1 :] <= half_maximum)
+    left_below = np.flatnonzero(profile[:peak_index] < half_maximum)
+    right_below = np.flatnonzero(profile[peak_index + 1 :] < half_maximum)
     if left_below.size == 0 or right_below.size == 0:
         raise ValueError(error)
 
@@ -532,12 +532,7 @@ def compute_image_stats(
     y_profile = processed.sum(axis=1)
     x_mass = float(x_profile.sum())
     y_mass = float(y_profile.sum())
-    if (
-        not np.isfinite(x_mass)
-        or not np.isfinite(y_mass)
-        or x_mass <= 0
-        or y_mass <= 0
-    ):
+    if not np.isfinite(x_mass) or not np.isfinite(y_mass) or x_mass <= 0 or y_mass <= 0:
         raise ValueError("Image has no positive signal after Otsu thresholding")
 
     centroid_x = float(np.dot(x_profile, x_coordinates) / x_mass)
@@ -622,9 +617,7 @@ class ImageEvaluation:
         run = self.tiled_client[uid]
         data = run["primary"]["data"]
         acquired_images = np.asarray(data[self.parameters.image_field].read())
-        acquired_intensities = np.asarray(
-            data[self.parameters.intensity_field].read()
-        )
+        acquired_intensities = np.asarray(data[self.parameters.intensity_field].read())
         count = len(suggestions)
 
         def shape_error(field: str, values: np.ndarray) -> ValueError:
@@ -639,10 +632,7 @@ class ImageEvaluation:
         else:
             if acquired_images.ndim == 0 or acquired_images.shape[0] != count:
                 raise shape_error(self.parameters.image_field, acquired_images)
-            if (
-                acquired_intensities.ndim == 0
-                or acquired_intensities.shape[0] != count
-            ):
+            if acquired_intensities.ndim == 0 or acquired_intensities.shape[0] != count:
                 raise shape_error(self.parameters.intensity_field, acquired_intensities)
             images = tuple(acquired_images[index] for index in range(count))
             intensity_samples = tuple(
@@ -709,7 +699,6 @@ class ImageEvaluation:
                     recorded_ids, images, intensities, strict=True
                 )
             }
-
 
         outcomes = []
         for suggestion in suggestions:
