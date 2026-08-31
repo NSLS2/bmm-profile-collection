@@ -22,6 +22,7 @@ from BMM.optimization import (
     compute_image_stats,
     get_energy_alignment_profile,
     make_energy_alignment_agent,
+    make_energy_scan_acquisition_plan,
     optimization_metadata_wrapper,
     search_for_optimal_positions,
 )
@@ -167,6 +168,132 @@ def test_agent_factory_returns_fresh_agents(make_profile_and_resources):
     assert first is not second
     assert profile.dofs[0].actuator == "motor"
     assert profile.dofs[0].step_size == 0.1
+    assert first.acquisition_plan is None
+    assert second.acquisition_plan is None
+
+
+def test_energy_scan_acquisition_runs_full_grid_per_suggestion():
+    motor = SynAxis(name="motor")
+    energy = SynAxis(name="energy")
+    detector = SynSignal(
+        name="detector",
+        func=lambda: 10 * motor.position + energy.position,
+    )
+    energy_points = [100.0, 101.0]
+    acquisition_plan = make_energy_scan_acquisition_plan(energy, energy_points)
+    energy_points[:] = [999.0]
+    suggestions = [
+        {"motor": 0.75, "_id": "right"},
+        {"motor": -0.25, "_id": "left"},
+    ]
+    documents = []
+    run_engine = RunEngine({}, call_returns_result=True)
+    run_engine.subscribe(lambda name, doc: documents.append((name, doc)))
+
+    result = run_engine(acquisition_plan(suggestions, [motor], [detector]))
+
+    starts = [doc for name, doc in documents if name == "start"]
+    assert len(starts) == 1
+    [start] = starts
+    assert start["run_key"] == "default_acquire"
+    assert result.plan_result == start["uid"]
+    assert len([doc for name, doc in documents if name == "stop"]) == 1
+    descriptors = [doc for name, doc in documents if name == "descriptor"]
+    assert [descriptor["name"] for descriptor in descriptors] == ["primary"]
+
+    events = [doc for name, doc in documents if name == "event"]
+    assert len(events) == 4
+    routed_positions = [
+        suggestion["motor"] for suggestion in start["blop_suggestions"]
+    ]
+    for index, position in enumerate(routed_positions):
+        block = events[index * 2 : (index + 1) * 2]
+        assert [event["data"]["motor"] for event in block] == [position, position]
+        assert [event["data"]["energy"] for event in block] == [100.0, 101.0]
+        assert [event["data"]["detector"] for event in block] == [
+            10 * position + 100.0,
+            10 * position + 101.0,
+        ]
+
+
+def test_energy_scan_acquisition_rejects_empty_grid():
+    energy = SynAxis(name="energy")
+
+    with pytest.raises(ValueError, match="Energy scan requires at least one energy"):
+        make_energy_scan_acquisition_plan(energy, [])
+
+
+def test_agent_optimization_nests_energy_scan_acquisition(
+    make_profile_and_resources,
+):
+    profile, resources = make_profile_and_resources()
+    motor = resources.actuators["motor"]
+    energy = SynAxis(name="energy")
+    camera = SynSignal(
+        name="camera",
+        func=lambda: motor.position + energy.position,
+    )
+    resources = replace(resources, sensors={"camera": camera})
+    documents = []
+    evaluation_calls = []
+
+    def evaluate(uid, suggestions):
+        evaluation_calls.append((uid, [dict(suggestion) for suggestion in suggestions]))
+        return [
+            {
+                "_id": suggestion["_id"],
+                "lateral_distance": abs(suggestion["motor"]),
+                "intensity": 1_000_001.0,
+            }
+            for suggestion in suggestions
+        ]
+
+    acquisition_plan = make_energy_scan_acquisition_plan(energy, [100.0, 101.0])
+    agent = make_energy_alignment_agent(
+        "reference",
+        profile=profile,
+        resources=resources,
+        evaluation_function=evaluate,
+        acquisition_plan=acquisition_plan,
+    )
+    run_engine = RunEngine({})
+    run_engine.subscribe(lambda name, doc: documents.append((name, doc)))
+
+    run_engine(agent.optimize(1))
+
+    starts = [doc for name, doc in documents if name == "start"]
+    assert [start["run_key"] for start in starts] == ["optimize", "default_acquire"]
+    outer_start, inner_start = starts
+    assert outer_start["uid"] != inner_start["uid"]
+    stops = [doc for name, doc in documents if name == "stop"]
+    assert [stop["run_start"] for stop in stops] == [
+        inner_start["uid"],
+        outer_start["uid"],
+    ]
+
+    assert evaluation_calls == [
+        (inner_start["uid"], inner_start["blop_suggestions"])
+    ]
+    [suggestion] = evaluation_calls[0][1]
+    descriptor_runs = {
+        doc["uid"]: doc["run_start"]
+        for name, doc in documents
+        if name == "descriptor"
+    }
+    inner_events = [
+        doc
+        for name, doc in documents
+        if name == "event"
+        and descriptor_runs[doc["descriptor"]] == inner_start["uid"]
+    ]
+    assert [event["data"]["motor"] for event in inner_events] == [
+        suggestion["motor"],
+        suggestion["motor"],
+    ]
+    assert [event["data"]["energy"] for event in inner_events] == [100.0, 101.0]
+    assert [event["data"]["camera"] for event in inner_events] == pytest.approx(
+        [suggestion["motor"] + 100.0, suggestion["motor"] + 101.0]
+    )
 
 
 def test_metadata_uses_profile_and_live_resources(make_profile_and_resources):

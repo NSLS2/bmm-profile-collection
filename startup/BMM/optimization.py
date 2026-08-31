@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from functools import partial
 from pathlib import Path
 import pickle
 import threading
@@ -11,17 +12,19 @@ from typing import TYPE_CHECKING, Any, Protocol
 from ax.api.protocols import IMetric
 from blop import (
     Agent,
+    default_acquire,
     DOF,
     Objective,
     OutcomeConstraint,
     RangeDOF,
     ScalarizedObjective,
 )
-from blop.protocols import Actuator, EvaluationFunction, Sensor
+from blop.protocols import AcquisitionPlan, Actuator, EvaluationFunction, Sensor
 from bluesky.callbacks import CallbackBase
-from bluesky.plan_stubs import null
+from bluesky.plan_stubs import mv, null, one_nd_step, trigger_and_read
 from bluesky.preprocessors import finalize_wrapper, inject_md_wrapper
-from bluesky.utils import MsgGenerator
+from bluesky.protocols import Readable
+from bluesky.utils import MsgGenerator, plan
 from event_model import Event, RunStart, RunStop
 import numpy as np
 from tiled.client.container import Container
@@ -460,12 +463,49 @@ class ImageEvaluation:
         return outcomes
 
 
+@plan
+def scan_energy(
+    detectors: Sequence[Readable],
+    *,
+    energy_actuator: Actuator,
+    energies: Sequence[float],
+) -> MsgGenerator[None]:
+    """Acquire every configured energy at the current suggested position."""
+    devices = [*detectors, energy_actuator]
+    for energy in energies:
+        yield from mv(energy_actuator, energy)
+        yield from trigger_and_read(devices)
+
+
+def make_energy_scan_acquisition_plan(
+    energy_actuator: Actuator,
+    energies: Sequence[float],
+) -> AcquisitionPlan:
+    """Compose Blop's default acquisition with an inner energy scan."""
+    energy_points = tuple(energies)
+    if not energy_points:
+        raise ValueError("Energy scan requires at least one energy")
+
+    return partial(
+        default_acquire,
+        per_step=partial(
+            one_nd_step,
+            take_reading=partial(
+                scan_energy,
+                energy_actuator=energy_actuator,
+                energies=energy_points,
+            ),
+        ),
+    )
+
+
 def make_energy_alignment_agent(
     reference_scan_uid: str,
     *,
     profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
     evaluation_function: EvaluationFunction | None = None,
+    acquisition_plan: AcquisitionPlan | None = None,
 ) -> Agent:
     """Construct a fresh Blop agent from a reusable alignment profile."""
     resolved_profile = get_energy_alignment_profile(profile)
@@ -483,6 +523,7 @@ def make_energy_alignment_agent(
         dofs=_bind_dofs(resolved_resources, resolved_profile),
         objectives=resolved_profile.objectives,
         evaluation_function=evaluation_function,
+        acquisition_plan=acquisition_plan,
         outcome_constraints=resolved_profile.outcome_constraints,
     )
     agent.ax_client.configure_generation_strategy(
