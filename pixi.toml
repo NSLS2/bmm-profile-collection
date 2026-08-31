@@ -37,6 +37,7 @@ nslsii = "==0.11.9"
 gpytorch = "*"
 botorch = "*"
 dash = ">=3,<4"
+scikit-image = ">=0.26,<0.27"
 
 [feature.profile.pypi-dependencies]
 emojis = "*"

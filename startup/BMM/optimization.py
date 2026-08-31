@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from numbers import Integral, Real
 from functools import partial
 from pathlib import Path
 import pickle
@@ -31,6 +32,8 @@ from bluesky.protocols import Movable, Readable
 from bluesky.utils import MsgGenerator, plan
 from event_model import Event, RunStart, RunStop
 import numpy as np
+from skimage.filters import gaussian, threshold_otsu
+from skimage.transform import resize
 from tiled.client.container import Container
 
 if TYPE_CHECKING:
@@ -59,7 +62,10 @@ class EnergyAlignmentResources:
 class BeamEvaluationConfig:
     image_field: str
     intensity_field: str
-    crop_region: tuple[int, int]
+    x_crop: tuple[int, int] | None = None
+    y_crop: tuple[int, int] | None = None
+    blur_sigma: float | None = 2.0
+    upscale_factor: int | None = 4
 
 
 @dataclass(frozen=True)
@@ -92,11 +98,15 @@ class EnergyAlignmentProfile:
 
 @dataclass(frozen=True)
 class BeamStats:
-    lateral_position: int
-    cropped_intensity: float
+    fwhm_x: float
+    fwhm_y: float
+    centroid_x: float
+    centroid_y: float
 
 
-_IMAGE_EVALUATION_OUTCOMES = frozenset({"lateral_distance", "intensity"})
+_IMAGE_EVALUATION_OUTCOMES = frozenset(
+    {"fwhm_x", "fwhm_y", "centroid_x", "centroid_y", "centroid_distance", "intensity"}
+)
 
 _ALIGNMENT_DOFS = (
     RangeDOF(
@@ -119,14 +129,15 @@ _ALIGNMENT_DOFS = (
 _BEAM_EVALUATION = BeamEvaluationConfig(
     image_field="cam-8_image",
     intensity_field="I0",
-    crop_region=(900, 1040),
+    x_crop=(900, 1040),
+    y_crop=None,
 )
 
 PER_ENERGY_ALIGNMENT = EnergyAlignmentProfile(
     name="per-energy-alignment",
     sensors=("camera", "i0"),
     dofs=_ALIGNMENT_DOFS,
-    objectives=(Objective(name="lateral_distance", minimize=True),),
+    objectives=(Objective(name="centroid_distance", minimize=True),),
     outcome_constraints=(
         OutcomeConstraint(
             "x >= 1000000",
@@ -257,6 +268,40 @@ def optimization_metadata_wrapper(
     return inject_md_wrapper(plan, md)
 
 
+def _validate_evaluation_config(parameters: BeamEvaluationConfig) -> None:
+    for axis, bounds in (("x", parameters.x_crop), ("y", parameters.y_crop)):
+        if bounds is None:
+            continue
+        if (
+            not isinstance(bounds, tuple)
+            or len(bounds) != 2
+            or any(
+                isinstance(bound, bool) or not isinstance(bound, Integral)
+                for bound in bounds
+            )
+            or bounds[0] < 0
+            or bounds[0] >= bounds[1]
+        ):
+            raise ValueError(f"Invalid {axis} crop {bounds!r}")
+
+    blur_sigma = parameters.blur_sigma
+    if blur_sigma is not None and (
+        isinstance(blur_sigma, bool)
+        or not isinstance(blur_sigma, Real)
+        or not np.isfinite(blur_sigma)
+        or blur_sigma <= 0
+    ):
+        raise ValueError("blur_sigma must be finite and positive")
+
+    upscale_factor = parameters.upscale_factor
+    if upscale_factor is not None and (
+        isinstance(upscale_factor, bool)
+        or not isinstance(upscale_factor, Integral)
+        or upscale_factor < 2
+    ):
+        raise ValueError("upscale_factor must be a non-boolean integer of at least 2")
+
+
 def _validate_profile(profile: EnergyAlignmentProfile) -> None:
     if not profile.sensors:
         raise ValueError(f"Profile {profile.name!r} must define at least one sensor")
@@ -278,11 +323,7 @@ def _validate_profile(profile: EnergyAlignmentProfile) -> None:
     if any(dof.actuator is None for dof in profile.dofs):
         raise ValueError(f"Profile {profile.name!r} cannot use unbound, name-only DOFs")
 
-    crop_start, crop_stop = profile.evaluation.crop_region
-    if crop_start < 0 or crop_start >= crop_stop:
-        raise ValueError(
-            f"Invalid image crop region {profile.evaluation.crop_region!r}"
-        )
+    _validate_evaluation_config(profile.evaluation)
 
     optimization = profile.optimization
     if optimization.iterations < 1:
@@ -362,11 +403,12 @@ def _bind_dofs(
     )
 
 
-def compute_image_stats(
+def _preprocess_image(
     image: np.ndarray,
     parameters: BeamEvaluationConfig,
-) -> BeamStats:
-    """Compute the beam position and intensity from one camera image."""
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    _validate_evaluation_config(parameters)
+
     gray = np.asarray(image).squeeze()
     if gray.ndim == 3:
         if gray.shape[-1] not in (3, 4):
@@ -378,19 +420,138 @@ def compute_image_stats(
     if gray.ndim != 2:
         raise ValueError(f"Expected a 2-D image, received shape {gray.shape!r}")
     gray = gray.astype(np.float64, copy=False)
+    if not np.isfinite(gray).all() or np.any(gray < 0):
+        raise ValueError("Image contains non-finite or negative pixels")
 
-    crop_start, crop_stop = parameters.crop_region
-    if crop_stop > gray.shape[1]:
+    height, width = gray.shape
+    x_start, x_stop = parameters.x_crop or (0, width)
+    if x_stop > width:
         raise ValueError(
-            f"Crop region {parameters.crop_region!r} exceeds image width {gray.shape[1]}"
+            f"Invalid x crop {parameters.x_crop!r} for image width {width}"
+        )
+    y_start, y_stop = parameters.y_crop or (0, height)
+    if y_stop > height:
+        raise ValueError(
+            f"Invalid y crop {parameters.y_crop!r} for image height {height}"
         )
 
-    cropped_x_profile = gray.sum(axis=0)[crop_start:crop_stop]
-    lateral_position = int(np.argmax(cropped_x_profile)) + crop_start
-    cropped_intensity = float(cropped_x_profile.sum())
+    cropped = gray[y_start:y_stop, x_start:x_stop]
+    if parameters.blur_sigma is None:
+        filtered = cropped
+    else:
+        filtered = gaussian(
+            cropped,
+            sigma=parameters.blur_sigma,
+            mode="reflect",
+            preserve_range=True,
+            channel_axis=None,
+        )
+    threshold = threshold_otsu(filtered)
+    thresholded = np.where(filtered > threshold, filtered, 0.0)
+    if not np.any(thresholded > 0):
+        raise ValueError("Image has no positive signal after Otsu thresholding")
+
+    if parameters.upscale_factor is None:
+        scale = 1
+        processed = thresholded
+    else:
+        scale = int(parameters.upscale_factor)
+        processed = resize(
+            thresholded,
+            (cropped.shape[0] * scale, cropped.shape[1] * scale),
+            order=3,
+            mode="reflect",
+            clip=True,
+            preserve_range=True,
+            anti_aliasing=False,
+        )
+    x_coordinates = x_start + (np.arange(processed.shape[1]) + 0.5) / scale - 0.5
+    y_coordinates = y_start + (np.arange(processed.shape[0]) + 0.5) / scale - 0.5
+    return processed, x_coordinates, y_coordinates
+
+
+def _full_width_half_maximum(
+    profile: np.ndarray,
+    coordinates: np.ndarray,
+    *,
+    axis: str,
+) -> float:
+    profile = np.asarray(profile, dtype=np.float64)
+    coordinates = np.asarray(coordinates, dtype=np.float64)
+    error = f"Cannot compute {axis} FWHM: peak is not bracketed at half maximum"
+    if (
+        profile.ndim != 1
+        or coordinates.ndim != 1
+        or profile.shape != coordinates.shape
+        or profile.size < 3
+        or not np.isfinite(profile).all()
+        or not np.isfinite(coordinates).all()
+        or not np.all(np.diff(coordinates) > 0)
+    ):
+        raise ValueError(error)
+
+    peak_index = int(np.argmax(profile))
+    peak = profile[peak_index]
+    if peak <= 0:
+        raise ValueError(error)
+    half_maximum = peak / 2
+
+    left_below = np.flatnonzero(profile[:peak_index] < half_maximum)
+    right_below = np.flatnonzero(profile[peak_index + 1 :] < half_maximum)
+    if left_below.size == 0 or right_below.size == 0:
+        raise ValueError(error)
+
+    left_outer = int(left_below[-1])
+    left_inner = left_outer + 1
+    if profile[left_inner] == half_maximum:
+        left_crossing = coordinates[left_inner]
+    else:
+        left_crossing = coordinates[left_outer] + (
+            (half_maximum - profile[left_outer])
+            * (coordinates[left_inner] - coordinates[left_outer])
+            / (profile[left_inner] - profile[left_outer])
+        )
+
+    right_outer = peak_index + 1 + int(right_below[0])
+    right_inner = right_outer - 1
+    if profile[right_inner] == half_maximum:
+        right_crossing = coordinates[right_inner]
+    else:
+        right_crossing = coordinates[right_inner] + (
+            (half_maximum - profile[right_inner])
+            * (coordinates[right_outer] - coordinates[right_inner])
+            / (profile[right_outer] - profile[right_inner])
+        )
+
+    width = float(right_crossing - left_crossing)
+    if not np.isfinite(width) or width <= 0:
+        raise ValueError(error)
+    return width
+
+
+def compute_image_stats(
+    image: np.ndarray,
+    parameters: BeamEvaluationConfig,
+) -> BeamStats:
+    """Compute beam widths and centroids from one camera image."""
+    processed, x_coordinates, y_coordinates = _preprocess_image(image, parameters)
+    x_profile = processed.sum(axis=0)
+    y_profile = processed.sum(axis=1)
+    x_mass = float(x_profile.sum())
+    y_mass = float(y_profile.sum())
+    if not np.isfinite(x_mass) or not np.isfinite(y_mass) or x_mass <= 0 or y_mass <= 0:
+        raise ValueError("Image has no positive signal after Otsu thresholding")
+
+    centroid_x = float(np.dot(x_profile, x_coordinates) / x_mass)
+    centroid_y = float(np.dot(y_profile, y_coordinates) / y_mass)
+    if not np.isfinite(centroid_x) or not np.isfinite(centroid_y):
+        raise ValueError("Image centroids must be finite")
+
     return BeamStats(
-        lateral_position=lateral_position,
-        cropped_intensity=cropped_intensity,
+        fwhm_x=_full_width_half_maximum(x_profile, x_coordinates, axis="x"),
+        fwhm_y=_full_width_half_maximum(y_profile, y_coordinates, axis="y"),
+        centroid_x=centroid_x,
+        centroid_y=centroid_y,
     )
 
 
@@ -405,19 +566,47 @@ def compute_stats(
     resolved_resources = _resolve_resources(resources)
     run = resolved_resources.catalog[uid]
     evaluation = resolved_profile.evaluation
-    image = run["primary"]["data"][evaluation.image_field].read()
-    intensity_i0 = run["primary"]["data"][evaluation.intensity_field].read()
+    data = run["primary"]["data"]
+    image = data[evaluation.image_field].read()
+    intensity_data = np.asarray(data[evaluation.intensity_field].read())
+    scalar_intensity = intensity_data.squeeze()
+    if scalar_intensity.ndim != 0:
+        raise ValueError(
+            f"{evaluation.intensity_field!r} data must contain one finite scalar; "
+            f"received shape {intensity_data.shape!r}"
+        )
+    try:
+        intensity = float(scalar_intensity)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{evaluation.intensity_field!r} data must contain one finite scalar"
+        ) from exc
+    if not np.isfinite(intensity):
+        raise ValueError(
+            f"{evaluation.intensity_field!r} data must contain one finite scalar"
+        )
+
     stats = compute_image_stats(image, evaluation)
     print(
-        f"lateral_position: {stats.lateral_position}, "
-        f"cropped_intensity={stats.cropped_intensity}, "
-        f"ic0_intensity={np.asarray(intensity_i0).squeeze()}"
+        f"fwhm_x={stats.fwhm_x}, "
+        f"fwhm_y={stats.fwhm_y}, "
+        f"centroid_x={stats.centroid_x}, "
+        f"centroid_y={stats.centroid_y}, "
+        f"intensity={intensity}"
     )
     return stats
 
 
 class ImageEvaluation:
-    """Evaluate camera images against a reference beam position."""
+    """Evaluate camera images against a reference beam position.
+
+    Each completed run provides one image and one finite scalar intensity per
+    suggestion. Batch image data uses its leading dimension as acquisition
+    order, the squeezed intensity data has shape ``(suggestion_count,)``, and
+    ``start.blop_suggestions`` contains the unique suggestion IDs in that same
+    order. Single acquisitions may omit this metadata and may include singleton
+    dimensions around their image or intensity value.
+    """
 
     def __init__(
         self,
@@ -426,42 +615,96 @@ class ImageEvaluation:
         parameters: BeamEvaluationConfig,
     ):
         self.tiled_client = tiled_client
+        self.reference_scan_uid = reference_scan_uid
         self.parameters = parameters
         reference_run = self.tiled_client[reference_scan_uid]
         reference_image = reference_run["primary"]["data"][
             parameters.image_field
         ].read()
         reference_stats = compute_image_stats(reference_image, parameters)
-        self.target_lateral_position = reference_stats.lateral_position
+        self.reference_centroid_x = reference_stats.centroid_x
+        self.reference_centroid_y = reference_stats.centroid_y
 
     def __call__(self, uid: str, suggestions: list[dict]) -> list[dict]:
         if not suggestions:
             return []
 
+        count = len(suggestions)
         run = self.tiled_client[uid]
-        acquired_images = np.asarray(
-            run["primary"]["data"][self.parameters.image_field].read()
-        )
-        if len(suggestions) == 1:
-            images = (acquired_images,)
-        elif acquired_images.shape[0] == len(suggestions):
-            images = tuple(acquired_images[index] for index in range(len(suggestions)))
-        else:
-            raise ValueError(
-                f"Received {len(suggestions)} suggestions but image data has shape "
-                f"{acquired_images.shape!r}"
+        data = run["primary"]["data"]
+        acquired_images = np.asarray(data[self.parameters.image_field].read())
+        intensity_data = np.asarray(data[self.parameters.intensity_field].read())
+
+        def shape_error(field: str, values: np.ndarray) -> ValueError:
+            return ValueError(
+                f"Received {count} suggestions but {field!r} data has shape "
+                f"{values.shape!r}"
             )
 
+        if count == 1:
+            images = (acquired_images,)
+        else:
+            if acquired_images.ndim == 0 or acquired_images.shape[0] != count:
+                raise shape_error(self.parameters.image_field, acquired_images)
+            images = acquired_images
+
+        try:
+            intensities = np.atleast_1d(
+                intensity_data.astype(np.float64, copy=False).squeeze()
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"{self.parameters.intensity_field!r} data must be numeric"
+            ) from exc
+        if intensities.shape != (count,):
+            raise shape_error(self.parameters.intensity_field, intensity_data)
+        if not np.isfinite(intensities).all():
+            raise ValueError(
+                f"{self.parameters.intensity_field!r} data must contain finite values"
+            )
+
+        suggestion_ids = [suggestion["_id"] for suggestion in suggestions]
+        if count == 1:
+            acquired_ids = suggestion_ids
+        else:
+            try:
+                acquired_ids = [
+                    suggestion["_id"]
+                    for suggestion in run.metadata["start"]["blop_suggestions"]
+                ]
+            except (AttributeError, KeyError, TypeError) as exc:
+                raise ValueError(
+                    "Batch evaluation requires blop_suggestions metadata"
+                ) from exc
+            if len(acquired_ids) != count or set(acquired_ids) != set(suggestion_ids):
+                raise ValueError(
+                    "blop_suggestions metadata IDs do not match supplied suggestion IDs"
+                )
+
+        paired_by_id = {
+            suggestion_id: (image, float(intensity))
+            for suggestion_id, image, intensity in zip(
+                acquired_ids, images, intensities, strict=True
+            )
+        }
         outcomes = []
-        for suggestion, image in zip(suggestions, images, strict=True):
+        for suggestion in suggestions:
+            image, intensity = paired_by_id[suggestion["_id"]]
             stats = compute_image_stats(image, self.parameters)
             outcomes.append(
                 {
                     "_id": suggestion["_id"],
-                    "lateral_distance": abs(
-                        self.target_lateral_position - stats.lateral_position
+                    "fwhm_x": float(stats.fwhm_x),
+                    "fwhm_y": float(stats.fwhm_y),
+                    "centroid_x": float(stats.centroid_x),
+                    "centroid_y": float(stats.centroid_y),
+                    "centroid_distance": float(
+                        np.hypot(
+                            self.reference_centroid_x - stats.centroid_x,
+                            self.reference_centroid_y - stats.centroid_y,
+                        )
                     ),
-                    "intensity": stats.cropped_intensity,
+                    "intensity": intensity,
                 }
             )
         return outcomes
