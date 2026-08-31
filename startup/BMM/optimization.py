@@ -11,9 +11,9 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Protocol
 
 from ax.api.protocols import IMetric
-from blop import (
+from blop import default_acquire
+from blop.ax import (
     Agent,
-    default_acquire,
     DOF,
     Objective,
     OutcomeConstraint,
@@ -38,6 +38,7 @@ from tiled.client.container import Container
 
 if TYPE_CHECKING:
     import plotly.graph_objects as go
+    from matplotlib.figure import Figure
 
     from blop.ax.agent import _AxAgentMixin
 
@@ -102,6 +103,55 @@ class BeamStats:
     fwhm_y: float
     centroid_x: float
     centroid_y: float
+
+@dataclass(frozen=True)
+class _ImageProcessingStage:
+    name: str
+    image: np.ndarray
+    x_coordinates: np.ndarray
+    y_coordinates: np.ndarray
+    threshold: float | None = None
+
+
+@dataclass(frozen=True)
+class _ResolvedEnergyAlignmentUID:
+    uid: str
+    run: Any
+    source_uid: str
+    source_start: Mapping[str, Any]
+
+@dataclass(frozen=True)
+class _EnergyAlignmentDebugAcquisition:
+    uid: str
+    run: Any
+    source_uid: str
+    start: Mapping[str, Any]
+    source_start: Mapping[str, Any]
+    suggestions: tuple[Mapping[str, Any], ...]
+    energies: tuple[float | None, ...]
+    intensities: tuple[float, ...]
+    event_count: int
+    frames_per_suggestion: int
+    mode: str
+    image_field: str
+    intensity_field: str
+    energy_field: str
+    energy_field_present: bool
+
+@dataclass(frozen=True)
+class _DebugPanelLimits:
+    image_min: float
+    image_max: float
+    x_marginal_max: float
+    y_marginal_max: float
+
+@dataclass(frozen=True)
+class _DebugFrameColumn:
+    acquisition: _EnergyAlignmentDebugAcquisition
+    suggestion_index: int
+    event_index: int
+    stages: tuple[_ImageProcessingStage, ...] | None
+    error: str | None = None
 
 
 _IMAGE_EVALUATION_OUTCOMES = frozenset(
@@ -403,10 +453,10 @@ def _bind_dofs(
     )
 
 
-def _preprocess_image(
+def _image_processing_stages(
     image: np.ndarray,
     parameters: BeamEvaluationConfig,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[_ImageProcessingStage, ...]:
     _validate_evaluation_config(parameters)
 
     gray = np.asarray(image).squeeze()
@@ -424,6 +474,12 @@ def _preprocess_image(
         raise ValueError("Image contains non-finite or negative pixels")
 
     height, width = gray.shape
+    x_coordinates = np.arange(width, dtype=np.float64)
+    y_coordinates = np.arange(height, dtype=np.float64)
+    stages = [
+        _ImageProcessingStage("grayscale", gray, x_coordinates, y_coordinates)
+    ]
+
     x_start, x_stop = parameters.x_crop or (0, width)
     if x_stop > width:
         raise ValueError(
@@ -436,6 +492,15 @@ def _preprocess_image(
         )
 
     cropped = gray[y_start:y_stop, x_start:x_stop]
+    x_coordinates = x_coordinates[x_start:x_stop]
+    y_coordinates = y_coordinates[y_start:y_stop]
+    if parameters.x_crop is not None or parameters.y_crop is not None:
+        stages.append(
+            _ImageProcessingStage(
+                "crop", cropped, x_coordinates, y_coordinates
+            )
+        )
+
     if parameters.blur_sigma is None:
         filtered = cropped
     else:
@@ -446,15 +511,30 @@ def _preprocess_image(
             preserve_range=True,
             channel_axis=None,
         )
-    threshold = threshold_otsu(filtered)
+        stages.append(
+            _ImageProcessingStage(
+                f"Gaussian σ={parameters.blur_sigma}",
+                filtered,
+                x_coordinates,
+                y_coordinates,
+            )
+        )
+
+    threshold = float(threshold_otsu(filtered))
     thresholded = np.where(filtered > threshold, filtered, 0.0)
     if not np.any(thresholded > 0):
         raise ValueError("Image has no positive signal after Otsu thresholding")
+    stages.append(
+        _ImageProcessingStage(
+            "Otsu threshold",
+            thresholded,
+            x_coordinates,
+            y_coordinates,
+            threshold,
+        )
+    )
 
-    if parameters.upscale_factor is None:
-        scale = 1
-        processed = thresholded
-    else:
+    if parameters.upscale_factor is not None:
         scale = int(parameters.upscale_factor)
         processed = resize(
             thresholded,
@@ -465,9 +545,26 @@ def _preprocess_image(
             preserve_range=True,
             anti_aliasing=False,
         )
-    x_coordinates = x_start + (np.arange(processed.shape[1]) + 0.5) / scale - 0.5
-    y_coordinates = y_start + (np.arange(processed.shape[0]) + 0.5) / scale - 0.5
-    return processed, x_coordinates, y_coordinates
+        x_coordinates = (
+            x_start + (np.arange(processed.shape[1]) + 0.5) / scale - 0.5
+        )
+        y_coordinates = (
+            y_start + (np.arange(processed.shape[0]) + 0.5) / scale - 0.5
+        )
+        stages.append(
+            _ImageProcessingStage(
+                f"resize ×{scale}", processed, x_coordinates, y_coordinates
+            )
+        )
+
+    return tuple(stages)
+
+
+def _preprocess_image(
+    image: np.ndarray,
+    parameters: BeamEvaluationConfig,
+) -> _ImageProcessingStage:
+    return _image_processing_stages(image, parameters)[-1]
 
 
 def _full_width_half_maximum(
@@ -529,14 +626,13 @@ def _full_width_half_maximum(
     return width
 
 
-def compute_image_stats(
+def _compute_processed_image_stats(
     image: np.ndarray,
-    parameters: BeamEvaluationConfig,
+    x_coordinates: np.ndarray,
+    y_coordinates: np.ndarray,
 ) -> BeamStats:
-    """Compute beam widths and centroids from one camera image."""
-    processed, x_coordinates, y_coordinates = _preprocess_image(image, parameters)
-    x_profile = processed.sum(axis=0)
-    y_profile = processed.sum(axis=1)
+    x_profile = image.sum(axis=0)
+    y_profile = image.sum(axis=1)
     x_mass = float(x_profile.sum())
     y_mass = float(y_profile.sum())
     if not np.isfinite(x_mass) or not np.isfinite(y_mass) or x_mass <= 0 or y_mass <= 0:
@@ -552,6 +648,19 @@ def compute_image_stats(
         fwhm_y=_full_width_half_maximum(y_profile, y_coordinates, axis="y"),
         centroid_x=centroid_x,
         centroid_y=centroid_y,
+    )
+
+
+def compute_image_stats(
+    image: np.ndarray,
+    parameters: BeamEvaluationConfig,
+) -> BeamStats:
+    """Compute beam widths and centroids from one camera image."""
+    processed = _preprocess_image(image, parameters)
+    return _compute_processed_image_stats(
+        processed.image,
+        processed.x_coordinates,
+        processed.y_coordinates,
     )
 
 
@@ -595,6 +704,92 @@ def compute_stats(
         f"intensity={intensity}"
     )
     return stats
+
+def _validate_pixel_size_um(
+    pixel_size_um: tuple[float, float],
+) -> tuple[float, float]:
+    if (
+        not isinstance(pixel_size_um, tuple)
+        or len(pixel_size_um) != 2
+        or any(
+            isinstance(scale, bool)
+            or not isinstance(scale, Real)
+            or not np.isfinite(scale)
+            or scale <= 0
+            for scale in pixel_size_um
+        )
+    ):
+        raise ValueError(
+            "pixel_size_um must be a finite positive "
+            "(x_um_per_pixel, y_um_per_pixel) tuple"
+        )
+    return float(pixel_size_um[0]), float(pixel_size_um[1])
+
+
+def show_energy_alignment_debug(
+    uids: str | Sequence[str],
+    *,
+    pixel_size_um: tuple[float, float],
+    energy_field: str = "dcm_energy",
+    profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
+    resources: EnergyAlignmentResources | None = None,
+) -> Figure:
+    """Show image-processing diagnostics for completed alignment acquisitions.
+
+    Beamline usage is ``show_energy_alignment_debug(outer_or_acquisition_uids,
+    pixel_size_um=(x_scale, y_scale))``. ``uids`` accepts one direct acquisition
+    or outer Blop optimization UID, or an ordered sequence containing either.
+    Set ``energy_field`` when the recorded energy signal is not ``dcm_energy``.
+    Scan-energy pages advance with Right and reverse with Left, wrapping at both
+    ends.
+
+    This viewer only reads completed runs from the configured Tiled catalog. It
+    does not validate, read, or move profile actuators or sensors.
+    """
+    pixel_size = _validate_pixel_size_um(pixel_size_um)
+    resolved_profile = get_energy_alignment_profile(profile)
+    resolved_resources = _resolve_resources(resources)
+    resolved_uids = _resolve_energy_alignment_debug_uids(
+        uids,
+        catalog=resolved_resources.catalog,
+        image_field=resolved_profile.evaluation.image_field,
+    )
+    acquisitions = tuple(
+        _describe_energy_alignment_acquisition(
+            resolved_uid,
+            evaluation=resolved_profile.evaluation,
+            energy_field=energy_field,
+        )
+        for resolved_uid in resolved_uids
+    )
+    modes = {acquisition.mode for acquisition in acquisitions}
+    if len(modes) != 1:
+        details = ", ".join(
+            f"{acquisition.uid!r} ({acquisition.mode})"
+            for acquisition in acquisitions
+        )
+        raise ValueError(
+            "Cannot mix per-energy and scan-energy acquisitions: " + details
+        )
+
+    from matplotlib import pyplot as plt
+
+    if modes == {"per-energy"}:
+        figure = _render_per_energy_debug(
+            acquisitions,
+            profile=resolved_profile,
+            pixel_size_um=pixel_size,
+            pyplot=plt,
+        )
+    else:
+        figure = _render_scan_energy_debug(
+            acquisitions,
+            profile=resolved_profile,
+            pixel_size_um=pixel_size,
+            pyplot=plt,
+        )
+    plt.show(block=False)
+    return figure
 
 
 class ImageEvaluation:
@@ -883,7 +1078,7 @@ def search_for_optimal_positions(
     return (yield from finalize_wrapper(main_plan(), cleanup_plan()))
 
 
-# --------- Dash live plotting callback ---------
+# --------- Acquired-image debug viewer ---------
 
 
 def _to_list(value: Any) -> list[Any]:
@@ -899,6 +1094,896 @@ def _to_list(value: Any) -> list[Any]:
 def _py(value: Any) -> Any:
     """Convert a NumPy scalar to its native Python equivalent."""
     return value.item() if hasattr(value, "item") else value
+
+def _run_start_metadata(run: Any) -> Mapping[str, Any]:
+    metadata = getattr(run, "metadata", {})
+    if not isinstance(metadata, Mapping):
+        return {}
+    start = metadata.get("start", {})
+    return start if isinstance(start, Mapping) else {}
+
+
+def _complete_run_uid(run: Any, requested_uid: str) -> str:
+    uid = _py(_run_start_metadata(run).get("uid", requested_uid))
+    return uid if isinstance(uid, str) and uid else requested_uid
+
+
+def _energy_alignment_debug_data(run: Any, uid: str) -> Any:
+    try:
+        return run["primary"]["data"]
+    except (KeyError, TypeError) as exc:
+        raise ValueError(f"UID {uid!r} has no primary data") from exc
+
+
+def _resolve_energy_alignment_debug_uids(
+    uids: str | Sequence[str],
+    *,
+    catalog: Any,
+    image_field: str,
+) -> tuple[_ResolvedEnergyAlignmentUID, ...]:
+    if isinstance(uids, str):
+        requested_uids = [uids]
+    elif isinstance(uids, Sequence):
+        requested_uids = list(uids)
+    else:
+        raise ValueError("uids must be a non-empty string or sequence of strings")
+    if not requested_uids:
+        raise ValueError("uids must contain at least one non-empty string")
+    for index, uid in enumerate(requested_uids):
+        if not isinstance(uid, str) or not uid:
+            raise ValueError(
+                f"uids[{index}] must be a non-empty string; received {uid!r}"
+            )
+
+    resolved: list[_ResolvedEnergyAlignmentUID] = []
+    seen_direct_uids: set[str] = set()
+    seen_requested_uids: set[str] = set()
+
+    def append_direct(
+        requested_uid: str,
+        run: Any,
+        *,
+        source_uid: str,
+        source_start: Mapping[str, Any],
+    ) -> None:
+        direct_uid = _complete_run_uid(run, requested_uid)
+        if direct_uid in seen_direct_uids:
+            return
+        data = _energy_alignment_debug_data(run, direct_uid)
+        if image_field not in data:
+            raise ValueError(
+                f"UID {direct_uid!r} does not contain image field "
+                f"{image_field!r}"
+            )
+        seen_direct_uids.add(direct_uid)
+        resolved.append(
+            _ResolvedEnergyAlignmentUID(
+                uid=direct_uid,
+                run=run,
+                source_uid=source_uid,
+                source_start=source_start,
+            )
+        )
+
+    for requested_uid in requested_uids:
+        if requested_uid in seen_requested_uids:
+            continue
+        seen_requested_uids.add(requested_uid)
+        run = catalog[requested_uid]
+        complete_uid = _complete_run_uid(run, requested_uid)
+        data = _energy_alignment_debug_data(run, complete_uid)
+        start = _run_start_metadata(run)
+        if image_field in data:
+            append_direct(
+                requested_uid,
+                run,
+                source_uid=complete_uid,
+                source_start=start,
+            )
+            continue
+        if "acquisition_uid" not in data:
+            raise ValueError(
+                f"UID {complete_uid!r} contains neither image field "
+                f"{image_field!r} nor 'acquisition_uid'"
+            )
+
+        linked_uids = [
+            _py(value) for value in _to_list(data["acquisition_uid"].read())
+        ]
+        if not linked_uids:
+            raise ValueError(
+                f"UID {complete_uid!r} field 'acquisition_uid' contains no values"
+            )
+        for index, linked_uid in enumerate(linked_uids):
+            if not isinstance(linked_uid, str) or not linked_uid:
+                raise ValueError(
+                    f"UID {complete_uid!r} field 'acquisition_uid' contains "
+                    f"an invalid value at index {index}: {linked_uid!r}"
+                )
+            if linked_uid in seen_direct_uids:
+                continue
+            linked_run = catalog[linked_uid]
+            append_direct(
+                linked_uid,
+                linked_run,
+                source_uid=complete_uid,
+                source_start=start,
+            )
+
+    return tuple(resolved)
+
+def _numeric_debug_samples(value: Any, *, uid: str, field: str) -> tuple[float, ...]:
+    raw = np.asarray(value)
+    if np.iscomplexobj(raw) or np.issubdtype(raw.dtype, np.bool_):
+        raise ValueError(
+            f"UID {uid!r} field {field!r} must contain numeric scalar samples"
+        )
+    try:
+        samples = np.atleast_1d(raw.astype(np.float64, copy=False).squeeze())
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"UID {uid!r} field {field!r} must contain numeric scalar samples"
+        ) from exc
+    if samples.ndim != 1:
+        raise ValueError(
+            f"UID {uid!r} field {field!r} must contain scalar samples; "
+            f"received shape {raw.shape!r}"
+        )
+    if not np.isfinite(samples).all():
+        raise ValueError(
+            f"UID {uid!r} field {field!r} must contain finite values"
+        )
+    return tuple(float(sample) for sample in samples)
+
+
+def _describe_energy_alignment_acquisition(
+    resolved_uid: _ResolvedEnergyAlignmentUID,
+    *,
+    evaluation: BeamEvaluationConfig,
+    energy_field: str,
+) -> _EnergyAlignmentDebugAcquisition:
+    uid = resolved_uid.uid
+    run = resolved_uid.run
+    data = _energy_alignment_debug_data(run, uid)
+    start = _run_start_metadata(run)
+
+    if "blop_suggestions" not in start:
+        suggestions: tuple[Mapping[str, Any], ...] = ({},)
+    else:
+        suggestion_values = _to_list(start["blop_suggestions"])
+        if not suggestion_values:
+            raise ValueError(
+                f"UID {uid!r} metadata field 'start.blop_suggestions' "
+                "must contain at least one suggestion"
+            )
+        invalid_index = next(
+            (
+                index
+                for index, suggestion in enumerate(suggestion_values)
+                if not isinstance(suggestion, Mapping)
+            ),
+            None,
+        )
+        if invalid_index is not None:
+            raise ValueError(
+                f"UID {uid!r} metadata field 'start.blop_suggestions' "
+                f"contains a non-mapping value at index {invalid_index}"
+            )
+        suggestions = tuple(suggestion_values)
+
+    suggestion_count = len(suggestions)
+    energy_field_present = energy_field in data
+    if energy_field_present:
+        energies = _numeric_debug_samples(
+            data[energy_field].read(), uid=uid, field=energy_field
+        )
+        energy_count = len(energies)
+        if energy_count < suggestion_count or energy_count % suggestion_count:
+            raise ValueError(
+                f"UID {uid!r} field {energy_field!r} has {energy_count} samples "
+                f"for {suggestion_count} suggestions; expected one per suggestion "
+                "or an evenly divisible scan"
+            )
+        frames_per_suggestion = energy_count // suggestion_count
+        mode = "scan-energy" if frames_per_suggestion > 1 else "per-energy"
+    else:
+        energies = tuple(None for _ in suggestions)
+        frames_per_suggestion = 1
+        mode = "per-energy"
+    event_count = suggestion_count * frames_per_suggestion
+
+    if evaluation.intensity_field not in data:
+        raise ValueError(
+            f"UID {uid!r} does not contain intensity field "
+            f"{evaluation.intensity_field!r}"
+        )
+    intensities = _numeric_debug_samples(
+        data[evaluation.intensity_field].read(),
+        uid=uid,
+        field=evaluation.intensity_field,
+    )
+    if len(intensities) != event_count:
+        raise ValueError(
+            f"UID {uid!r} field {evaluation.intensity_field!r} has "
+            f"{len(intensities)} samples; expected {event_count} to match "
+            f"{suggestion_count} suggestions and field {energy_field!r}"
+        )
+
+    return _EnergyAlignmentDebugAcquisition(
+        uid=uid,
+        run=run,
+        source_uid=resolved_uid.source_uid,
+        start=start,
+        source_start=resolved_uid.source_start,
+        suggestions=suggestions,
+        energies=energies,
+        intensities=intensities,
+        event_count=event_count,
+        frames_per_suggestion=frames_per_suggestion,
+        mode=mode,
+        image_field=evaluation.image_field,
+        intensity_field=evaluation.intensity_field,
+        energy_field=energy_field,
+        energy_field_present=energy_field_present,
+    )
+
+
+def _read_energy_alignment_debug_frames(
+    acquisition: _EnergyAlignmentDebugAcquisition,
+) -> np.ndarray:
+    data = _energy_alignment_debug_data(acquisition.run, acquisition.uid)
+    raw = np.asarray(data[acquisition.image_field].read())
+    if acquisition.event_count == 1:
+        image = raw.squeeze()
+        if image.ndim == 2 or (image.ndim == 3 and image.shape[-1] in (3, 4)):
+            return image[np.newaxis, ...]
+    elif raw.ndim >= 3 and raw.shape[0] == acquisition.event_count:
+        return raw
+
+    if acquisition.energy_field_present:
+        detail = (
+            f"expected {acquisition.event_count} frames to match field "
+            f"{acquisition.energy_field!r}"
+        )
+    else:
+        detail = (
+            "multiple per-energy frames require matching "
+            "'start.blop_suggestions' records; scan-energy data requires "
+            f"the recorded energy_field instead of {acquisition.energy_field!r}"
+        )
+    raise ValueError(
+        f"UID {acquisition.uid!r} field {acquisition.image_field!r} has shape "
+        f"{raw.shape!r}; {detail}"
+    )
+
+def _debug_panel_limits(
+    stages: Sequence[_ImageProcessingStage],
+) -> _DebugPanelLimits | None:
+    if not stages:
+        return None
+    image_min = min(float(np.min(stage.image)) for stage in stages)
+    image_max = max(float(np.max(stage.image)) for stage in stages)
+    if image_max <= image_min:
+        image_max = image_min + 1.0
+    x_marginal_max = max(
+        float(np.max(stage.image.sum(axis=0))) for stage in stages
+    )
+    y_marginal_max = max(
+        float(np.max(stage.image.sum(axis=1))) for stage in stages
+    )
+    return _DebugPanelLimits(
+        image_min=image_min,
+        image_max=image_max,
+        x_marginal_max=max(x_marginal_max, 1.0),
+        y_marginal_max=max(y_marginal_max, 1.0),
+    )
+
+
+def _coordinate_extent(coordinates: np.ndarray) -> tuple[float, float]:
+    if coordinates.size > 1:
+        spacing = float(coordinates[1] - coordinates[0])
+    else:
+        spacing = 1.0
+    return (
+        float(coordinates[0] - spacing / 2),
+        float(coordinates[-1] + spacing / 2),
+    )
+
+
+def _render_energy_alignment_debug_panel(
+    figure: Figure,
+    cell: Any,
+    *,
+    stage: _ImageProcessingStage | None,
+    pixel_size_um: tuple[float, float],
+    row_label: str = "",
+    column_label: str = "",
+    final_stage: bool = False,
+    limits: _DebugPanelLimits | None = None,
+    overlay: Sequence[tuple[str, _ImageProcessingStage]] = (),
+    error: str | None = None,
+    pyplot: Any,
+) -> tuple[Any, Any, Any]:
+    inner = cell.subgridspec(
+        2,
+        2,
+        height_ratios=(1, 4),
+        width_ratios=(4, 1),
+        hspace=0.05,
+        wspace=0.05,
+    )
+    image_axis = figure.add_subplot(inner[1, 0])
+    x_axis = figure.add_subplot(inner[0, 0], sharex=image_axis)
+    y_axis = figure.add_subplot(inner[1, 1], sharey=image_axis)
+    image_axis.set_gid("energy-alignment-image")
+    x_axis.set_gid("energy-alignment-x-marginal")
+    y_axis.set_gid("energy-alignment-y-marginal")
+    x_axis.set_title(column_label, fontsize=8)
+
+    if error is not None:
+        x_axis.set_axis_off()
+        y_axis.set_axis_off()
+        image_axis.set_axis_off()
+        image_axis.text(
+            0.5,
+            0.5,
+            error,
+            ha="center",
+            va="center",
+            wrap=True,
+            transform=image_axis.transAxes,
+        )
+        if row_label:
+            image_axis.text(
+                0.0,
+                1.02,
+                row_label,
+                ha="left",
+                va="bottom",
+                transform=image_axis.transAxes,
+            )
+        return image_axis, x_axis, y_axis
+
+    x_scale, y_scale = pixel_size_um
+    if stage is not None:
+        if overlay:
+            raise ValueError("A debug panel cannot be both ordinary and overlaid")
+        x_coordinates = stage.x_coordinates * x_scale
+        y_coordinates = stage.y_coordinates * y_scale
+        x_limits = _coordinate_extent(x_coordinates)
+        y_limits = _coordinate_extent(y_coordinates)
+        panel_limits = limits or _debug_panel_limits((stage,))
+        assert panel_limits is not None
+        image_axis.imshow(
+            stage.image,
+            cmap="viridis",
+            origin="lower",
+            aspect="auto",
+            extent=(*x_limits, *y_limits),
+            vmin=panel_limits.image_min,
+            vmax=panel_limits.image_max,
+        )
+        x_profile = stage.image.sum(axis=0)
+        y_profile = stage.image.sum(axis=1)
+        x_axis.plot(x_coordinates, x_profile)
+        y_axis.plot(y_profile, y_coordinates)
+        x_axis.set_ylim(0, panel_limits.x_marginal_max * 1.05)
+        y_axis.set_xlim(0, panel_limits.y_marginal_max * 1.05)
+
+        annotations = []
+        if stage.threshold is not None:
+            annotations.append(f"threshold = {stage.threshold:.6g}")
+        if final_stage:
+            try:
+                stats = _compute_processed_image_stats(
+                    stage.image,
+                    stage.x_coordinates,
+                    stage.y_coordinates,
+                )
+            except ValueError as exc:
+                annotations.append(str(exc))
+            else:
+                image_axis.plot(
+                    stats.centroid_x * x_scale,
+                    stats.centroid_y * y_scale,
+                    marker="+",
+                    markersize=10,
+                    markeredgewidth=1.5,
+                    color="white",
+                )
+                annotations.extend(
+                    (
+                        f"centroid x = {stats.centroid_x:.3g} px = "
+                        f"{stats.centroid_x * x_scale:.3g} µm",
+                        f"centroid y = {stats.centroid_y:.3g} px = "
+                        f"{stats.centroid_y * y_scale:.3g} µm",
+                        f"FWHM x = {stats.fwhm_x:.3g} px = "
+                        f"{stats.fwhm_x * x_scale:.3g} µm",
+                        f"FWHM y = {stats.fwhm_y:.3g} px = "
+                        f"{stats.fwhm_y * y_scale:.3g} µm",
+                    )
+                )
+        if annotations:
+            image_axis.text(
+                0.02,
+                0.98,
+                "\n".join(annotations),
+                ha="left",
+                va="top",
+                fontsize=6,
+                color="white",
+                bbox={"facecolor": "black", "alpha": 0.55, "pad": 2},
+                transform=image_axis.transAxes,
+            )
+    elif overlay:
+        colors = pyplot.get_cmap("viridis")(
+            np.linspace(0.0, 1.0, len(overlay))
+        )
+        x_min = y_min = np.inf
+        x_max = y_max = -np.inf
+        threshold_labels = []
+        for (label, overlay_stage), color in zip(overlay, colors, strict=True):
+            peak = float(np.max(overlay_stage.image))
+            normalized = overlay_stage.image / peak
+            x_coordinates = overlay_stage.x_coordinates * x_scale
+            y_coordinates = overlay_stage.y_coordinates * y_scale
+            x_extent = _coordinate_extent(x_coordinates)
+            y_extent = _coordinate_extent(y_coordinates)
+            x_min, x_max = min(x_min, x_extent[0]), max(x_max, x_extent[1])
+            y_min, y_max = min(y_min, y_extent[0]), max(y_max, y_extent[1])
+            image_axis.contour(
+                x_coordinates,
+                y_coordinates,
+                normalized,
+                levels=(0.25, 0.5, 0.75),
+                colors=[color],
+            )
+            x_profile = normalized.sum(axis=0)
+            y_profile = normalized.sum(axis=1)
+            x_profile /= np.max(x_profile)
+            y_profile /= np.max(y_profile)
+            x_axis.plot(x_coordinates, x_profile, color=color, label=label)
+            y_axis.plot(y_profile, y_coordinates, color=color, label=label)
+            image_axis.plot([], [], color=color, label=label)
+            if overlay_stage.threshold is not None:
+                threshold_labels.append(
+                    f"{label}: threshold = {overlay_stage.threshold:.6g}"
+                )
+        image_axis.set_xlim(x_min, x_max)
+        image_axis.set_ylim(y_min, y_max)
+        x_axis.set_ylim(0, 1.05)
+        y_axis.set_xlim(0, 1.05)
+        image_axis.legend(title="energy", fontsize=6, title_fontsize=6)
+        if threshold_labels:
+            image_axis.text(
+                0.02,
+                0.02,
+                "\n".join(threshold_labels),
+                ha="left",
+                va="bottom",
+                fontsize=6,
+                bbox={"facecolor": "white", "alpha": 0.7, "pad": 2},
+                transform=image_axis.transAxes,
+            )
+    else:
+        raise ValueError("A debug panel requires a stage, overlay, or error")
+
+    image_axis.set_xlabel("x (µm)")
+    image_axis.set_ylabel(f"{row_label}\ny (µm)" if row_label else "y (µm)")
+    x_axis.set_ylabel("Σy")
+    y_axis.set_xlabel("Σx")
+    x_axis.tick_params(labelbottom=False)
+    y_axis.tick_params(labelleft=False)
+    return image_axis, x_axis, y_axis
+
+
+def _configured_image_stage_names(
+    parameters: BeamEvaluationConfig,
+) -> tuple[str, ...]:
+    names = ["grayscale"]
+    if parameters.x_crop is not None or parameters.y_crop is not None:
+        names.append("crop")
+    if parameters.blur_sigma is not None:
+        names.append(f"Gaussian σ={parameters.blur_sigma}")
+    names.append("Otsu threshold")
+    if parameters.upscale_factor is not None:
+        names.append(f"resize ×{parameters.upscale_factor}")
+    return tuple(names)
+
+
+def _process_energy_alignment_debug_frame(
+    acquisition: _EnergyAlignmentDebugAcquisition,
+    image: np.ndarray,
+    *,
+    suggestion_index: int,
+    event_index: int,
+    parameters: BeamEvaluationConfig,
+) -> _DebugFrameColumn:
+    try:
+        stages = _image_processing_stages(image, parameters)
+    except ValueError as exc:
+        error = f"UID {acquisition.uid!r}, frame {event_index}: {exc}"
+        return _DebugFrameColumn(
+            acquisition=acquisition,
+            suggestion_index=suggestion_index,
+            event_index=event_index,
+            stages=None,
+            error=error,
+        )
+    return _DebugFrameColumn(
+        acquisition=acquisition,
+        suggestion_index=suggestion_index,
+        event_index=event_index,
+        stages=stages,
+    )
+
+
+def _debug_metadata_value(
+    acquisition: _EnergyAlignmentDebugAcquisition,
+    *path: str,
+) -> Any:
+    for start in (acquisition.start, acquisition.source_start):
+        value: Any = start
+        for key in path:
+            if not isinstance(value, Mapping) or key not in value:
+                break
+            value = value[key]
+        else:
+            if value is not None:
+                return _py(value)
+    return None
+
+
+def _format_debug_value(value: Any) -> str:
+    value = _py(value)
+    if isinstance(value, Real) and not isinstance(value, bool):
+        return f"{float(value):.6g}"
+    return str(value)
+
+
+def _shortest_unique_uid_prefixes(uids: Sequence[str]) -> dict[str, str]:
+    unique_uids = tuple(dict.fromkeys(uids))
+    prefixes = {}
+    for uid in unique_uids:
+        length = min(8, len(uid))
+        while length < len(uid) and any(
+            other != uid and other.startswith(uid[:length])
+            for other in unique_uids
+        ):
+            length += 1
+        prefixes[uid] = uid[:length]
+    return prefixes
+
+
+def _debug_column_label(
+    column: _DebugFrameColumn,
+    uid_prefix: str,
+) -> str:
+    acquisition = column.acquisition
+    lines = []
+    scan_id = _debug_metadata_value(acquisition, "scan_id")
+    if scan_id is not None:
+        lines.append(f"scan_id={_format_debug_value(scan_id)}")
+    requested_energy = _debug_metadata_value(
+        acquisition, "BMM_agent", "requested_energy"
+    )
+    if requested_energy is not None:
+        lines.append(f"requested_energy={_format_debug_value(requested_energy)}")
+    beamline_energy = _debug_metadata_value(acquisition, "Beamline", "energy")
+    if beamline_energy is not None:
+        lines.append(f"Beamline.energy={_format_debug_value(beamline_energy)}")
+    lines.append(f"UID={uid_prefix}")
+
+    suggestion = acquisition.suggestions[column.suggestion_index]
+    if suggestion:
+        if "_id" in suggestion:
+            lines.append(f"suggestion _id={_format_debug_value(suggestion['_id'])}")
+        for name, value in suggestion.items():
+            if name != "_id":
+                lines.append(f"{name}={_format_debug_value(value)}")
+    else:
+        lines.append("suggestion unnamed")
+
+    energy = acquisition.energies[column.event_index]
+    if energy is not None:
+        lines.append(f"{acquisition.energy_field}={energy:.6g}")
+    lines.append(
+        f"{acquisition.intensity_field}="
+        f"{acquisition.intensities[column.event_index]:.6g}"
+    )
+    return "\n".join(lines)
+
+
+def _debug_reference_uids(
+    acquisitions: Sequence[_EnergyAlignmentDebugAcquisition],
+) -> tuple[str, ...]:
+    references = []
+    seen = set()
+    for acquisition in acquisitions:
+        for start in (acquisition.start, acquisition.source_start):
+            value: Any = start
+            for key in ("BMM_agent", "reference_scan_uid"):
+                if not isinstance(value, Mapping) or key not in value:
+                    break
+                value = value[key]
+            else:
+                for reference in _to_list(value):
+                    reference = _py(reference)
+                    if (
+                        isinstance(reference, str)
+                        and reference
+                        and reference not in seen
+                    ):
+                        seen.add(reference)
+                        references.append(reference)
+    return tuple(references)
+
+
+def _debug_figure_title(
+    mode: str,
+    acquisitions: Sequence[_EnergyAlignmentDebugAcquisition],
+    *,
+    profile: EnergyAlignmentProfile,
+    pixel_size_um: tuple[float, float],
+) -> str:
+    acquisition_uids = tuple(dict.fromkeys(item.uid for item in acquisitions))
+    reference_uids = _debug_reference_uids(acquisitions)
+    references = ", ".join(reference_uids) if reference_uids else "none"
+    return (
+        f"Energy alignment debug — {mode}\n"
+        f"profile={profile.name} | acquisition UIDs={', '.join(acquisition_uids)} | "
+        f"reference UIDs={references} | pixel calibration: "
+        f"x={pixel_size_um[0]:.6g} µm/px, y={pixel_size_um[1]:.6g} µm/px"
+    )
+
+
+def _render_per_energy_debug(
+    acquisitions: Sequence[_EnergyAlignmentDebugAcquisition],
+    *,
+    profile: EnergyAlignmentProfile,
+    pixel_size_um: tuple[float, float],
+    pyplot: Any,
+) -> Figure:
+    columns: list[_DebugFrameColumn] = []
+    for acquisition in acquisitions:
+        frames = _read_energy_alignment_debug_frames(acquisition)
+        for suggestion_index, image in enumerate(frames):
+            columns.append(
+                _process_energy_alignment_debug_frame(
+                    acquisition,
+                    image,
+                    suggestion_index=suggestion_index,
+                    event_index=suggestion_index,
+                    parameters=profile.evaluation,
+                )
+            )
+
+    row_names = _configured_image_stage_names(profile.evaluation)
+    figure = pyplot.figure(
+        figsize=(max(7.0, 3.2 * len(columns)), max(5.0, 2.6 * len(row_names))),
+        constrained_layout=True,
+    )
+    grid = figure.add_gridspec(len(row_names), len(columns))
+    uid_prefixes = _shortest_unique_uid_prefixes(
+        [column.acquisition.uid for column in columns]
+    )
+    row_limits = [
+        _debug_panel_limits(
+            [
+                column.stages[row_index]
+                for column in columns
+                if column.stages is not None
+            ]
+        )
+        for row_index in range(len(row_names))
+    ]
+
+    for row_index, row_name in enumerate(row_names):
+        for column_index, column in enumerate(columns):
+            _render_energy_alignment_debug_panel(
+                figure,
+                grid[row_index, column_index],
+                stage=(
+                    column.stages[row_index]
+                    if column.stages is not None
+                    else None
+                ),
+                pixel_size_um=pixel_size_um,
+                row_label=row_name if column_index == 0 else "",
+                column_label=(
+                    _debug_column_label(
+                        column,
+                        uid_prefixes[column.acquisition.uid],
+                    )
+                    if row_index == 0
+                    else ""
+                ),
+                final_stage=row_index == len(row_names) - 1,
+                limits=row_limits[row_index],
+                error=column.error,
+                pyplot=pyplot,
+            )
+
+    figure.suptitle(
+        _debug_figure_title(
+            "per-energy",
+            acquisitions,
+            profile=profile,
+            pixel_size_um=pixel_size_um,
+        )
+    )
+    return figure
+
+
+def _debug_suggestion_summary(suggestion: Mapping[str, Any]) -> str:
+    if not suggestion:
+        return "suggestion unnamed"
+    values = []
+    if "_id" in suggestion:
+        values.append(f"_id={_format_debug_value(suggestion['_id'])}")
+    values.extend(
+        f"{name}={_format_debug_value(value)}"
+        for name, value in suggestion.items()
+        if name != "_id"
+    )
+    return "suggestion " + ", ".join(values)
+
+
+def _render_scan_energy_debug(
+    acquisitions: Sequence[_EnergyAlignmentDebugAcquisition],
+    *,
+    profile: EnergyAlignmentProfile,
+    pixel_size_um: tuple[float, float],
+    pyplot: Any,
+) -> Figure:
+    pages = tuple(
+        (acquisition, suggestion_index)
+        for acquisition in acquisitions
+        for suggestion_index in range(len(acquisition.suggestions))
+    )
+    row_names = _configured_image_stage_names(profile.evaluation)
+    uid_prefixes = _shortest_unique_uid_prefixes(
+        [acquisition.uid for acquisition in acquisitions]
+    )
+    figure = pyplot.figure(constrained_layout=True)
+    page_index = 0
+    loaded_uid: str | None = None
+    loaded_frames: np.ndarray | None = None
+
+    def render_page() -> None:
+        nonlocal loaded_frames, loaded_uid
+        acquisition, suggestion_index = pages[page_index]
+        figure.clear()
+        if loaded_uid != acquisition.uid:
+            loaded_frames = None
+            loaded_uid = None
+            loaded_frames = _read_energy_alignment_debug_frames(acquisition)
+            loaded_uid = acquisition.uid
+        assert loaded_frames is not None
+
+        first_event = suggestion_index * acquisition.frames_per_suggestion
+        last_event = first_event + acquisition.frames_per_suggestion
+        columns = [
+            _process_energy_alignment_debug_frame(
+                acquisition,
+                loaded_frames[event_index],
+                suggestion_index=suggestion_index,
+                event_index=event_index,
+                parameters=profile.evaluation,
+            )
+            for event_index in range(first_event, last_event)
+        ]
+        column_count = len(columns) + 1
+        figure.set_size_inches(
+            max(7.0, 3.2 * column_count),
+            max(5.0, 2.6 * len(row_names)),
+            forward=True,
+        )
+        grid = figure.add_gridspec(len(row_names), column_count)
+        row_limits = [
+            _debug_panel_limits(
+                [
+                    column.stages[row_index]
+                    for column in columns
+                    if column.stages is not None
+                ]
+            )
+            for row_index in range(len(row_names))
+        ]
+
+        for row_index, row_name in enumerate(row_names):
+            for column_index, column in enumerate(columns):
+                _render_energy_alignment_debug_panel(
+                    figure,
+                    grid[row_index, column_index],
+                    stage=(
+                        column.stages[row_index]
+                        if column.stages is not None
+                        else None
+                    ),
+                    pixel_size_um=pixel_size_um,
+                    row_label=row_name if column_index == 0 else "",
+                    column_label=(
+                        _debug_column_label(
+                            column,
+                            uid_prefixes[acquisition.uid],
+                        )
+                        if row_index == 0
+                        else ""
+                    ),
+                    final_stage=row_index == len(row_names) - 1,
+                    limits=row_limits[row_index],
+                    error=column.error,
+                    pyplot=pyplot,
+                )
+
+            overlay = tuple(
+                (
+                    f"{acquisition.energy_field}="
+                    f"{acquisition.energies[column.event_index]:.6g}",
+                    column.stages[row_index],
+                )
+                for column in columns
+                if column.stages is not None
+            )
+            overlay_error = None
+            if not overlay:
+                overlay_error = next(
+                    (
+                        column.error
+                        for column in columns
+                        if column.error is not None
+                    ),
+                    f"UID {acquisition.uid!r}: no processable images",
+                )
+            _render_energy_alignment_debug_panel(
+                figure,
+                grid[row_index, -1],
+                stage=None,
+                overlay=overlay,
+                error=overlay_error,
+                pixel_size_um=pixel_size_um,
+                column_label=(
+                    "all energies\n"
+                    f"UID={uid_prefixes[acquisition.uid]}\n"
+                    + _debug_suggestion_summary(
+                        acquisition.suggestions[suggestion_index]
+                    )
+                    if row_index == 0
+                    else ""
+                ),
+                pyplot=pyplot,
+            )
+
+        figure.suptitle(
+            _debug_figure_title(
+                "scan-energy",
+                (acquisition,),
+                profile=profile,
+                pixel_size_um=pixel_size_um,
+            )
+            + f"\npage {page_index + 1}/{len(pages)} | UID={acquisition.uid} | "
+            + _debug_suggestion_summary(acquisition.suggestions[suggestion_index])
+            + " | Left/Right: change page"
+        )
+
+    def on_key(event: Any) -> None:
+        nonlocal page_index
+        if event.key == "right":
+            page_index = (page_index + 1) % len(pages)
+        elif event.key == "left":
+            page_index = (page_index - 1) % len(pages)
+        else:
+            return
+        render_page()
+        figure.canvas.draw_idle()
+
+    render_page()
+    figure.canvas.mpl_connect("key_press_event", on_key)
+    return figure
+
+
+# --------- Dash live plotting callback ---------
 
 
 class SurrogateModelDashCallback(CallbackBase):

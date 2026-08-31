@@ -3,9 +3,11 @@ import pickle
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from blop import Objective, RangeDOF
+from blop.ax import Objective, RangeDOF
 from bluesky import RunEngine
 from bluesky.plan_stubs import close_run, mv, null, open_run
+from matplotlib import pyplot as plt
+from matplotlib.backend_bases import KeyEvent
 import numpy as np
 from ophyd.sim import SynAxis, SynSignal
 import pytest
@@ -20,6 +22,8 @@ from BMM.optimization import (
     SurrogateModelDashCallback,
     _optimization_metadata,
     _full_width_half_maximum,
+    _compute_processed_image_stats,
+    _image_processing_stages,
     _preprocess_image,
     _write_energy_map,
     compute_image_stats,
@@ -29,6 +33,7 @@ from BMM.optimization import (
     make_energy_scan_acquisition_plan,
     optimization_metadata_wrapper,
     search_for_optimal_positions,
+    show_energy_alignment_debug,
 )
 
 
@@ -136,7 +141,7 @@ def test_full_width_half_maximum_interpolates_crossings():
             _full_width_half_maximum(invalid_profile, coordinates, axis="x")
 
 
-def test_compute_image_stats_preprocesses_in_native_coordinates():
+def test_image_processing_stages_match_evaluation_pipeline():
     parameters = BeamEvaluationConfig(
         image_field="image",
         intensity_field="i0",
@@ -169,12 +174,29 @@ def test_compute_image_stats_preprocesses_in_native_coordinates():
             getattr(stats, metric), abs=0.25
         )
 
-    processed, x_coordinates, y_coordinates = _preprocess_image(image, parameters)
-    assert processed.shape == (68, 84)
-    assert np.diff(x_coordinates) == pytest.approx(0.25)
-    assert np.diff(y_coordinates) == pytest.approx(0.25)
-    assert x_coordinates.mean() == pytest.approx(18)
-    assert y_coordinates.mean() == pytest.approx(12)
+    stages = _image_processing_stages(image, parameters)
+    processed = _preprocess_image(image, parameters)
+    assert [stage.name for stage in stages] == [
+        "grayscale",
+        "crop",
+        "Gaussian σ=2.0",
+        "Otsu threshold",
+        "resize ×4",
+    ]
+    assert stages[-2].threshold is not None
+    assert np.array_equal(processed.image, stages[-1].image)
+    assert np.array_equal(processed.x_coordinates, stages[-1].x_coordinates)
+    assert np.array_equal(processed.y_coordinates, stages[-1].y_coordinates)
+    assert _compute_processed_image_stats(
+        processed.image,
+        processed.x_coordinates,
+        processed.y_coordinates,
+    ) == stats
+    assert processed.image.shape == (68, 84)
+    assert np.diff(processed.x_coordinates) == pytest.approx(0.25)
+    assert np.diff(processed.y_coordinates) == pytest.approx(0.25)
+    assert processed.x_coordinates.mean() == pytest.approx(18)
+    assert processed.y_coordinates.mean() == pytest.approx(12)
 
 
 def test_preprocess_image_allows_each_step_to_be_disabled():
@@ -189,14 +211,17 @@ def test_preprocess_image_allows_each_step_to_be_disabled():
         upscale_factor=None,
     )
 
-    processed, x_coordinates, y_coordinates = _preprocess_image(image, parameters)
+    stages = _image_processing_stages(image, parameters)
+    processed = _preprocess_image(image, parameters)
     stats = compute_image_stats(image, parameters)
 
-    assert processed.shape == image.shape
-    assert np.array_equal(x_coordinates, np.arange(image.shape[1]))
-    assert np.array_equal(y_coordinates, np.arange(image.shape[0]))
-    assert np.count_nonzero(processed) == 1
-    assert processed[3, 4] == 10
+    assert [stage.name for stage in stages] == ["grayscale", "Otsu threshold"]
+    assert processed.name == "Otsu threshold"
+    assert processed.image.shape == image.shape
+    assert np.array_equal(processed.x_coordinates, np.arange(image.shape[1]))
+    assert np.array_equal(processed.y_coordinates, np.arange(image.shape[0]))
+    assert np.count_nonzero(processed.image) == 1
+    assert processed.image[3, 4] == 10
     assert stats.centroid_x == 4.0
     assert stats.centroid_y == 3.0
     assert stats.fwhm_x == 1.0
@@ -533,6 +558,435 @@ def test_compute_stats_rejects_non_scalar_ion_reading(make_profile_and_resources
 
     with pytest.raises(ValueError, match="one finite scalar"):
         compute_stats("acquired", profile=profile, resources=resources)
+
+def test_energy_alignment_debug_expands_outer_run_and_renders_per_energy_grid(
+    make_profile_and_resources,
+):
+    plt.switch_backend("Agg")
+    first_uid = "aaaaaaaa111111111111111111111111"
+    second_uid = "aaaaaaaa222222222222222222222222"
+    first_images = np.stack(
+        (gaussian_image(center_x=17), 2 * gaussian_image(center_x=19))
+    )
+    first = run_with_fields(
+        metadata={
+            "start": {
+                "uid": first_uid,
+                "scan_id": 41,
+                "blop_suggestions": [
+                    {"_id": "first-a", "motor": -0.2},
+                    {"_id": "first-b", "motor": 0.3},
+                ],
+            }
+        },
+        image=first_images,
+        i0=np.array([100.0, 200.0]),
+        dcm_energy=np.array([7112.0, 7113.0]),
+    )
+    second = run_with_fields(
+        metadata={
+            "start": {
+                "uid": second_uid,
+                "scan_id": 42,
+                "blop_suggestions": [{"_id": "second-a", "motor": 0.1}],
+            }
+        },
+        image=gaussian_image(center_y=13),
+        i0=300.0,
+        dcm_energy=7114.0,
+    )
+    outer = run_with_fields(
+        metadata={
+            "start": {
+                "uid": "outer-optimization-full-uid",
+                "BMM_agent": {
+                    "requested_energy": "Fe",
+                    "reference_scan_uid": "reference-full-uid",
+                },
+                "Beamline": {"energy": 7112.0},
+            }
+        },
+        acquisition_uid=np.array([first_uid, second_uid, first_uid]),
+    )
+    profile, resources = make_profile_and_resources(
+        catalog={first_uid: first, second_uid: second, "outer": outer}
+    )
+
+    figure = show_energy_alignment_debug(
+        "outer",
+        pixel_size_um=(2.0, 3.0),
+        profile=profile,
+        resources=resources,
+    )
+    try:
+        figure.canvas.draw()
+        row_names = [
+            stage.name
+            for stage in _image_processing_stages(
+                first_images[0], profile.evaluation
+            )
+        ]
+        image_axes = [
+            axis
+            for axis in figure.axes
+            if axis.get_gid() == "energy-alignment-image"
+        ]
+        x_axes = [
+            axis
+            for axis in figure.axes
+            if axis.get_gid() == "energy-alignment-x-marginal"
+        ]
+        y_axes = [
+            axis
+            for axis in figure.axes
+            if axis.get_gid() == "energy-alignment-y-marginal"
+        ]
+        assert (
+            len(image_axes)
+            == len(x_axes)
+            == len(y_axes)
+            == len(row_names) * 3
+        )
+        assert [
+            image_axes[index * 3].get_ylabel().splitlines()[0]
+            for index in range(len(row_names))
+        ] == row_names
+
+        displayed = np.asarray(image_axes[0].images[0].get_array())
+        assert x_axes[0].lines[0].get_ydata() == pytest.approx(
+            displayed.sum(axis=0)
+        )
+        assert y_axes[0].lines[0].get_xdata() == pytest.approx(
+            displayed.sum(axis=1)
+        )
+        assert x_axes[0].lines[0].get_xdata() == pytest.approx(
+            np.arange(first_images.shape[2]) * 2.0
+        )
+        assert y_axes[0].lines[0].get_ydata() == pytest.approx(
+            np.arange(first_images.shape[1]) * 3.0
+        )
+        assert len({axis.images[0].get_clim() for axis in image_axes[:3]}) == 1
+
+        final_text = "\n".join(
+            text.get_text() for text in image_axes[-3].texts
+        )
+        stats = compute_image_stats(first_images[0], profile.evaluation)
+        assert f"{stats.fwhm_x * 2.0:.3g} µm" in final_text
+        assert f"{stats.fwhm_y * 3.0:.3g} µm" in final_text
+        assert "centroid x" in final_text and "px" in final_text
+        assert any(
+            "threshold =" in text.get_text()
+            for axis in image_axes
+            for text in axis.texts
+        )
+
+        column_context = "\n".join(axis.get_title() for axis in x_axes)
+        assert "scan_id=41" in column_context
+        assert "requested_energy=Fe" in column_context
+        assert "Beamline.energy=7112" in column_context
+        assert "UID=aaaaaaaa1" in column_context
+        assert "UID=aaaaaaaa2" in column_context
+        assert "suggestion _id=first-a" in column_context
+        assert "motor=-0.2" in column_context
+        assert "dcm_energy=7114" in column_context
+        assert "i0=300" in column_context
+
+        title = figure._suptitle.get_text()
+        assert "per-energy" in title and f"profile={profile.name}" in title
+        assert first_uid in title and second_uid in title
+        assert "reference-full-uid" in title
+        assert "x=2 µm/px, y=3 µm/px" in title
+        assert outer["primary"]["data"]["acquisition_uid"].read_count == 1
+        assert first["primary"]["data"]["image"].read_count == 1
+        assert second["primary"]["data"]["image"].read_count == 1
+    finally:
+        plt.close(figure)
+
+
+def test_energy_alignment_debug_renders_scan_overlay_and_navigates_pages(
+    make_profile_and_resources,
+):
+    plt.switch_backend("Agg")
+    first_uid = "scan-aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    second_uid = "scan-bbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+    def scan_run(uid, shift):
+        return run_with_fields(
+            metadata={
+                "start": {
+                    "uid": uid,
+                    "scan_id": 50 + shift,
+                    "blop_suggestions": [
+                        {"_id": f"{uid}-a", "motor": -0.2},
+                        {"_id": f"{uid}-b", "motor": 0.3},
+                    ],
+                    "BMM_agent": {"reference_scan_uid": "reference-full-uid"},
+                }
+            },
+            image=np.stack(
+                [
+                    gaussian_image(center_x=16 + shift + index)
+                    for index in range(6)
+                ]
+            ),
+            i0=np.arange(6, dtype=float) + 10,
+            recorded_energy=np.array([7000.0, 7100.0, 7200.0] * 2),
+        )
+
+    first = scan_run(first_uid, 0)
+    second = scan_run(second_uid, 1)
+    profile, resources = make_profile_and_resources(
+        catalog={first_uid: first, second_uid: second}
+    )
+
+    figure = show_energy_alignment_debug(
+        [first_uid, second_uid],
+        pixel_size_um=(2.0, 3.0),
+        energy_field="recorded_energy",
+        profile=profile,
+        resources=resources,
+    )
+    try:
+        figure.canvas.draw()
+        assert first["primary"]["data"]["image"].read_count == 1
+        assert second["primary"]["data"]["image"].read_count == 0
+
+        image_axes = [
+            axis
+            for axis in figure.axes
+            if axis.get_gid() == "energy-alignment-image"
+        ]
+        x_axes = [
+            axis
+            for axis in figure.axes
+            if axis.get_gid() == "energy-alignment-x-marginal"
+        ]
+        y_axes = [
+            axis
+            for axis in figure.axes
+            if axis.get_gid() == "energy-alignment-y-marginal"
+        ]
+        row_count = len(_image_processing_stages(gaussian_image(), profile.evaluation))
+        assert len(image_axes) == len(x_axes) == len(y_axes) == row_count * 4
+
+        overlay_index = next(
+            index
+            for index, axis in enumerate(x_axes)
+            if axis.get_title().startswith("all energies")
+        )
+        overlay_image = image_axes[overlay_index]
+        overlay_x = x_axes[overlay_index]
+        overlay_y = y_axes[overlay_index]
+        assert len(overlay_image.collections) == 3
+        assert all(
+            tuple(contours.levels) == (0.25, 0.5, 0.75)
+            for contours in overlay_image.collections
+        )
+        assert len(overlay_x.lines) == len(overlay_y.lines) == 3
+        assert all(np.max(line.get_ydata()) == 1.0 for line in overlay_x.lines)
+        assert all(np.max(line.get_xdata()) == 1.0 for line in overlay_y.lines)
+        assert overlay_image.get_legend() is not None
+        assert all(axis.images for axis in image_axes[:3])
+        assert max(np.max(axis.images[0].get_array()) for axis in image_axes[:3]) > 1
+        ordinary_titles = "\n".join(axis.get_title() for axis in x_axes)
+        assert "recorded_energy=7000" in ordinary_titles
+        assert "recorded_energy=7200" in ordinary_titles
+        assert "i0=10" in ordinary_titles
+
+        visited = [figure._suptitle.get_text()]
+        for _ in range(4):
+            figure.canvas.callbacks.process(
+                "key_press_event",
+                KeyEvent("key_press_event", figure.canvas, key="right"),
+            )
+            figure.canvas.draw()
+            visited.append(figure._suptitle.get_text())
+        assert any("page 1/4" in title and first_uid in title for title in visited)
+        assert any("page 2/4" in title and first_uid in title for title in visited)
+        assert any("page 3/4" in title and second_uid in title for title in visited)
+        assert any("page 4/4" in title and second_uid in title for title in visited)
+        assert "page 1/4" in visited[-1]
+        assert first["primary"]["data"]["image"].read_count == 2
+        assert second["primary"]["data"]["image"].read_count == 1
+
+        figure.canvas.callbacks.process(
+            "key_press_event",
+            KeyEvent("key_press_event", figure.canvas, key="left"),
+        )
+        figure.canvas.draw()
+        assert "page 4/4" in figure._suptitle.get_text()
+        assert second["primary"]["data"]["image"].read_count == 2
+    finally:
+        plt.close(figure)
+
+
+@pytest.mark.parametrize(
+    ("case", "message"),
+    [
+        ("empty-uids", "uids"),
+        ("non-string-uid", r"uids\[1\]"),
+        ("invalid-calibration", "pixel_size_um"),
+        ("outer-without-links", "bad-outer.*acquisition_uid"),
+        ("mixed-modes", "per-uid.*scan-uid"),
+        ("energy-count", "energy-bad.*dcm_energy"),
+        ("intensity-count", "intensity-bad.*i0"),
+        ("image-count", "image-bad.*image"),
+        ("missing-scan-energy", "missing-energy.*energy_field"),
+        ("non-numeric-energy", "energy-text.*dcm_energy.*numeric"),
+        ("non-finite-energy", "energy-inf.*dcm_energy.*finite"),
+        ("non-numeric-intensity", "intensity-text.*i0.*numeric"),
+        ("non-finite-intensity", "intensity-inf.*i0.*finite"),
+    ],
+)
+def test_energy_alignment_debug_rejects_invalid_inputs(
+    case,
+    message,
+    make_profile_and_resources,
+):
+    image = gaussian_image()
+    pixel_size_um = (2.0, 3.0)
+    uids = "direct"
+    catalog = {
+        "direct": run_with_fields(
+            metadata={"start": {"uid": "direct"}},
+            image=image,
+            i0=1.0,
+            dcm_energy=7000.0,
+        )
+    }
+
+    if case == "empty-uids":
+        uids = []
+    elif case == "non-string-uid":
+        uids = ["direct", 3]
+    elif case == "invalid-calibration":
+        pixel_size_um = (0.0, 3.0)
+    elif case == "outer-without-links":
+        uids = "bad-outer"
+        catalog = {
+            "bad-outer": run_with_fields(
+                metadata={"start": {"uid": "bad-outer"}},
+                unrelated=np.array([1.0]),
+            )
+        }
+    elif case == "mixed-modes":
+        uids = ["per", "scan"]
+        catalog = {
+            "per": run_with_fields(
+                metadata={
+                    "start": {
+                        "uid": "per-uid",
+                        "blop_suggestions": [{"_id": "per"}],
+                    }
+                },
+                image=image,
+                i0=1.0,
+                dcm_energy=7000.0,
+            ),
+            "scan": run_with_fields(
+                metadata={
+                    "start": {
+                        "uid": "scan-uid",
+                        "blop_suggestions": [{"_id": "scan"}],
+                    }
+                },
+                image=np.stack((image, image)),
+                i0=np.array([1.0, 2.0]),
+                dcm_energy=np.array([7000.0, 7100.0]),
+            ),
+        }
+    elif case == "energy-count":
+        uids = "energy-bad"
+        catalog = {
+            "energy-bad": run_with_fields(
+                metadata={
+                    "start": {
+                        "uid": "energy-bad",
+                        "blop_suggestions": [{"_id": "a"}, {"_id": "b"}],
+                    }
+                },
+                image=np.stack((image, image)),
+                i0=np.ones(3),
+                dcm_energy=np.arange(3, dtype=float),
+            )
+        }
+    elif case == "intensity-count":
+        uids = "intensity-bad"
+        catalog = {
+            "intensity-bad": run_with_fields(
+                metadata={
+                    "start": {
+                        "uid": "intensity-bad",
+                        "blop_suggestions": [{"_id": "a"}, {"_id": "b"}],
+                    }
+                },
+                image=np.stack((image, image)),
+                i0=np.ones(1),
+                dcm_energy=np.arange(2, dtype=float),
+            )
+        }
+    elif case == "image-count":
+        uids = "image-bad"
+        catalog = {
+            "image-bad": run_with_fields(
+                metadata={
+                    "start": {
+                        "uid": "image-bad",
+                        "blop_suggestions": [{"_id": "a"}, {"_id": "b"}],
+                    }
+                },
+                image=image,
+                i0=np.ones(2),
+                dcm_energy=np.arange(2, dtype=float),
+            )
+        }
+    elif case == "missing-scan-energy":
+        uids = "missing-energy"
+        catalog = {
+            "missing-energy": run_with_fields(
+                metadata={
+                    "start": {
+                        "uid": "missing-energy",
+                        "blop_suggestions": [{"_id": "only"}],
+                    }
+                },
+                image=np.stack((image, image)),
+                i0=1.0,
+            )
+        }
+    elif case in {
+        "non-numeric-energy",
+        "non-finite-energy",
+        "non-numeric-intensity",
+        "non-finite-intensity",
+    }:
+        uid, intensity, energy = {
+            "non-numeric-energy": ("energy-text", 1.0, "not-an-energy"),
+            "non-finite-energy": ("energy-inf", 1.0, np.inf),
+            "non-numeric-intensity": ("intensity-text", "not-an-intensity", 7000.0),
+            "non-finite-intensity": ("intensity-inf", np.inf, 7000.0),
+        }[case]
+        uids = uid
+        catalog = {
+            uid: run_with_fields(
+                metadata={"start": {"uid": uid}},
+                image=image,
+                i0=intensity,
+                dcm_energy=energy,
+            )
+        }
+
+    profile, resources = make_profile_and_resources(catalog=catalog)
+    try:
+        with pytest.raises(ValueError, match=message):
+            show_energy_alignment_debug(
+                uids,
+                pixel_size_um=pixel_size_um,
+                profile=profile,
+                resources=resources,
+            )
+    finally:
+        plt.close("all")
 
 
 def test_agent_factory_returns_fresh_agents(make_profile_and_resources):
