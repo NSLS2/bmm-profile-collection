@@ -832,11 +832,12 @@ def _write_energy_map(
 def search_for_optimal_positions(
     energies: list[str],
     *,
+    reference_scan_uid: str | None = None,
     energy_map_filename: str | Path | None = None,
     profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
 ) -> MsgGenerator[dict[str, Any]]:
-    """Optimize motor positions at each energy using a named or custom profile."""
+    """Optimize each energy against a supplied or newly acquired target run."""
     resolved_profile = get_energy_alignment_profile(profile)
     resolved_resources = _resolve_resources(resources)
     _validate_resources(resolved_resources, resolved_profile)
@@ -847,17 +848,19 @@ def search_for_optimal_positions(
         if not energies:
             return energy_map
 
-        target_readables: list[Readable] = [
-            resolved_resources.sensors[name] for name in resolved_profile.sensors
-        ]
-        target_readables.extend(
-            cast(Readable, dof.actuator)
-            for dof in _bind_dofs(resolved_resources, resolved_profile)
-        )
-        reference_scan_uid = yield from acquire_target_position(target_readables)
+        target_uid = reference_scan_uid
+        if target_uid is None:
+            target_readables: list[Readable] = [
+                resolved_resources.sensors[name] for name in resolved_profile.sensors
+            ]
+            target_readables.extend(
+                cast(Readable, dof.actuator)
+                for dof in _bind_dofs(resolved_resources, resolved_profile)
+            )
+            target_uid = yield from acquire_target_position(target_readables)
         evaluation_function = ImageEvaluation(
             resolved_resources.catalog,
-            reference_scan_uid=reference_scan_uid,
+            reference_scan_uid=target_uid,
             parameters=resolved_profile.evaluation,
         )
         resolved_resources.prompt_state.prompt = False
@@ -872,7 +875,7 @@ def search_for_optimal_positions(
             )
 
             agent = make_energy_alignment_agent(
-                reference_scan_uid,
+                target_uid,
                 profile=resolved_profile,
                 resources=resolved_resources,
                 evaluation_function=evaluation_function,
@@ -880,7 +883,7 @@ def search_for_optimal_positions(
             optimize_plan = optimization_metadata_wrapper(
                 agent.optimize(resolved_profile.optimization.iterations),
                 energy,
-                reference_scan_uid,
+                target_uid,
                 profile=resolved_profile,
                 resources=resolved_resources,
             )

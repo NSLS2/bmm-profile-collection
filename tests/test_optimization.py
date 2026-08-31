@@ -959,6 +959,68 @@ def test_search_captures_and_reuses_target_reference(
     assert reference_image.read_count == 1
 
 
+def test_search_uses_supplied_target_reference(
+    make_profile_and_resources,
+    monkeypatch,
+):
+    class FakeAgent:
+        def optimize(self, iterations):
+            yield from null()
+
+        def get_best_points(self):
+            return []
+
+    def unexpected_target_acquisition(readables):
+        raise AssertionError("search recaptured a supplied target")
+        yield from null()
+
+    profile, resources = make_profile_and_resources()
+    reference_image = resources.catalog["reference"]["primary"]["data"]["image"]
+    evaluation_functions = []
+    reference_scan_uids = []
+    metadata_references = []
+    fake_agent = FakeAgent()
+
+    def make_agent(reference_scan_uid, *, evaluation_function=None, **kwargs):
+        reference_scan_uids.append(reference_scan_uid)
+        evaluation_functions.append(evaluation_function)
+        return fake_agent
+
+    def add_metadata(plan, energy, reference_scan_uid, **kwargs):
+        metadata_references.append((energy, reference_scan_uid))
+        return plan
+
+    monkeypatch.setattr(
+        optimization_module,
+        "acquire_target_position",
+        unexpected_target_acquisition,
+    )
+    monkeypatch.setattr(
+        optimization_module,
+        "make_energy_alignment_agent",
+        make_agent,
+    )
+    monkeypatch.setattr(
+        optimization_module,
+        "optimization_metadata_wrapper",
+        add_metadata,
+    )
+    RunEngine({})(
+        search_for_optimal_positions(
+            ["Fe", "Cu"],
+            reference_scan_uid="reference",
+            profile=profile,
+            resources=resources,
+        )
+    )
+
+    assert reference_scan_uids == ["reference", "reference"]
+    assert metadata_references == [("Fe", "reference"), ("Cu", "reference")]
+    assert len(evaluation_functions) == 2
+    assert evaluation_functions[0] is evaluation_functions[1]
+    assert reference_image.read_count == 1
+
+
 def test_search_restores_prompt_after_failure(
     make_profile_and_resources,
     monkeypatch,
