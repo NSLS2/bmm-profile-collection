@@ -774,6 +774,7 @@ def make_energy_alignment_agent(
     resources: EnergyAlignmentResources | None = None,
     evaluation_function: EvaluationFunction | None = None,
     acquisition_plan: AcquisitionPlan | None = None,
+    subscribe_to_dash: bool = True,
 ) -> Agent:
     """Construct a fresh Blop agent from a reusable alignment profile."""
     resolved_profile = get_energy_alignment_profile(profile)
@@ -798,6 +799,10 @@ def make_energy_alignment_agent(
         initialization_budget=resolved_profile.optimization.initialization_budget,
         initialize_with_center=resolved_profile.optimization.initialize_with_center,
     )
+
+    if subscribe_to_dash:
+        subscribe_dash_to_agent(agent)
+
     return agent
 
 
@@ -884,6 +889,17 @@ def search_for_optimal_positions(
 
 
 # --------- Dash live plotting callback ---------
+
+def subscribe_dash_to_agent(agent):
+    try:
+        viz = SurrogateModelDashCallback(agent, resolution=41)
+        agent.subscribe(viz)
+
+        # run alongside the RunEngine
+        threading.Thread(target=viz.serve, kwargs={"port": 8050}, daemon=True).start()
+    except Exception as e:
+        print(f"Failed to register agent to dash callback with error {e}")
+
 
 def _to_list(value: Any) -> list:
     """Coerce a scalar, numpy array, or iterable into a plain list."""
