@@ -55,10 +55,10 @@ class EnergyAlignmentResources:
 class BeamEvaluationConfig:
     image_field: str
     intensity_field: str
-    x_crop: tuple[int, int]
+    x_crop: tuple[int, int] | None = None
     y_crop: tuple[int, int] | None = None
-    blur_sigma: float = 2.0
-    upscale_factor: int = 4
+    blur_sigma: float | None = 2.0
+    upscale_factor: int | None = 4
 
 
 @dataclass(frozen=True)
@@ -263,7 +263,7 @@ def optimization_metadata_wrapper(
 
 def _validate_evaluation_config(parameters: BeamEvaluationConfig) -> None:
     for axis, bounds in (("x", parameters.x_crop), ("y", parameters.y_crop)):
-        if axis == "y" and bounds is None:
+        if bounds is None:
             continue
         if (
             not isinstance(bounds, tuple)
@@ -277,17 +277,20 @@ def _validate_evaluation_config(parameters: BeamEvaluationConfig) -> None:
         ):
             raise ValueError(f"Invalid {axis} crop {bounds!r}")
 
-    if (
-        isinstance(parameters.blur_sigma, bool)
-        or not isinstance(parameters.blur_sigma, Real)
-        or not np.isfinite(parameters.blur_sigma)
-        or parameters.blur_sigma <= 0
+    blur_sigma = parameters.blur_sigma
+    if blur_sigma is not None and (
+        isinstance(blur_sigma, bool)
+        or not isinstance(blur_sigma, Real)
+        or not np.isfinite(blur_sigma)
+        or blur_sigma <= 0
     ):
         raise ValueError("blur_sigma must be finite and positive")
-    if (
-        isinstance(parameters.upscale_factor, bool)
-        or not isinstance(parameters.upscale_factor, Integral)
-        or parameters.upscale_factor < 2
+
+    upscale_factor = parameters.upscale_factor
+    if upscale_factor is not None and (
+        isinstance(upscale_factor, bool)
+        or not isinstance(upscale_factor, Integral)
+        or upscale_factor < 2
     ):
         raise ValueError("upscale_factor must be a non-boolean integer of at least 2")
 
@@ -414,7 +417,7 @@ def _preprocess_image(
         raise ValueError("Image contains non-finite or negative pixels")
 
     height, width = gray.shape
-    x_start, x_stop = parameters.x_crop
+    x_start, x_stop = parameters.x_crop or (0, width)
     if x_stop > width:
         raise ValueError(
             f"Invalid x crop {parameters.x_crop!r} for image width {width}"
@@ -426,28 +429,35 @@ def _preprocess_image(
         )
 
     cropped = gray[y_start:y_stop, x_start:x_stop]
-    blurred = gaussian(
-        cropped,
-        sigma=parameters.blur_sigma,
-        mode="reflect",
-        preserve_range=True,
-        channel_axis=None,
-    )
-    threshold = threshold_otsu(blurred)
-    thresholded = np.where(blurred > threshold, blurred, 0.0)
+    if parameters.blur_sigma is None:
+        filtered = cropped
+    else:
+        filtered = gaussian(
+            cropped,
+            sigma=parameters.blur_sigma,
+            mode="reflect",
+            preserve_range=True,
+            channel_axis=None,
+        )
+    threshold = threshold_otsu(filtered)
+    thresholded = np.where(filtered > threshold, filtered, 0.0)
     if not np.any(thresholded > 0):
         raise ValueError("Image has no positive signal after Otsu thresholding")
 
-    scale = int(parameters.upscale_factor)
-    processed = resize(
-        thresholded,
-        (cropped.shape[0] * scale, cropped.shape[1] * scale),
-        order=3,
-        mode="reflect",
-        clip=True,
-        preserve_range=True,
-        anti_aliasing=False,
-    )
+    if parameters.upscale_factor is None:
+        scale = 1
+        processed = thresholded
+    else:
+        scale = int(parameters.upscale_factor)
+        processed = resize(
+            thresholded,
+            (cropped.shape[0] * scale, cropped.shape[1] * scale),
+            order=3,
+            mode="reflect",
+            clip=True,
+            preserve_range=True,
+            anti_aliasing=False,
+        )
     x_coordinates = x_start + (np.arange(processed.shape[1]) + 0.5) / scale - 0.5
     y_coordinates = y_start + (np.arange(processed.shape[0]) + 0.5) / scale - 0.5
     return processed, x_coordinates, y_coordinates

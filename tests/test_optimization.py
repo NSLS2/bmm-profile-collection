@@ -175,6 +175,32 @@ def test_compute_image_stats_preprocesses_in_native_coordinates():
     assert y_coordinates.mean() == pytest.approx(12)
 
 
+def test_preprocess_image_allows_each_step_to_be_disabled():
+    image = np.zeros((7, 9))
+    image[3, 4] = 10
+    parameters = BeamEvaluationConfig(
+        image_field="image",
+        intensity_field="i0",
+        x_crop=None,
+        y_crop=None,
+        blur_sigma=None,
+        upscale_factor=None,
+    )
+
+    processed, x_coordinates, y_coordinates = _preprocess_image(image, parameters)
+    stats = compute_image_stats(image, parameters)
+
+    assert processed.shape == image.shape
+    assert np.array_equal(x_coordinates, np.arange(image.shape[1]))
+    assert np.array_equal(y_coordinates, np.arange(image.shape[0]))
+    assert np.count_nonzero(processed) == 1
+    assert processed[3, 4] == 10
+    assert stats.centroid_x == 4.0
+    assert stats.centroid_y == 3.0
+    assert stats.fwhm_x == 1.0
+    assert stats.fwhm_y == 1.0
+
+
 @pytest.mark.parametrize(
     ("image", "parameters", "message"),
     [
