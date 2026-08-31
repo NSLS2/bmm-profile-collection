@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from numbers import Integral, Real
+from functools import partial
 from pathlib import Path
 import pickle
 import threading
@@ -12,17 +13,23 @@ from typing import TYPE_CHECKING, Any, Protocol
 from ax.api.protocols import IMetric
 from blop import (
     Agent,
+    default_acquire,
     DOF,
     Objective,
     OutcomeConstraint,
     RangeDOF,
     ScalarizedObjective,
 )
-from blop.protocols import Actuator, EvaluationFunction, Sensor
+from blop.protocols import AcquisitionPlan, Actuator, EvaluationFunction, Sensor
 from bluesky.callbacks import CallbackBase
-from bluesky.plan_stubs import null
-from bluesky.preprocessors import finalize_wrapper, inject_md_wrapper
-from bluesky.utils import MsgGenerator
+from bluesky.plan_stubs import checkpoint, move_per_step, null, trigger_and_read
+from bluesky.preprocessors import (
+    finalize_wrapper,
+    inject_md_wrapper,
+    set_run_key_wrapper,
+)
+from bluesky.protocols import Movable, Readable
+from bluesky.utils import MsgGenerator, plan
 from event_model import Event, RunStart, RunStop
 import numpy as np
 from skimage.filters import gaussian, threshold_otsu
@@ -703,12 +710,70 @@ class ImageEvaluation:
         return outcomes
 
 
+@plan
+def scan_energy(
+    detectors: Sequence[Readable],
+    step: Mapping[Movable, Any],
+    pos_cache: dict[Movable, Any],
+    *,
+    change_edge_plan: Callable[..., MsgGenerator[None]],
+    energy_readable: Readable,
+    elements: Sequence[str],
+    energy_change: EnergyChangeConfig = EnergyChangeConfig(),
+) -> MsgGenerator[None]:
+    """Change edge, restore the suggestion, and acquire at every element."""
+    motors = tuple(step)
+    devices = [*detectors, *motors, energy_readable]
+
+    for element in elements:
+        yield from checkpoint()
+        # Keep any optional change_edge scans separate from the data run.
+        yield from set_run_key_wrapper(
+            change_edge_plan(
+                element,
+                focus=energy_change.focus,
+                no_hslits=energy_change.no_hslits,
+                mirror=energy_change.mirror,
+                tune=False,
+                preserve_dcm_roll=True,
+            ),
+            "change_edge",
+        )
+        yield from move_per_step(step, pos_cache)
+        yield from trigger_and_read(devices)
+
+
+def make_energy_scan_acquisition_plan(
+    change_edge_plan: Callable[..., MsgGenerator[None]],
+    energy_readable: Readable,
+    elements: Sequence[str],
+    *,
+    energy_change: EnergyChangeConfig = EnergyChangeConfig(),
+) -> AcquisitionPlan:
+    """Compose Blop's default acquisition with an inner element-edge scan."""
+    element_names = tuple(elements)
+    if not element_names:
+        raise ValueError("Energy scan requires at least one element")
+
+    return partial(
+        default_acquire,
+        per_step=partial(
+            scan_energy,
+            change_edge_plan=change_edge_plan,
+            energy_readable=energy_readable,
+            elements=element_names,
+            energy_change=energy_change,
+        ),
+    )
+
+
 def make_energy_alignment_agent(
     reference_scan_uid: str,
     *,
     profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
     evaluation_function: EvaluationFunction | None = None,
+    acquisition_plan: AcquisitionPlan | None = None,
 ) -> Agent:
     """Construct a fresh Blop agent from a reusable alignment profile."""
     resolved_profile = get_energy_alignment_profile(profile)
@@ -726,6 +791,7 @@ def make_energy_alignment_agent(
         dofs=_bind_dofs(resolved_resources, resolved_profile),
         objectives=resolved_profile.objectives,
         evaluation_function=evaluation_function,
+        acquisition_plan=acquisition_plan,
         outcome_constraints=resolved_profile.outcome_constraints,
     )
     agent.ax_client.configure_generation_strategy(
