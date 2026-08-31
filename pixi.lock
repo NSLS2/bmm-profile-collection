@@ -820,11 +820,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/zict-3.0.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-3.23.1-pyhcf101f3_0.conda
       - pypi: git+https://github.com/NSLS2/bmm_tools?branch=main#883e0b58fa4efbb097f8fdd6bc1ead21c7fbc4e6
-      - pypi: git+https://github.com/bluesky/blop?branch=main#b819219e806bd7c200b59c7ad9986da5ab5e636b
+      - pypi: git+https://github.com/bluesky/blop?branch=main#adaaa0fe0c023f1fd29d1dd9c9413e32eb069256
       - pypi: https://files.pythonhosted.org/packages/67/d8/8af47ecca80c365d5ffcdce6fae78ec71921052189c1486ba9dbac7a36f4/pvxslibs-1.3.2-cp312-cp312-manylinux2014_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/91/4c/e0ce1ef95d4000ebc1c11801f9b944fa5910ecc15b5e351865763d8657f8/graphviz-0.21-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/c7/19/1d98cda56787fc54d68aca5c7a149b0238beaaf0a965515994e91f800258/ax_platform-1.2.4-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/de/1f/77fa3081e4f66ca3576c896ae5d31c3002ac6607f9747d2e3aa49227e464/markdown-3.10.2-py3-none-any.whl
   terminal:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -1611,11 +1608,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/zict-3.0.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-3.23.1-pyhcf101f3_0.conda
       - pypi: git+https://github.com/NSLS2/bmm_tools?branch=main#883e0b58fa4efbb097f8fdd6bc1ead21c7fbc4e6
-      - pypi: git+https://github.com/bluesky/blop?branch=main#b819219e806bd7c200b59c7ad9986da5ab5e636b
+      - pypi: git+https://github.com/bluesky/blop?branch=main#adaaa0fe0c023f1fd29d1dd9c9413e32eb069256
       - pypi: https://files.pythonhosted.org/packages/67/d8/8af47ecca80c365d5ffcdce6fae78ec71921052189c1486ba9dbac7a36f4/pvxslibs-1.3.2-cp312-cp312-manylinux2014_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/91/4c/e0ce1ef95d4000ebc1c11801f9b944fa5910ecc15b5e351865763d8657f8/graphviz-0.21-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/c7/19/1d98cda56787fc54d68aca5c7a149b0238beaaf0a965515994e91f800258/ax_platform-1.2.4-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/de/1f/77fa3081e4f66ca3576c896ae5d31c3002ac6607f9747d2e3aa49227e464/markdown-3.10.2-py3-none-any.whl
   test:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -2403,11 +2397,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/zict-3.0.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-3.23.1-pyhcf101f3_0.conda
       - pypi: git+https://github.com/NSLS2/bmm_tools?branch=main#883e0b58fa4efbb097f8fdd6bc1ead21c7fbc4e6
-      - pypi: git+https://github.com/bluesky/blop?branch=main#b819219e806bd7c200b59c7ad9986da5ab5e636b
+      - pypi: git+https://github.com/bluesky/blop?branch=main#adaaa0fe0c023f1fd29d1dd9c9413e32eb069256
       - pypi: https://files.pythonhosted.org/packages/67/d8/8af47ecca80c365d5ffcdce6fae78ec71921052189c1486ba9dbac7a36f4/pvxslibs-1.3.2-cp312-cp312-manylinux2014_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/91/4c/e0ce1ef95d4000ebc1c11801f9b944fa5910ecc15b5e351865763d8657f8/graphviz-0.21-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/c7/19/1d98cda56787fc54d68aca5c7a149b0238beaaf0a965515994e91f800258/ax_platform-1.2.4-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/de/1f/77fa3081e4f66ca3576c896ae5d31c3002ac6607f9747d2e3aa49227e464/markdown-3.10.2-py3-none-any.whl
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
   build_number: 20
@@ -14184,33 +14175,44 @@ packages:
   name: bmm-tools
   version: 0.1.0
   requires_python: '>=3.10'
-- pypi: git+https://github.com/bluesky/blop?branch=main#b819219e806bd7c200b59c7ad9986da5ab5e636b
+- pypi: git+https://github.com/bluesky/blop?branch=main#adaaa0fe0c023f1fd29d1dd9c9413e32eb069256
   name: blop
-  version: 1.0.0b2.dev14
+  version: 1.1.1.dev1
   requires_dist:
-  - ax-platform>=1.1.0,<1.3
-  - bluesky-queueserver-api>=0.0.12
   - bluesky>=1.14.2
-  - botorch>=0.16.0
-  - gpytorch
   - networkx>=3
   - numpy
   - rich>=13
-  - scipy
-  - torch ; extra == 'cpu'
-  - torch ; extra != 'cpu'
+  - ax-platform>=1.3.0,<1.4 ; extra == 'all'
+  - bluesky-queueserver-api ; extra == 'all'
+  - botorch>=0.18.0,<0.19.0 ; extra == 'all'
+  - gpytorch ; extra == 'all'
+  - torch ; extra == 'all' and extra == 'cpu'
+  - torch ; extra == 'all' and extra != 'cpu'
+  - xopt>3.0.0 ; extra == 'all'
+  - ax-platform>=1.3.0,<1.4 ; extra == 'ax'
+  - botorch>=0.18.0,<0.19.0 ; extra == 'ax'
+  - gpytorch ; extra == 'ax'
+  - torch ; extra == 'ax' and extra == 'cpu'
+  - torch ; extra == 'ax' and extra != 'cpu'
+  - ax-platform>=1.3.0,<1.4 ; extra == 'dev'
   - bluesky-queueserver-api ; extra == 'dev'
+  - botorch>=0.18.0,<0.19.0 ; extra == 'dev'
   - coverage ; extra == 'dev'
+  - gpytorch ; extra == 'dev'
   - ipykernel ; extra == 'dev'
   - nbstripout ; extra == 'dev'
-  - pandas-stubs ; extra == 'dev'
   - pre-commit ; extra == 'dev'
   - pyright ; extra == 'dev'
   - pytest ; extra == 'dev'
   - pytest-cov ; extra == 'dev'
   - ruff ; extra == 'dev'
-  - bluesky-queueserver-api ; extra == 'qs'
-  requires_python: '>=3.10'
+  - torch ; extra == 'cpu' and extra == 'dev'
+  - torch ; extra != 'cpu' and extra == 'dev'
+  - xopt>3.0.0 ; extra == 'dev'
+  - bluesky-queueserver-api ; extra == 'queueserver'
+  - xopt>3.0.0 ; extra == 'xopt'
+  requires_python: '>=3.11'
 - pypi: https://files.pythonhosted.org/packages/67/d8/8af47ecca80c365d5ffcdce6fae78ec71921052189c1486ba9dbac7a36f4/pvxslibs-1.3.2-cp312-cp312-manylinux2014_x86_64.whl
   name: pvxslibs
   version: 1.3.2
@@ -14219,76 +14221,3 @@ packages:
   - setuptools-dso>=2.7a1
   - epicscorelibs>=7.0.7.99.1.1,<7.0.7.99.2
   requires_python: '>=2.7'
-- pypi: https://files.pythonhosted.org/packages/91/4c/e0ce1ef95d4000ebc1c11801f9b944fa5910ecc15b5e351865763d8657f8/graphviz-0.21-py3-none-any.whl
-  name: graphviz
-  version: '0.21'
-  sha256: 54f33de9f4f911d7e84e4191749cac8cc5653f815b06738c54db9a15ab8b1e42
-  requires_dist:
-  - build ; extra == 'dev'
-  - wheel ; extra == 'dev'
-  - twine ; extra == 'dev'
-  - flake8 ; extra == 'dev'
-  - flake8-pyproject ; extra == 'dev'
-  - pep8-naming ; extra == 'dev'
-  - tox>=3 ; extra == 'dev'
-  - pytest>=7,<8.1 ; extra == 'test'
-  - pytest-mock>=3 ; extra == 'test'
-  - pytest-cov ; extra == 'test'
-  - coverage ; extra == 'test'
-  - sphinx>=5,<7 ; extra == 'docs'
-  - sphinx-autodoc-typehints ; extra == 'docs'
-  - sphinx-rtd-theme>=0.2.5 ; extra == 'docs'
-  requires_python: '>=3.9'
-- pypi: https://files.pythonhosted.org/packages/c7/19/1d98cda56787fc54d68aca5c7a149b0238beaaf0a965515994e91f800258/ax_platform-1.2.4-py3-none-any.whl
-  name: ax-platform
-  version: 1.2.4
-  sha256: d96cf181098a1f570ea036875e21c534174ba0c4415ab5c5d96bd8c1dc1afc23
-  requires_dist:
-  - botorch[pymoo]>=0.17.2,<0.17.3.dev9999
-  - jinja2
-  - pandas
-  - scipy
-  - scikit-learn
-  - ipywidgets
-  - plotly>=5.12.0
-  - pyre-extensions
-  - sympy
-  - markdown
-  - graphviz
-  - beautifulsoup4 ; extra == 'dev'
-  - jinja2 ; extra == 'dev'
-  - pyfakefs ; extra == 'dev'
-  - pytest>=4.6 ; extra == 'dev'
-  - pytest-cov ; extra == 'dev'
-  - sphinx ; extra == 'dev'
-  - sphinx-autodoc-typehints ; extra == 'dev'
-  - sphinx-rtd-theme ; extra == 'dev'
-  - lxml ; extra == 'dev'
-  - mdformat-myst ; extra == 'dev'
-  - sqlalchemy==1.4.17 ; extra == 'mysql'
-  - jupyter ; extra == 'notebook'
-  - tensorboard>=2.18.0 ; extra == 'unittest-minimal'
-  - torchx>=0.2.0 ; extra == 'unittest-minimal'
-  - pyarrow ; extra == 'unittest-minimal'
-  - xgboost>=3.0.2 ; extra == 'unittest-minimal'
-  - ax-platform[dev,mysql,notebook,unittest-minimal] ; extra == 'unittest'
-  - ax-platform[unittest] ; extra == 'tutorial'
-  - matplotlib ; extra == 'tutorial'
-  - papermill ; extra == 'tutorial'
-  - mdformat ; extra == 'tutorial'
-  requires_python: '>=3.11'
-- pypi: https://files.pythonhosted.org/packages/de/1f/77fa3081e4f66ca3576c896ae5d31c3002ac6607f9747d2e3aa49227e464/markdown-3.10.2-py3-none-any.whl
-  name: markdown
-  version: 3.10.2
-  sha256: e91464b71ae3ee7afd3017d9f358ef0baf158fd9a298db92f1d4761133824c36
-  requires_dist:
-  - coverage ; extra == 'testing'
-  - pyyaml ; extra == 'testing'
-  - mkdocs>=1.6 ; extra == 'docs'
-  - mkdocs-nature>=0.6 ; extra == 'docs'
-  - mdx-gh-links>=0.2 ; extra == 'docs'
-  - mkdocstrings[python]>=0.28.3 ; extra == 'docs'
-  - mkdocs-gen-files ; extra == 'docs'
-  - mkdocs-section-index ; extra == 'docs'
-  - mkdocs-literate-nav ; extra == 'docs'
-  requires_python: '>=3.10'
