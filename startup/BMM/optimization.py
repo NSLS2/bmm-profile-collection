@@ -21,8 +21,12 @@ from blop import (
 )
 from blop.protocols import AcquisitionPlan, Actuator, EvaluationFunction, Sensor
 from bluesky.callbacks import CallbackBase
-from bluesky.plan_stubs import mv, null, one_nd_step, trigger_and_read
-from bluesky.preprocessors import finalize_wrapper, inject_md_wrapper
+from bluesky.plan_stubs import null, one_nd_step, trigger_and_read
+from bluesky.preprocessors import (
+    finalize_wrapper,
+    inject_md_wrapper,
+    set_run_key_wrapper,
+)
 from bluesky.protocols import Readable
 from bluesky.utils import MsgGenerator, plan
 from event_model import Event, RunStart, RunStop
@@ -467,24 +471,38 @@ class ImageEvaluation:
 def scan_energy(
     detectors: Sequence[Readable],
     *,
-    energy_actuator: Actuator,
-    energies: Sequence[float],
+    change_edge_plan: Callable[..., MsgGenerator[None]],
+    energy_readable: Readable,
+    elements: Sequence[str],
+    energy_change: EnergyChangeConfig = EnergyChangeConfig(),
 ) -> MsgGenerator[None]:
-    """Acquire every configured energy at the current suggested position."""
-    devices = [*detectors, energy_actuator]
-    for energy in energies:
-        yield from mv(energy_actuator, energy)
+    """Acquire each configured element edge at the current suggested position."""
+    devices = [*detectors, energy_readable]
+    for element in elements:
+        # change_edge may open tuning runs; keep them separate from the data run.
+        yield from set_run_key_wrapper(
+            change_edge_plan(
+                element,
+                focus=energy_change.focus,
+                no_hslits=energy_change.no_hslits,
+                mirror=energy_change.mirror,
+            ),
+            "change_edge",
+        )
         yield from trigger_and_read(devices)
 
 
 def make_energy_scan_acquisition_plan(
-    energy_actuator: Actuator,
-    energies: Sequence[float],
+    change_edge_plan: Callable[..., MsgGenerator[None]],
+    energy_readable: Readable,
+    elements: Sequence[str],
+    *,
+    energy_change: EnergyChangeConfig = EnergyChangeConfig(),
 ) -> AcquisitionPlan:
-    """Compose Blop's default acquisition with an inner energy scan."""
-    energy_points = tuple(energies)
-    if not energy_points:
-        raise ValueError("Energy scan requires at least one energy")
+    """Compose Blop's default acquisition with an inner element-edge scan."""
+    element_names = tuple(elements)
+    if not element_names:
+        raise ValueError("Energy scan requires at least one element")
 
     return partial(
         default_acquire,
@@ -492,8 +510,10 @@ def make_energy_scan_acquisition_plan(
             one_nd_step,
             take_reading=partial(
                 scan_energy,
-                energy_actuator=energy_actuator,
-                energies=energy_points,
+                change_edge_plan=change_edge_plan,
+                energy_readable=energy_readable,
+                elements=element_names,
+                energy_change=energy_change,
             ),
         ),
     )
