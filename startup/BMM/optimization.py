@@ -489,8 +489,8 @@ def _full_width_half_maximum(
         raise ValueError(error)
     half_maximum = peak / 2
 
-    left_below = np.flatnonzero(profile[:peak_index] < half_maximum)
-    right_below = np.flatnonzero(profile[peak_index + 1 :] < half_maximum)
+    left_below = np.flatnonzero(profile[:peak_index] <= half_maximum)
+    right_below = np.flatnonzero(profile[peak_index + 1 :] <= half_maximum)
     if left_below.size == 0 or right_below.size == 0:
         raise ValueError(error)
 
