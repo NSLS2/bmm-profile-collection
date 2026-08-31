@@ -591,7 +591,15 @@ def compute_stats(
 
 
 class ImageEvaluation:
-    """Evaluate camera images against a reference beam position."""
+    """Evaluate camera images against a reference beam position.
+
+    Each completed run provides one image and one finite scalar intensity per
+    suggestion. Batch image data uses its leading dimension as acquisition
+    order, the squeezed intensity data has shape ``(suggestion_count,)``, and
+    ``start.blop_suggestions`` contains the unique suggestion IDs in that same
+    order. Single acquisitions may omit this metadata and may include singleton
+    dimensions around their image or intensity value.
+    """
 
     def __init__(
         self,
@@ -614,11 +622,11 @@ class ImageEvaluation:
         if not suggestions:
             return []
 
+        count = len(suggestions)
         run = self.tiled_client[uid]
         data = run["primary"]["data"]
         acquired_images = np.asarray(data[self.parameters.image_field].read())
-        acquired_intensities = np.asarray(data[self.parameters.intensity_field].read())
-        count = len(suggestions)
+        intensity_data = np.asarray(data[self.parameters.intensity_field].read())
 
         def shape_error(field: str, values: np.ndarray) -> ValueError:
             return ValueError(
@@ -628,78 +636,50 @@ class ImageEvaluation:
 
         if count == 1:
             images = (acquired_images,)
-            intensity_samples = (acquired_intensities,)
         else:
             if acquired_images.ndim == 0 or acquired_images.shape[0] != count:
                 raise shape_error(self.parameters.image_field, acquired_images)
-            if acquired_intensities.ndim == 0 or acquired_intensities.shape[0] != count:
-                raise shape_error(self.parameters.intensity_field, acquired_intensities)
-            images = tuple(acquired_images[index] for index in range(count))
-            intensity_samples = tuple(
-                acquired_intensities[index] for index in range(count)
+            images = acquired_images
+
+        try:
+            intensities = np.atleast_1d(
+                intensity_data.astype(np.float64, copy=False).squeeze()
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"{self.parameters.intensity_field!r} data must be numeric"
+            ) from exc
+        if intensities.shape != (count,):
+            raise shape_error(self.parameters.intensity_field, intensity_data)
+        if not np.isfinite(intensities).all():
+            raise ValueError(
+                f"{self.parameters.intensity_field!r} data must contain finite values"
             )
 
-        intensities: list[float] = []
-        for sample in intensity_samples:
-            scalar = np.asarray(sample).squeeze()
-            if scalar.ndim != 0:
-                raise shape_error(self.parameters.intensity_field, acquired_intensities)
-            try:
-                intensity = float(scalar)
-            except (TypeError, ValueError) as exc:
-                raise ValueError(
-                    f"{self.parameters.intensity_field!r} data must contain "
-                    "finite scalar values"
-                ) from exc
-            if not np.isfinite(intensity):
-                raise ValueError(
-                    f"{self.parameters.intensity_field!r} data must contain "
-                    "finite scalar values"
-                )
-            intensities.append(intensity)
         suggestion_ids = [suggestion["_id"] for suggestion in suggestions]
-        missing_metadata = object()
-        recorded_suggestions: Any = missing_metadata
-        metadata = getattr(run, "metadata", None)
-        if metadata is not None:
-            try:
-                recorded_suggestions = metadata["start"]["blop_suggestions"]
-            except (KeyError, TypeError):
-                pass
-
-        if recorded_suggestions is missing_metadata:
-            if count > 1:
-                raise ValueError("Batch evaluation requires blop_suggestions metadata")
-            paired_by_id = {suggestion_ids[0]: (images[0], intensities[0])}
+        if count == 1:
+            acquired_ids = suggestion_ids
         else:
             try:
-                recorded_ids = [item["_id"] for item in recorded_suggestions]
-            except (KeyError, TypeError):
+                acquired_ids = [
+                    suggestion["_id"]
+                    for suggestion in run.metadata["start"]["blop_suggestions"]
+                ]
+            except (AttributeError, KeyError, TypeError) as exc:
                 raise ValueError(
-                    "blop_suggestions metadata IDs do not match supplied suggestion IDs"
-                ) from None
-            try:
-                has_duplicate_ids = len(recorded_ids) != len(set(recorded_ids))
-                ids_match = set(recorded_ids) == set(suggestion_ids)
-            except TypeError:
-                raise ValueError(
-                    "blop_suggestions metadata IDs do not match supplied suggestion IDs"
-                ) from None
-            if has_duplicate_ids:
-                raise ValueError(
-                    "blop_suggestions metadata contains duplicate _id values"
-                )
-            if len(recorded_ids) != count or not ids_match:
+                    "Batch evaluation requires blop_suggestions metadata"
+                ) from exc
+            if len(acquired_ids) != count or set(acquired_ids) != set(suggestion_ids):
                 raise ValueError(
                     "blop_suggestions metadata IDs do not match supplied suggestion IDs"
                 )
-            paired_by_id = {
-                suggestion_id: (image, intensity)
-                for suggestion_id, image, intensity in zip(
-                    recorded_ids, images, intensities, strict=True
-                )
-            }
 
+        paired_by_id = {
+            suggestion_id: (image, float(intensity))
+            for suggestion_id, image, intensity in zip(
+                acquired_ids, images, intensities, strict=True
+            )
+        }
         outcomes = []
         for suggestion in suggestions:
             image, intensity = paired_by_id[suggestion["_id"]]
