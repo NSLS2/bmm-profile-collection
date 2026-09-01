@@ -556,6 +556,63 @@ def compute_image_stats(
     )
 
 
+def compute_multi_energy_alignment_metrics(
+    reference_image: np.ndarray,
+    images: Sequence[np.ndarray] | np.ndarray,
+    intensities: Sequence[Any] | np.ndarray,
+    parameters: BeamEvaluationConfig,
+) -> dict[str, float]:
+    """Compute horizontal beam-stability metrics for already-acquired images."""
+    reference_stats = compute_image_stats(reference_image, parameters)
+    image_stats = [compute_image_stats(image, parameters) for image in images]
+
+    centroid_offsets = np.array(
+        [stats.centroid_x - reference_stats.centroid_x for stats in image_stats]
+    )
+    fwhm_values = np.array([stats.fwhm_x for stats in image_stats])
+    intensity_values = np.asarray(intensities).squeeze()
+
+    centroid_x_rmse_px = np.sqrt(np.mean(centroid_offsets**2))
+    fwhm_x_rms_px = np.sqrt(np.mean(fwhm_values**2))
+
+    return {
+        "centroid_x_offset_mean_px": float(np.mean(centroid_offsets)),
+        "centroid_x_std_px": float(np.std(centroid_offsets)),
+        "centroid_x_span_px": float(np.max(centroid_offsets) - np.min(centroid_offsets)),
+        "centroid_x_rmse_px": float(centroid_x_rmse_px),
+        "fwhm_x_mean_px": float(np.mean(fwhm_values)),
+        "fwhm_x_std_px": float(np.std(fwhm_values)),
+        "fwhm_x_rms_px": float(fwhm_x_rms_px),
+        "fwhm_x_rms_normalized": float(fwhm_x_rms_px / reference_stats.fwhm_x),
+        "intensity_min": float(np.min(intensity_values)),
+        "intensity_mean": float(np.mean(intensity_values)),
+    }
+
+
+def compute_multi_energy_alignment_metrics_from_catalog(
+    catalog: Container | Mapping[str, Any],
+    reference_uid: str,
+    scan_uids: Sequence[str],
+    parameters: BeamEvaluationConfig,
+) -> dict[str, float]:
+    """Read completed runs and compute multi-energy beam-stability metrics."""
+    reference_run = catalog[reference_uid]
+    reference_image = reference_run["primary"]["data"][parameters.image_field].read()
+    images = []
+    intensities = []
+    for uid in scan_uids:
+        data = catalog[uid]["primary"]["data"]
+        images.append(data[parameters.image_field].read())
+        intensities.append(data[parameters.intensity_field].read())
+
+    return compute_multi_energy_alignment_metrics(
+        reference_image,
+        images,
+        intensities,
+        parameters,
+    )
+
+
 def compute_stats(
     uid: str,
     *,
