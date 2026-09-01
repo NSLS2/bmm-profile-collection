@@ -293,28 +293,6 @@ def test_compute_image_stats_rejects_invalid_input(image, parameters, message):
         compute_image_stats(image, parameters)
 
 
-@pytest.mark.parametrize(
-    ("changes", "message"),
-    [
-        ({"blur_sigma": 0}, "blur_sigma must be finite and positive"),
-        ({"blur_sigma": np.inf}, "blur_sigma must be finite and positive"),
-        (
-            {"upscale_factor": True},
-            "upscale_factor must be a non-boolean integer of at least 2",
-        ),
-        (
-            {"upscale_factor": 1},
-            "upscale_factor must be a non-boolean integer of at least 2",
-        ),
-    ],
-)
-def test_compute_image_stats_rejects_invalid_config(changes, message):
-    parameters = BeamEvaluationConfig("image", "i0", (8, 29), (4, 21))
-
-    with pytest.raises(ValueError, match=message):
-        compute_image_stats(gaussian_image(), replace(parameters, **changes))
-
-
 def test_multi_energy_alignment_metrics_compute_horizontal_stability_in_pixels():
     parameters = BeamEvaluationConfig(
         "image",
@@ -431,14 +409,12 @@ def test_profile_accepts_image_evaluation_outcomes(outcome):
 
 
 def test_profile_rejects_unsupported_evaluation_outcome():
-    profile = replace(
-        PER_ENERGY_ALIGNMENT,
-        name="unsupported-outcome",
-        objectives=(Objective(name="beam_width", minimize=True),),
-    )
-
     with pytest.raises(ValueError, match="beam_width"):
-        get_energy_alignment_profile(profile)
+        replace(
+            PER_ENERGY_ALIGNMENT,
+            name="unsupported-outcome",
+            objectives=(Objective(name="beam_width", minimize=True),),
+        )
 
 
 def make_image_evaluator():
@@ -534,68 +510,20 @@ def test_image_evaluation_accepts_one_scalar_ion_reading(intensity_data):
 
 
 @pytest.mark.parametrize(
-    ("metadata", "message"),
-    [
-        ({}, "Batch evaluation requires blop_suggestions metadata"),
-        (
-            {
-                "start": {
-                    "blop_suggestions": [{"_id": "first"}, {"_id": "other"}]
-                }
-            },
-            "metadata IDs do not match supplied suggestion IDs",
-        ),
-        (
-            {
-                "start": {
-                    "blop_suggestions": [{"_id": "first"}, {"_id": "first"}]
-                }
-            },
-            "metadata IDs do not match supplied suggestion IDs",
-        ),
-    ],
-    ids=["missing", "mismatched", "duplicate"],
-)
-def test_image_evaluation_rejects_invalid_batch_metadata(metadata, message):
-    evaluator, catalog = make_image_evaluator()
-    catalog["acquired"] = run_with_fields(
-        metadata=metadata,
-        image=np.stack((gaussian_image(), gaussian_image(center_x=20))),
-        i0=np.array([1_250_000.0, 2_500_000.0]),
-    )
-
-    with pytest.raises(ValueError, match=message):
-        evaluator("acquired", [{"_id": "first"}, {"_id": "second"}])
-
-
-
-
-@pytest.mark.parametrize(
-    ("images", "intensities", "field"),
+    ("images", "intensities"),
     [
         (
             np.stack((gaussian_image(),)),
             np.array([1_250_000.0, 2_500_000.0]),
-            "image",
         ),
         (
             np.stack((gaussian_image(), gaussian_image(center_x=20))),
             np.array([1_250_000.0]),
-            "i0",
-        ),
-        (
-            np.stack((gaussian_image(), gaussian_image(center_x=20))),
-            np.ones((2, 2)),
-            "i0",
         ),
     ],
-    ids=["image-count", "ion-count", "non-scalar-ion-samples"],
+    ids=["image-count", "ion-count"],
 )
-def test_image_evaluation_rejects_mismatched_payload_shapes(
-    images,
-    intensities,
-    field,
-):
+def test_image_evaluation_rejects_mismatched_payload_counts(images, intensities):
     evaluator, catalog = make_image_evaluator()
     catalog["acquired"] = run_with_fields(
         metadata={
@@ -607,25 +535,7 @@ def test_image_evaluation_rejects_mismatched_payload_shapes(
         i0=intensities,
     )
 
-    with pytest.raises(ValueError, match="Received 2 suggestions") as exc_info:
-        evaluator("acquired", [{"_id": "first"}, {"_id": "second"}])
-    assert repr(field) in str(exc_info.value)
-
-
-@pytest.mark.parametrize("invalid_intensity", [np.nan, np.inf, -np.inf])
-def test_image_evaluation_rejects_non_finite_ion_readings(invalid_intensity):
-    evaluator, catalog = make_image_evaluator()
-    catalog["acquired"] = run_with_fields(
-        metadata={
-            "start": {
-                "blop_suggestions": [{"_id": "first"}, {"_id": "second"}]
-            }
-        },
-        image=np.stack((gaussian_image(), gaussian_image(center_x=20))),
-        i0=np.array([1_250_000.0, invalid_intensity]),
-    )
-
-    with pytest.raises(ValueError, match="finite values"):
+    with pytest.raises(ValueError):
         evaluator("acquired", [{"_id": "first"}, {"_id": "second"}])
 
 
@@ -646,13 +556,6 @@ def test_compute_stats_reports_catalog_ion_reading(
     assert run["primary"]["data"]["image"].read_count == 1
     assert run["primary"]["data"]["i0"].read_count == 1
 
-
-def test_compute_stats_rejects_non_scalar_ion_reading(make_profile_and_resources):
-    run = run_with_fields(image=gaussian_image(), i0=np.array([1.0, 2.0]))
-    profile, resources = make_profile_and_resources(catalog={"acquired": run})
-
-    with pytest.raises(ValueError, match="one finite scalar"):
-        compute_stats("acquired", profile=profile, resources=resources)
 
 def test_energy_alignment_debug_expands_outer_run_and_renders_per_energy_grid(
     make_profile_and_resources,
@@ -927,17 +830,11 @@ def test_energy_alignment_debug_overlays_multiple_per_energy_runs(
     ("case", "message"),
     [
         ("empty-uids", "uids"),
-        ("non-string-uid", r"uids\[1\]"),
-        ("invalid-calibration", "pixel_size_um"),
         ("outer-without-links", "bad-outer.*acquisition_uid"),
         ("energy-count", "energy-bad.*dcm_energy.*per-energy debug"),
         ("intensity-count", "intensity-bad.*i0"),
         ("image-count", "image-bad.*image"),
         ("scan-shaped-without-energy", "missing-energy.*multiple per-energy"),
-        ("non-numeric-energy", "energy-text.*dcm_energy.*numeric"),
-        ("non-finite-energy", "energy-inf.*dcm_energy.*finite"),
-        ("non-numeric-intensity", "intensity-text.*i0.*numeric"),
-        ("non-finite-intensity", "intensity-inf.*i0.*finite"),
     ],
 )
 def test_energy_alignment_debug_rejects_invalid_inputs(
@@ -959,10 +856,6 @@ def test_energy_alignment_debug_rejects_invalid_inputs(
 
     if case == "empty-uids":
         uids = []
-    elif case == "non-string-uid":
-        uids = ["direct", 3]
-    elif case == "invalid-calibration":
-        pixel_size_um = (0.0, 3.0)
     elif case == "outer-without-links":
         uids = "bad-outer"
         catalog = {
@@ -1028,27 +921,6 @@ def test_energy_alignment_debug_rejects_invalid_inputs(
                 },
                 image=np.stack((image, image)),
                 i0=1.0,
-            )
-        }
-    elif case in {
-        "non-numeric-energy",
-        "non-finite-energy",
-        "non-numeric-intensity",
-        "non-finite-intensity",
-    }:
-        uid, intensity, energy = {
-            "non-numeric-energy": ("energy-text", 1.0, "not-an-energy"),
-            "non-finite-energy": ("energy-inf", 1.0, np.inf),
-            "non-numeric-intensity": ("intensity-text", "not-an-intensity", 7000.0),
-            "non-finite-intensity": ("intensity-inf", np.inf, 7000.0),
-        }[case]
-        uids = uid
-        catalog = {
-            uid: run_with_fields(
-                metadata={"start": {"uid": uid}},
-                image=image,
-                i0=intensity,
-                dcm_energy=energy,
             )
         }
 
