@@ -3,7 +3,7 @@ import pickle
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from blop import Objective, RangeDOF
+from blop.ax import Objective, RangeDOF
 from bluesky import RunEngine
 from bluesky.plan_stubs import close_run, mv, null, open_run
 import numpy as np
@@ -22,6 +22,7 @@ from BMM.optimization import (
     _full_width_half_maximum,
     _preprocess_image,
     _write_energy_map,
+    acquire_target_position,
     compute_image_stats,
     compute_stats,
     get_energy_alignment_profile,
@@ -552,6 +553,38 @@ def test_agent_factory_returns_fresh_agents(make_profile_and_resources):
     assert second.acquisition_plan is None
 
 
+def test_acquire_target_position_records_supplied_readables():
+    camera_value = np.array([[1.0, 2.0], [3.0, 4.0]])
+    ion_chamber_value = 1_250_000.0
+    motor_position = 0.375
+    camera = SynSignal(name="camera", func=lambda: camera_value)
+    ion_chamber = SynSignal(name="ion_chamber", func=lambda: ion_chamber_value)
+    motor = SynAxis(name="motor", value=motor_position)
+    documents = []
+    run_engine = RunEngine({}, call_returns_result=True)
+    run_engine.subscribe(lambda name, doc: documents.append((name, doc)))
+
+    with patch.object(motor, "set", wraps=motor.set) as set_motor:
+        result = run_engine(
+            acquire_target_position([camera, ion_chamber, motor])
+        )
+
+    starts = [doc for name, doc in documents if name == "start"]
+    assert len(starts) == 1
+    [start] = starts
+    assert start["plan_name"] == "acquire_target_position"
+    assert result.plan_result == start["uid"]
+
+    events = [doc for name, doc in documents if name == "event"]
+    assert len(events) == 1
+    [event] = events
+    np.testing.assert_array_equal(event["data"]["camera"], camera_value)
+    assert event["data"]["ion_chamber"] == ion_chamber_value
+    assert event["data"]["motor"] == motor_position
+    assert set_motor.call_count == 0
+    assert len([doc for name, doc in documents if name == "stop"]) == 1
+
+
 def test_energy_scan_acquisition_runs_full_grid_per_suggestion():
     motor = SynAxis(name="motor")
     energy = SynAxis(name="energy")
@@ -848,11 +881,10 @@ def test_energy_map_write_is_atomic_and_pickle_compatible(tmp_path):
     assert not (filename.parent / f".{filename.name}.tmp").exists()
 
 
-def test_search_reuses_reference_evaluation(
+def test_search_captures_and_reuses_target_reference(
     make_profile_and_resources,
     monkeypatch,
 ):
-
     class FakeAgent:
         def optimize(self, iterations):
             yield from null()
@@ -861,9 +893,18 @@ def test_search_reuses_reference_evaluation(
             return [(0, {"motor": 0.0}, {"centroid_distance": (0.0, 0.0)})]
 
     reference_image = Field(gaussian_image())
-    catalog = {"reference": {"primary": {"data": {"image": reference_image}}}}
+    catalog = {"target": {"primary": {"data": {"image": reference_image}}}}
+    lifecycle = []
+    acquired_readables = []
 
-    def change_edge(*args, **kwargs):
+    def acquire_target(readables):
+        lifecycle.append("acquire")
+        acquired_readables.append(tuple(readables))
+        yield from null()
+        return "target"
+
+    def change_edge(energy, **kwargs):
+        lifecycle.append(f"edge:{energy}")
         yield from null()
 
     profile, resources = make_profile_and_resources(
@@ -871,51 +912,173 @@ def test_search_reuses_reference_evaluation(
         change_edge_plan=change_edge,
     )
     evaluation_functions = []
+    reference_scan_uids = []
+    metadata_references = []
     fake_agent = FakeAgent()
 
-    def make_agent(*args, evaluation_function=None, **kwargs):
+    def make_agent(reference_scan_uid, *, evaluation_function=None, **kwargs):
+        reference_scan_uids.append(reference_scan_uid)
         evaluation_functions.append(evaluation_function)
         return fake_agent
 
+    def add_metadata(plan, energy, reference_scan_uid, **kwargs):
+        metadata_references.append((energy, reference_scan_uid))
+        return plan
+
+    monkeypatch.setattr(
+        optimization_module,
+        "acquire_target_position",
+        acquire_target,
+    )
     monkeypatch.setattr(
         optimization_module,
         "make_energy_alignment_agent",
         make_agent,
     )
+    monkeypatch.setattr(
+        optimization_module,
+        "optimization_metadata_wrapper",
+        add_metadata,
+    )
     RunEngine({})(
         search_for_optimal_positions(
             ["Fe", "Cu"],
-            "reference",
             profile=profile,
             resources=resources,
         )
     )
 
+    assert lifecycle == ["acquire", "edge:Fe", "edge:Cu"]
+    assert acquired_readables == [
+        (resources.sensors["camera"], resources.actuators["motor"])
+    ]
+    assert reference_scan_uids == ["target", "target"]
+    assert metadata_references == [("Fe", "target"), ("Cu", "target")]
+    assert len(evaluation_functions) == 2
     assert evaluation_functions[0] is evaluation_functions[1]
     assert reference_image.read_count == 1
 
 
-def test_search_restores_prompt_after_failure():
+def test_search_uses_supplied_target_reference(
+    make_profile_and_resources,
+    monkeypatch,
+):
+    class FakeAgent:
+        def optimize(self, iterations):
+            yield from null()
+
+        def get_best_points(self):
+            return []
+
+    def unexpected_target_acquisition(readables):
+        raise AssertionError("search recaptured a supplied target")
+        yield from null()
+
+    profile, resources = make_profile_and_resources()
+    reference_image = resources.catalog["reference"]["primary"]["data"]["image"]
+    evaluation_functions = []
+    reference_scan_uids = []
+    metadata_references = []
+    fake_agent = FakeAgent()
+
+    def make_agent(reference_scan_uid, *, evaluation_function=None, **kwargs):
+        reference_scan_uids.append(reference_scan_uid)
+        evaluation_functions.append(evaluation_function)
+        return fake_agent
+
+    def add_metadata(plan, energy, reference_scan_uid, **kwargs):
+        metadata_references.append((energy, reference_scan_uid))
+        return plan
+
+    monkeypatch.setattr(
+        optimization_module,
+        "acquire_target_position",
+        unexpected_target_acquisition,
+    )
+    monkeypatch.setattr(
+        optimization_module,
+        "make_energy_alignment_agent",
+        make_agent,
+    )
+    monkeypatch.setattr(
+        optimization_module,
+        "optimization_metadata_wrapper",
+        add_metadata,
+    )
+    RunEngine({})(
+        search_for_optimal_positions(
+            ["Fe", "Cu"],
+            reference_scan_uid="reference",
+            profile=profile,
+            resources=resources,
+        )
+    )
+
+    assert reference_scan_uids == ["reference", "reference"]
+    assert metadata_references == [("Fe", "reference"), ("Cu", "reference")]
+    assert len(evaluation_functions) == 2
+    assert evaluation_functions[0] is evaluation_functions[1]
+    assert reference_image.read_count == 1
+
+
+def test_search_restores_prompt_after_failure(
+    make_profile_and_resources,
+    monkeypatch,
+):
+    def acquire_target(sensors):
+        yield from null()
+        return "target"
+
     def failing_change_edge(*args, **kwargs):
         yield from null()
         raise RuntimeError("energy change failed")
 
-    prompt_state = SimpleNamespace(prompt=True)
-    resources = EnergyAlignmentResources(
-        catalog={},
-        actuators={dof.actuator: object() for dof in PER_ENERGY_ALIGNMENT.dofs},
-        sensors={sensor: object() for sensor in PER_ENERGY_ALIGNMENT.sensors},
+    profile, resources = make_profile_and_resources(
+        catalog={"target": run_with_fields(image=gaussian_image())},
         change_edge_plan=failing_change_edge,
-        prompt_state=prompt_state,
+    )
+    prompt_state = resources.prompt_state
+    monkeypatch.setattr(
+        optimization_module,
+        "acquire_target_position",
+        acquire_target,
     )
 
     with pytest.raises(RuntimeError, match="energy change failed"):
         RunEngine({})(
             search_for_optimal_positions(
                 ["Fe"],
-                "reference",
+                profile=profile,
                 resources=resources,
             )
         )
 
     assert prompt_state.prompt
+
+
+def test_search_with_no_energies_skips_target_acquisition(
+    make_profile_and_resources,
+    monkeypatch,
+):
+    profile, resources = make_profile_and_resources()
+    original_prompt = resources.prompt_state.prompt
+
+    def unexpected_target_acquisition(sensors):
+        raise AssertionError("empty search acquired a target")
+        yield from null()
+
+    monkeypatch.setattr(
+        optimization_module,
+        "acquire_target_position",
+        unexpected_target_acquisition,
+    )
+    result = RunEngine({}, call_returns_result=True)(
+        search_for_optimal_positions(
+            [],
+            profile=profile,
+            resources=resources,
+        )
+    )
+
+    assert result.plan_result == {}
+    assert resources.prompt_state.prompt is original_prompt
