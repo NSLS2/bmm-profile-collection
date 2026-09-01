@@ -24,6 +24,8 @@ from BMM.optimization import (
     _write_energy_map,
     acquire_target_position,
     compute_image_stats,
+    compute_multi_energy_alignment_metrics,
+    compute_multi_energy_alignment_metrics_from_catalog,
     compute_stats,
     get_energy_alignment_profile,
     make_energy_alignment_agent,
@@ -288,6 +290,100 @@ def test_compute_image_stats_rejects_invalid_config(changes, message):
 
     with pytest.raises(ValueError, match=message):
         compute_image_stats(gaussian_image(), replace(parameters, **changes))
+
+
+def test_multi_energy_alignment_metrics_compute_horizontal_stability_in_pixels():
+    parameters = BeamEvaluationConfig(
+        "image",
+        "i0",
+        blur_sigma=None,
+        upscale_factor=None,
+    )
+    reference = gaussian_image(center_x=18.0, sigma_x=3.0)
+    images = (
+        gaussian_image(center_x=17.0, sigma_x=2.0),
+        gaussian_image(center_x=19.0, sigma_x=4.0),
+    )
+    intensities = np.array([7.0, 11.0])
+
+    metrics = compute_multi_energy_alignment_metrics(
+        reference,
+        images,
+        intensities,
+        parameters,
+    )
+
+    assert set(metrics) == {
+        "centroid_x_offset_mean_px",
+        "centroid_x_std_px",
+        "centroid_x_span_px",
+        "centroid_x_rmse_px",
+        "fwhm_x_mean_px",
+        "fwhm_x_std_px",
+        "fwhm_x_rms_px",
+        "fwhm_x_rms_normalized",
+        "intensity_min",
+        "intensity_mean",
+    }
+    assert all(type(value) is float for value in metrics.values())
+    assert metrics["centroid_x_offset_mean_px"] == pytest.approx(0.0, abs=1e-12)
+    assert metrics["centroid_x_std_px"] == pytest.approx(1.0)
+    assert metrics["centroid_x_span_px"] == pytest.approx(2.0)
+    assert metrics["centroid_x_rmse_px"] == pytest.approx(1.0)
+
+    expected_fwhm_x_px = np.array(
+        [compute_image_stats(image, parameters).fwhm_x for image in images]
+    )
+    reference_fwhm_x_px = compute_image_stats(reference, parameters).fwhm_x
+    assert metrics["fwhm_x_mean_px"] == pytest.approx(
+        float(np.mean(expected_fwhm_x_px))
+    )
+    assert metrics["fwhm_x_std_px"] == pytest.approx(
+        float(np.std(expected_fwhm_x_px, ddof=0))
+    )
+    assert metrics["fwhm_x_rms_px"] == pytest.approx(
+        float(np.sqrt(np.mean(expected_fwhm_x_px**2)))
+    )
+    assert metrics["fwhm_x_rms_normalized"] == pytest.approx(
+        metrics["fwhm_x_rms_px"] / reference_fwhm_x_px
+    )
+    assert metrics["intensity_min"] == 7.0
+    assert metrics["intensity_mean"] == 9.0
+
+
+def test_multi_energy_alignment_metrics_from_catalog_reads_existing_runs():
+    parameters = BeamEvaluationConfig(
+        "image",
+        "i0",
+        blur_sigma=None,
+        upscale_factor=None,
+    )
+    catalog = {
+        "reference": run_with_fields(image=gaussian_image(center_x=18.0)),
+        "low": run_with_fields(
+            image=gaussian_image(center_x=17.0),
+            i0=np.array([4.0]),
+        ),
+        "high": run_with_fields(
+            image=gaussian_image(center_x=19.0),
+            i0=np.array([8.0]),
+        ),
+    }
+
+    metrics = compute_multi_energy_alignment_metrics_from_catalog(
+        catalog,
+        "reference",
+        ("low", "high"),
+        parameters,
+    )
+
+    assert metrics["centroid_x_span_px"] == pytest.approx(2.0)
+    assert metrics["intensity_mean"] == 6.0
+    assert catalog["reference"]["primary"]["data"]["image"].read_count == 1
+    assert catalog["low"]["primary"]["data"]["image"].read_count == 1
+    assert catalog["low"]["primary"]["data"]["i0"].read_count == 1
+    assert catalog["high"]["primary"]["data"]["image"].read_count == 1
+    assert catalog["high"]["primary"]["data"]["i0"].read_count == 1
 
 
 @pytest.mark.parametrize(
