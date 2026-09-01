@@ -5,9 +5,8 @@ from unittest.mock import patch
 
 from blop.ax import Objective, RangeDOF
 from bluesky import RunEngine
-from bluesky.plan_stubs import close_run, mv, null, open_run
+from bluesky.plan_stubs import close_run, null, open_run
 from matplotlib import pyplot as plt
-from matplotlib.backend_bases import KeyEvent
 import numpy as np
 from ophyd.sim import SynAxis, SynSignal
 import pytest
@@ -26,11 +25,13 @@ from BMM.optimization import (
     _image_processing_stages,
     _preprocess_image,
     _write_energy_map,
+    acquire_target_position,
     compute_image_stats,
+    compute_multi_energy_alignment_metrics,
+    compute_multi_energy_alignment_metrics_from_catalog,
     compute_stats,
     get_energy_alignment_profile,
     make_energy_alignment_agent,
-    make_energy_scan_acquisition_plan,
     optimization_metadata_wrapper,
     search_for_optimal_positions,
     show_energy_alignment_debug,
@@ -312,6 +313,100 @@ def test_compute_image_stats_rejects_invalid_config(changes, message):
 
     with pytest.raises(ValueError, match=message):
         compute_image_stats(gaussian_image(), replace(parameters, **changes))
+
+
+def test_multi_energy_alignment_metrics_compute_horizontal_stability_in_pixels():
+    parameters = BeamEvaluationConfig(
+        "image",
+        "i0",
+        blur_sigma=None,
+        upscale_factor=None,
+    )
+    reference = gaussian_image(center_x=18.0, sigma_x=3.0)
+    images = (
+        gaussian_image(center_x=17.0, sigma_x=2.0),
+        gaussian_image(center_x=19.0, sigma_x=4.0),
+    )
+    intensities = np.array([7.0, 11.0])
+
+    metrics = compute_multi_energy_alignment_metrics(
+        reference,
+        images,
+        intensities,
+        parameters,
+    )
+
+    assert set(metrics) == {
+        "centroid_x_offset_mean_px",
+        "centroid_x_std_px",
+        "centroid_x_span_px",
+        "centroid_x_rmse_px",
+        "fwhm_x_mean_px",
+        "fwhm_x_std_px",
+        "fwhm_x_rms_px",
+        "fwhm_x_rms_normalized",
+        "intensity_min",
+        "intensity_mean",
+    }
+    assert all(type(value) is float for value in metrics.values())
+    assert metrics["centroid_x_offset_mean_px"] == pytest.approx(0.0, abs=1e-12)
+    assert metrics["centroid_x_std_px"] == pytest.approx(1.0)
+    assert metrics["centroid_x_span_px"] == pytest.approx(2.0)
+    assert metrics["centroid_x_rmse_px"] == pytest.approx(1.0)
+
+    expected_fwhm_x_px = np.array(
+        [compute_image_stats(image, parameters).fwhm_x for image in images]
+    )
+    reference_fwhm_x_px = compute_image_stats(reference, parameters).fwhm_x
+    assert metrics["fwhm_x_mean_px"] == pytest.approx(
+        float(np.mean(expected_fwhm_x_px))
+    )
+    assert metrics["fwhm_x_std_px"] == pytest.approx(
+        float(np.std(expected_fwhm_x_px, ddof=0))
+    )
+    assert metrics["fwhm_x_rms_px"] == pytest.approx(
+        float(np.sqrt(np.mean(expected_fwhm_x_px**2)))
+    )
+    assert metrics["fwhm_x_rms_normalized"] == pytest.approx(
+        metrics["fwhm_x_rms_px"] / reference_fwhm_x_px
+    )
+    assert metrics["intensity_min"] == 7.0
+    assert metrics["intensity_mean"] == 9.0
+
+
+def test_multi_energy_alignment_metrics_from_catalog_reads_existing_runs():
+    parameters = BeamEvaluationConfig(
+        "image",
+        "i0",
+        blur_sigma=None,
+        upscale_factor=None,
+    )
+    catalog = {
+        "reference": run_with_fields(image=gaussian_image(center_x=18.0)),
+        "low": run_with_fields(
+            image=gaussian_image(center_x=17.0),
+            i0=np.array([4.0]),
+        ),
+        "high": run_with_fields(
+            image=gaussian_image(center_x=19.0),
+            i0=np.array([8.0]),
+        ),
+    }
+
+    metrics = compute_multi_energy_alignment_metrics_from_catalog(
+        catalog=catalog,
+        reference_uid="reference",
+        per_energy_uids=("low", "high"),
+        parameters=parameters,
+    )
+
+    assert metrics["centroid_x_span_px"] == pytest.approx(2.0)
+    assert metrics["intensity_mean"] == 6.0
+    assert catalog["reference"]["primary"]["data"]["image"].read_count == 1
+    assert catalog["low"]["primary"]["data"]["image"].read_count == 1
+    assert catalog["low"]["primary"]["data"]["i0"].read_count == 1
+    assert catalog["high"]["primary"]["data"]["image"].read_count == 1
+    assert catalog["high"]["primary"]["data"]["i0"].read_count == 1
 
 
 @pytest.mark.parametrize(
@@ -703,54 +798,63 @@ def test_energy_alignment_debug_expands_outer_run_and_renders_per_energy_grid(
         plt.close(figure)
 
 
-def test_energy_alignment_debug_renders_scan_overlay_and_navigates_pages(
+def test_energy_alignment_debug_overlays_multiple_per_energy_runs(
     make_profile_and_resources,
 ):
     plt.switch_backend("Agg")
-    first_uid = "scan-aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    second_uid = "scan-bbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-
-    def scan_run(uid, shift):
-        return run_with_fields(
+    energies = (7000.0, 7100.0, 7200.0)
+    acquisition_uids = tuple(
+        f"acquisition-{index:02d}-full-uid" for index in range(len(energies))
+    )
+    outer_uids = tuple(
+        f"optimization-{index:02d}-full-uid" for index in range(len(energies))
+    )
+    catalog = {}
+    acquisitions = []
+    outers = []
+    for index, (energy, acquisition_uid, outer_uid) in enumerate(
+        zip(energies, acquisition_uids, outer_uids, strict=True)
+    ):
+        acquisition = run_with_fields(
             metadata={
                 "start": {
-                    "uid": uid,
-                    "scan_id": 50 + shift,
+                    "uid": acquisition_uid,
+                    "scan_id": 50 + index,
                     "blop_suggestions": [
-                        {"_id": f"{uid}-a", "motor": -0.2},
-                        {"_id": f"{uid}-b", "motor": 0.3},
+                        {"_id": f"energy-{index}", "motor": index / 10}
                     ],
-                    "BMM_agent": {"reference_scan_uid": "reference-full-uid"},
                 }
             },
-            image=np.stack(
-                [
-                    gaussian_image(center_x=16 + shift + index)
-                    for index in range(6)
-                ]
-            ),
-            i0=np.arange(6, dtype=float) + 10,
-            recorded_energy=np.array([7000.0, 7100.0, 7200.0] * 2),
+            image=(index + 1) * gaussian_image(center_x=16 + index),
+            i0=10.0 + index,
         )
+        outer = run_with_fields(
+            metadata={
+                "start": {
+                    "uid": outer_uid,
+                    "BMM_agent": {
+                        "requested_energy": f"edge-{index}",
+                        "reference_scan_uid": "reference-full-uid",
+                    },
+                    "Beamline": {"energy": energy},
+                }
+            },
+            acquisition_uid=np.array([acquisition_uid]),
+        )
+        catalog[acquisition_uid] = acquisition
+        catalog[outer_uid] = outer
+        acquisitions.append(acquisition)
+        outers.append(outer)
 
-    first = scan_run(first_uid, 0)
-    second = scan_run(second_uid, 1)
-    profile, resources = make_profile_and_resources(
-        catalog={first_uid: first, second_uid: second}
-    )
-
+    profile, resources = make_profile_and_resources(catalog=catalog)
     figure = show_energy_alignment_debug(
-        [first_uid, second_uid],
+        outer_uids,
         pixel_size_um=(2.0, 3.0),
-        energy_field="recorded_energy",
         profile=profile,
         resources=resources,
     )
     try:
         figure.canvas.draw()
-        assert first["primary"]["data"]["image"].read_count == 1
-        assert second["primary"]["data"]["image"].read_count == 0
-
         image_axes = [
             axis
             for axis in figure.axes
@@ -766,7 +870,9 @@ def test_energy_alignment_debug_renders_scan_overlay_and_navigates_pages(
             for axis in figure.axes
             if axis.get_gid() == "energy-alignment-y-marginal"
         ]
-        row_count = len(_image_processing_stages(gaussian_image(), profile.evaluation))
+        row_count = len(
+            _image_processing_stages(gaussian_image(), profile.evaluation)
+        )
         assert len(image_axes) == len(x_axes) == len(y_axes) == row_count * 4
 
         overlay_index = next(
@@ -788,34 +894,31 @@ def test_energy_alignment_debug_renders_scan_overlay_and_navigates_pages(
         assert overlay_image.get_legend() is not None
         assert all(axis.images for axis in image_axes[:3])
         assert max(np.max(axis.images[0].get_array()) for axis in image_axes[:3]) > 1
-        ordinary_titles = "\n".join(axis.get_title() for axis in x_axes)
-        assert "recorded_energy=7000" in ordinary_titles
-        assert "recorded_energy=7200" in ordinary_titles
-        assert "i0=10" in ordinary_titles
 
-        visited = [figure._suptitle.get_text()]
-        for _ in range(4):
-            figure.canvas.callbacks.process(
-                "key_press_event",
-                KeyEvent("key_press_event", figure.canvas, key="right"),
-            )
-            figure.canvas.draw()
-            visited.append(figure._suptitle.get_text())
-        assert any("page 1/4" in title and first_uid in title for title in visited)
-        assert any("page 2/4" in title and first_uid in title for title in visited)
-        assert any("page 3/4" in title and second_uid in title for title in visited)
-        assert any("page 4/4" in title and second_uid in title for title in visited)
-        assert "page 1/4" in visited[-1]
-        assert first["primary"]["data"]["image"].read_count == 2
-        assert second["primary"]["data"]["image"].read_count == 1
+        top_titles = [axis.get_title() for axis in x_axes[:4]]
+        assert [
+            f"Beamline.energy={energy:.6g}" in top_titles[index]
+            for index, energy in enumerate(energies)
+        ] == [True, True, True]
+        assert top_titles[-1].startswith("all energies")
+        assert "3 frames from 3 per-energy runs" in top_titles[-1]
+        assert [
+            f"Beamline.energy={energy:.6g}" in line.get_label()
+            for line, energy in zip(overlay_x.lines, energies, strict=True)
+        ] == [True, True, True]
 
-        figure.canvas.callbacks.process(
-            "key_press_event",
-            KeyEvent("key_press_event", figure.canvas, key="left"),
+        title = figure._suptitle.get_text()
+        assert "multi-energy from per-energy runs" in title
+        assert all(uid in title for uid in acquisition_uids)
+        assert "reference-full-uid" in title
+        assert all(
+            run["primary"]["data"]["image"].read_count == 1
+            for run in acquisitions
         )
-        figure.canvas.draw()
-        assert "page 4/4" in figure._suptitle.get_text()
-        assert second["primary"]["data"]["image"].read_count == 2
+        assert all(
+            run["primary"]["data"]["acquisition_uid"].read_count == 1
+            for run in outers
+        )
     finally:
         plt.close(figure)
 
@@ -827,11 +930,10 @@ def test_energy_alignment_debug_renders_scan_overlay_and_navigates_pages(
         ("non-string-uid", r"uids\[1\]"),
         ("invalid-calibration", "pixel_size_um"),
         ("outer-without-links", "bad-outer.*acquisition_uid"),
-        ("mixed-modes", "per-uid.*scan-uid"),
-        ("energy-count", "energy-bad.*dcm_energy"),
+        ("energy-count", "energy-bad.*dcm_energy.*per-energy debug"),
         ("intensity-count", "intensity-bad.*i0"),
         ("image-count", "image-bad.*image"),
-        ("missing-scan-energy", "missing-energy.*energy_field"),
+        ("scan-shaped-without-energy", "missing-energy.*multiple per-energy"),
         ("non-numeric-energy", "energy-text.*dcm_energy.*numeric"),
         ("non-finite-energy", "energy-inf.*dcm_energy.*finite"),
         ("non-numeric-intensity", "intensity-text.*i0.*numeric"),
@@ -868,32 +970,6 @@ def test_energy_alignment_debug_rejects_invalid_inputs(
                 metadata={"start": {"uid": "bad-outer"}},
                 unrelated=np.array([1.0]),
             )
-        }
-    elif case == "mixed-modes":
-        uids = ["per", "scan"]
-        catalog = {
-            "per": run_with_fields(
-                metadata={
-                    "start": {
-                        "uid": "per-uid",
-                        "blop_suggestions": [{"_id": "per"}],
-                    }
-                },
-                image=image,
-                i0=1.0,
-                dcm_energy=7000.0,
-            ),
-            "scan": run_with_fields(
-                metadata={
-                    "start": {
-                        "uid": "scan-uid",
-                        "blop_suggestions": [{"_id": "scan"}],
-                    }
-                },
-                image=np.stack((image, image)),
-                i0=np.array([1.0, 2.0]),
-                dcm_energy=np.array([7000.0, 7100.0]),
-            ),
         }
     elif case == "energy-count":
         uids = "energy-bad"
@@ -940,7 +1016,7 @@ def test_energy_alignment_debug_rejects_invalid_inputs(
                 dcm_energy=np.arange(2, dtype=float),
             )
         }
-    elif case == "missing-scan-energy":
+    elif case == "scan-shaped-without-energy":
         uids = "missing-energy"
         catalog = {
             "missing-energy": run_with_fields(
@@ -993,10 +1069,16 @@ def test_agent_factory_returns_fresh_agents(make_profile_and_resources):
     profile, resources = make_profile_and_resources()
 
     first = make_energy_alignment_agent(
-        "reference", profile=profile, resources=resources
+        "reference",
+        profile=profile,
+        resources=resources,
+        subscribe_to_dash=False,
     )
     second = make_energy_alignment_agent(
-        "reference", profile=profile, resources=resources
+        "reference",
+        profile=profile,
+        resources=resources,
+        subscribe_to_dash=False,
     )
 
     assert first is not second
@@ -1006,224 +1088,38 @@ def test_agent_factory_returns_fresh_agents(make_profile_and_resources):
     assert second.acquisition_plan is None
 
 
-def test_energy_scan_acquisition_runs_full_grid_per_suggestion():
-    motor = SynAxis(name="motor")
-    energy = SynAxis(name="energy")
-    detector = SynSignal(
-        name="detector",
-        func=lambda: 10 * motor.position + energy.position,
-    )
-    edge_energies = {"Fe": 7112.0, "Cu": 8979.0}
-    edge_motor_positions = {"Fe": -0.9, "Cu": 0.9}
-    edge_changes = []
-
-    def change_edge(element, **kwargs):
-        edge_changes.append((element, kwargs))
-        if kwargs["preserve_dcm_roll"]:
-            yield from mv(energy, edge_energies[element])
-        else:
-            yield from mv(
-                energy,
-                edge_energies[element],
-                motor,
-                edge_motor_positions[element],
-            )
-
-    elements = ["Fe", "Cu"]
-    acquisition_plan = make_energy_scan_acquisition_plan(
-        change_edge,
-        energy,
-        elements,
-    )
-    elements[:] = ["Zn"]
-    suggestions = [
-        {"motor": 0.75, "_id": "right"},
-        {"motor": -0.25, "_id": "left"},
-    ]
+def test_acquire_target_position_records_supplied_readables():
+    camera_value = np.array([[1.0, 2.0], [3.0, 4.0]])
+    ion_chamber_value = 1_250_000.0
+    motor_position = 0.375
+    camera = SynSignal(name="camera", func=lambda: camera_value)
+    ion_chamber = SynSignal(name="ion_chamber", func=lambda: ion_chamber_value)
+    motor = SynAxis(name="motor", value=motor_position)
     documents = []
     run_engine = RunEngine({}, call_returns_result=True)
     run_engine.subscribe(lambda name, doc: documents.append((name, doc)))
 
     with patch.object(motor, "set", wraps=motor.set) as set_motor:
-        result = run_engine(acquisition_plan(suggestions, [motor], [detector]))
+        result = run_engine(
+            acquire_target_position([camera, ion_chamber, motor])
+        )
 
     starts = [doc for name, doc in documents if name == "start"]
     assert len(starts) == 1
     [start] = starts
-    assert start["run_key"] == "default_acquire"
+    assert start["plan_name"] == "acquire_target_position"
     assert result.plan_result == start["uid"]
-    assert len([doc for name, doc in documents if name == "stop"]) == 1
-    descriptors = [doc for name, doc in documents if name == "descriptor"]
-    assert [descriptor["name"] for descriptor in descriptors] == ["primary"]
 
     events = [doc for name, doc in documents if name == "event"]
-    assert len(events) == 4
-    routed_positions = [
-        suggestion["motor"] for suggestion in start["blop_suggestions"]
-    ]
-    assert [call.args[0] for call in set_motor.call_args_list] == pytest.approx(
-        routed_positions
-    )
-    assert [element for element, _ in edge_changes] == ["Fe", "Cu"] * 2
-    assert all(
-        options
-        == {
-            "focus": True,
-            "no_hslits": True,
-            "mirror": False,
-            "tune": False,
-            "preserve_dcm_roll": True,
-        }
-        for _, options in edge_changes
-    )
-    for index, position in enumerate(routed_positions):
-        block = events[index * 2 : (index + 1) * 2]
-        assert [event["data"]["motor"] for event in block] == pytest.approx(
-            [position, position]
-        )
-        assert [event["data"]["energy"] for event in block] == [7112.0, 8979.0]
-        assert [event["data"]["detector"] for event in block] == pytest.approx(
-            [
-                10 * position + 7112.0,
-                10 * position + 8979.0,
-            ]
-        )
+    assert len(events) == 1
+    [event] = events
+    np.testing.assert_array_equal(event["data"]["camera"], camera_value)
+    assert event["data"]["ion_chamber"] == ion_chamber_value
+    assert event["data"]["motor"] == motor_position
+    assert set_motor.call_count == 0
+    assert len([doc for name, doc in documents if name == "stop"]) == 1
 
 
-def test_energy_scan_acquisition_rejects_empty_element_list():
-    energy = SynAxis(name="energy")
-    edge_changes = []
-
-    def change_edge(element, **kwargs):
-        edge_changes.append((element, kwargs))
-        yield from null()
-
-    with pytest.raises(ValueError, match="Energy scan requires at least one element"):
-        make_energy_scan_acquisition_plan(change_edge, energy, [])
-
-    assert edge_changes == []
-
-
-def test_agent_optimization_nests_energy_scan_acquisition(
-    make_profile_and_resources,
-):
-    profile, resources = make_profile_and_resources()
-    motor = resources.actuators["motor"]
-    energy = SynAxis(name="energy")
-    camera = SynSignal(
-        name="camera",
-        func=lambda: motor.position + energy.position,
-    )
-    edge_energies = {"Fe": 7112.0, "Cu": 8979.0}
-    edge_motor_positions = {"Fe": -0.9, "Cu": 0.9}
-    edge_changes = []
-
-    def change_edge(element, **kwargs):
-        edge_changes.append((element, kwargs))
-        if kwargs["preserve_dcm_roll"]:
-            yield from mv(energy, edge_energies[element])
-        else:
-            yield from mv(
-                energy,
-                edge_energies[element],
-                motor,
-                edge_motor_positions[element],
-            )
-
-    resources = replace(
-        resources,
-        sensors={"camera": camera},
-        change_edge_plan=change_edge,
-    )
-    documents = []
-    evaluation_calls = []
-
-    def evaluate(uid, suggestions):
-        evaluation_calls.append((uid, [dict(suggestion) for suggestion in suggestions]))
-        return [
-            {
-                "_id": suggestion["_id"],
-                "lateral_distance": abs(suggestion["motor"]),
-                "intensity": 1_000_001.0,
-            }
-            for suggestion in suggestions
-        ]
-
-    acquisition_plan = make_energy_scan_acquisition_plan(
-        resources.change_edge_plan,
-        energy,
-        ["Fe", "Cu"],
-        energy_change=profile.energy_change,
-    )
-    agent = make_energy_alignment_agent(
-        "reference",
-        profile=profile,
-        resources=resources,
-        evaluation_function=evaluate,
-        acquisition_plan=acquisition_plan,
-    )
-    run_engine = RunEngine({})
-    run_engine.subscribe(lambda name, doc: documents.append((name, doc)))
-
-    run_engine(agent.optimize(1))
-
-    starts = [doc for name, doc in documents if name == "start"]
-    assert [start["run_key"] for start in starts] == ["optimize", "default_acquire"]
-    outer_start, inner_start = starts
-    assert outer_start["uid"] != inner_start["uid"]
-    stops = [doc for name, doc in documents if name == "stop"]
-    assert [stop["run_start"] for stop in stops] == [
-        inner_start["uid"],
-        outer_start["uid"],
-    ]
-
-    assert edge_changes == [
-        (
-            "Fe",
-            {
-                "focus": True,
-                "no_hslits": True,
-                "mirror": False,
-                "tune": False,
-                "preserve_dcm_roll": True,
-            },
-        ),
-        (
-            "Cu",
-            {
-                "focus": True,
-                "no_hslits": True,
-                "mirror": False,
-                "tune": False,
-                "preserve_dcm_roll": True,
-            },
-        ),
-    ]
-    assert evaluation_calls == [
-        (inner_start["uid"], inner_start["blop_suggestions"])
-    ]
-    [suggestion] = evaluation_calls[0][1]
-    descriptor_runs = {
-        doc["uid"]: doc["run_start"]
-        for name, doc in documents
-        if name == "descriptor"
-    }
-    inner_events = [
-        doc
-        for name, doc in documents
-        if name == "event"
-        and descriptor_runs[doc["descriptor"]] == inner_start["uid"]
-    ]
-    assert [event["data"]["motor"] for event in inner_events] == pytest.approx(
-        [suggestion["motor"], suggestion["motor"]]
-    )
-    assert [event["data"]["energy"] for event in inner_events] == [
-        7112.0,
-        8979.0,
-    ]
-    assert [event["data"]["camera"] for event in inner_events] == pytest.approx(
-        [suggestion["motor"] + 7112.0, suggestion["motor"] + 8979.0]
-    )
 
 
 def test_metadata_uses_profile_and_live_resources(make_profile_and_resources):
@@ -1277,6 +1173,7 @@ def test_dash_callback_builds_app(make_profile_and_resources):
         "reference",
         profile=profile,
         resources=resources,
+        subscribe_to_dash=False,
     )
 
     callback = SurrogateModelDashCallback(agent)
@@ -1302,11 +1199,10 @@ def test_energy_map_write_is_atomic_and_pickle_compatible(tmp_path):
     assert not (filename.parent / f".{filename.name}.tmp").exists()
 
 
-def test_search_reuses_reference_evaluation(
+def test_search_captures_and_reuses_target_reference(
     make_profile_and_resources,
     monkeypatch,
 ):
-
     class FakeAgent:
         def optimize(self, iterations):
             yield from null()
@@ -1315,9 +1211,18 @@ def test_search_reuses_reference_evaluation(
             return [(0, {"motor": 0.0}, {"centroid_distance": (0.0, 0.0)})]
 
     reference_image = Field(gaussian_image())
-    catalog = {"reference": {"primary": {"data": {"image": reference_image}}}}
+    catalog = {"target": {"primary": {"data": {"image": reference_image}}}}
+    lifecycle = []
+    acquired_readables = []
 
-    def change_edge(*args, **kwargs):
+    def acquire_target(readables):
+        lifecycle.append("acquire")
+        acquired_readables.append(tuple(readables))
+        yield from null()
+        return "target"
+
+    def change_edge(energy, **kwargs):
+        lifecycle.append(f"edge:{energy}")
         yield from null()
 
     profile, resources = make_profile_and_resources(
@@ -1325,51 +1230,173 @@ def test_search_reuses_reference_evaluation(
         change_edge_plan=change_edge,
     )
     evaluation_functions = []
+    reference_scan_uids = []
+    metadata_references = []
     fake_agent = FakeAgent()
 
-    def make_agent(*args, evaluation_function=None, **kwargs):
+    def make_agent(reference_scan_uid, *, evaluation_function=None, **kwargs):
+        reference_scan_uids.append(reference_scan_uid)
         evaluation_functions.append(evaluation_function)
         return fake_agent
 
+    def add_metadata(plan, energy, reference_scan_uid, **kwargs):
+        metadata_references.append((energy, reference_scan_uid))
+        return plan
+
+    monkeypatch.setattr(
+        optimization_module,
+        "acquire_target_position",
+        acquire_target,
+    )
     monkeypatch.setattr(
         optimization_module,
         "make_energy_alignment_agent",
         make_agent,
     )
+    monkeypatch.setattr(
+        optimization_module,
+        "optimization_metadata_wrapper",
+        add_metadata,
+    )
     RunEngine({})(
         search_for_optimal_positions(
             ["Fe", "Cu"],
-            "reference",
             profile=profile,
             resources=resources,
         )
     )
 
+    assert lifecycle == ["acquire", "edge:Fe", "edge:Cu"]
+    assert acquired_readables == [
+        (resources.sensors["camera"], resources.actuators["motor"])
+    ]
+    assert reference_scan_uids == ["target", "target"]
+    assert metadata_references == [("Fe", "target"), ("Cu", "target")]
+    assert len(evaluation_functions) == 2
     assert evaluation_functions[0] is evaluation_functions[1]
     assert reference_image.read_count == 1
 
 
-def test_search_restores_prompt_after_failure():
+def test_search_uses_supplied_target_reference(
+    make_profile_and_resources,
+    monkeypatch,
+):
+    class FakeAgent:
+        def optimize(self, iterations):
+            yield from null()
+
+        def get_best_points(self):
+            return []
+
+    def unexpected_target_acquisition(readables):
+        raise AssertionError("search recaptured a supplied target")
+        yield from null()
+
+    profile, resources = make_profile_and_resources()
+    reference_image = resources.catalog["reference"]["primary"]["data"]["image"]
+    evaluation_functions = []
+    reference_scan_uids = []
+    metadata_references = []
+    fake_agent = FakeAgent()
+
+    def make_agent(reference_scan_uid, *, evaluation_function=None, **kwargs):
+        reference_scan_uids.append(reference_scan_uid)
+        evaluation_functions.append(evaluation_function)
+        return fake_agent
+
+    def add_metadata(plan, energy, reference_scan_uid, **kwargs):
+        metadata_references.append((energy, reference_scan_uid))
+        return plan
+
+    monkeypatch.setattr(
+        optimization_module,
+        "acquire_target_position",
+        unexpected_target_acquisition,
+    )
+    monkeypatch.setattr(
+        optimization_module,
+        "make_energy_alignment_agent",
+        make_agent,
+    )
+    monkeypatch.setattr(
+        optimization_module,
+        "optimization_metadata_wrapper",
+        add_metadata,
+    )
+    RunEngine({})(
+        search_for_optimal_positions(
+            ["Fe", "Cu"],
+            reference_scan_uid="reference",
+            profile=profile,
+            resources=resources,
+        )
+    )
+
+    assert reference_scan_uids == ["reference", "reference"]
+    assert metadata_references == [("Fe", "reference"), ("Cu", "reference")]
+    assert len(evaluation_functions) == 2
+    assert evaluation_functions[0] is evaluation_functions[1]
+    assert reference_image.read_count == 1
+
+
+def test_search_restores_prompt_after_failure(
+    make_profile_and_resources,
+    monkeypatch,
+):
+    def acquire_target(sensors):
+        yield from null()
+        return "target"
+
     def failing_change_edge(*args, **kwargs):
         yield from null()
         raise RuntimeError("energy change failed")
 
-    prompt_state = SimpleNamespace(prompt=True)
-    resources = EnergyAlignmentResources(
-        catalog={},
-        actuators={dof.actuator: object() for dof in PER_ENERGY_ALIGNMENT.dofs},
-        sensors={sensor: object() for sensor in PER_ENERGY_ALIGNMENT.sensors},
+    profile, resources = make_profile_and_resources(
+        catalog={"target": run_with_fields(image=gaussian_image())},
         change_edge_plan=failing_change_edge,
-        prompt_state=prompt_state,
+    )
+    prompt_state = resources.prompt_state
+    monkeypatch.setattr(
+        optimization_module,
+        "acquire_target_position",
+        acquire_target,
     )
 
     with pytest.raises(RuntimeError, match="energy change failed"):
         RunEngine({})(
             search_for_optimal_positions(
                 ["Fe"],
-                "reference",
+                profile=profile,
                 resources=resources,
             )
         )
 
     assert prompt_state.prompt
+
+
+def test_search_with_no_energies_skips_target_acquisition(
+    make_profile_and_resources,
+    monkeypatch,
+):
+    profile, resources = make_profile_and_resources()
+    original_prompt = resources.prompt_state.prompt
+
+    def unexpected_target_acquisition(sensors):
+        raise AssertionError("empty search acquired a target")
+        yield from null()
+
+    monkeypatch.setattr(
+        optimization_module,
+        "acquire_target_position",
+        unexpected_target_acquisition,
+    )
+    result = RunEngine({}, call_returns_result=True)(
+        search_for_optimal_positions(
+            [],
+            profile=profile,
+            resources=resources,
+        )
+    )
+
+    assert result.plan_result == {}
+    assert resources.prompt_state.prompt is original_prompt

@@ -3,15 +3,13 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from numbers import Integral, Real
-from functools import partial
 from pathlib import Path
 import pickle
 import threading
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from ax.api.protocols import IMetric
-from blop import default_acquire
 from blop.ax import (
     Agent,
     DOF,
@@ -22,14 +20,11 @@ from blop.ax import (
 )
 from blop.protocols import AcquisitionPlan, Actuator, EvaluationFunction, Sensor
 from bluesky.callbacks import CallbackBase
-from bluesky.plan_stubs import checkpoint, move_per_step, null, trigger_and_read
-from bluesky.preprocessors import (
-    finalize_wrapper,
-    inject_md_wrapper,
-    set_run_key_wrapper,
-)
-from bluesky.protocols import Movable, Readable
-from bluesky.utils import MsgGenerator, plan
+from bluesky.plan_stubs import null
+from bluesky.plans import count
+from bluesky.preprocessors import finalize_wrapper, inject_md_wrapper
+from bluesky.protocols import Readable
+from bluesky.utils import MsgGenerator
 from event_model import Event, RunStart, RunStop
 import numpy as np
 from skimage.filters import gaussian, threshold_otsu
@@ -131,12 +126,9 @@ class _EnergyAlignmentDebugAcquisition:
     energies: tuple[float | None, ...]
     intensities: tuple[float, ...]
     event_count: int
-    frames_per_suggestion: int
-    mode: str
     image_field: str
     intensity_field: str
     energy_field: str
-    energy_field_present: bool
 
 @dataclass(frozen=True)
 class _DebugPanelLimits:
@@ -664,6 +656,65 @@ def compute_image_stats(
     )
 
 
+def compute_multi_energy_alignment_metrics(
+    reference_image: np.ndarray,
+    images: Sequence[np.ndarray] | np.ndarray,
+    intensities: Sequence[Any] | np.ndarray,
+    parameters: BeamEvaluationConfig,
+) -> dict[str, float]:
+    """Compute horizontal beam-stability metrics for already-acquired images."""
+    reference_stats = compute_image_stats(reference_image, parameters)
+    image_stats = [compute_image_stats(image, parameters) for image in images]
+
+    centroid_offsets = np.array(
+        [stats.centroid_x - reference_stats.centroid_x for stats in image_stats]
+    )
+    fwhm_values = np.array([stats.fwhm_x for stats in image_stats])
+    intensity_values = np.asarray(intensities).squeeze()
+
+    centroid_x_rmse_px = np.sqrt(np.mean(centroid_offsets**2))
+    fwhm_x_rms_px = np.sqrt(np.mean(fwhm_values**2))
+
+    return {
+        "centroid_x_offset_mean_px": float(np.mean(centroid_offsets)),
+        "centroid_x_std_px": float(np.std(centroid_offsets)),
+        "centroid_x_span_px": float(
+            np.max(centroid_offsets) - np.min(centroid_offsets)
+        ),
+        "centroid_x_rmse_px": float(centroid_x_rmse_px),
+        "fwhm_x_mean_px": float(np.mean(fwhm_values)),
+        "fwhm_x_std_px": float(np.std(fwhm_values)),
+        "fwhm_x_rms_px": float(fwhm_x_rms_px),
+        "fwhm_x_rms_normalized": float(fwhm_x_rms_px / reference_stats.fwhm_x),
+        "intensity_min": float(np.min(intensity_values)),
+        "intensity_mean": float(np.mean(intensity_values)),
+    }
+
+
+def compute_multi_energy_alignment_metrics_from_catalog(
+    catalog: Container | Mapping[str, Any],
+    reference_uid: str,
+    per_energy_uids: Sequence[str],
+    parameters: BeamEvaluationConfig,
+) -> dict[str, float]:
+    """Read completed per-energy runs and compute beam-stability metrics."""
+    reference_run = catalog[reference_uid]
+    reference_image = reference_run["primary"]["data"][parameters.image_field].read()
+    images = []
+    intensities = []
+    for uid in per_energy_uids:
+        data = catalog[uid]["primary"]["data"]
+        images.append(data[parameters.image_field].read())
+        intensities.append(data[parameters.intensity_field].read())
+
+    return compute_multi_energy_alignment_metrics(
+        reference_image,
+        images,
+        intensities,
+        parameters,
+    )
+
+
 def compute_stats(
     uid: str,
     *,
@@ -737,11 +788,11 @@ def show_energy_alignment_debug(
     """Show image-processing diagnostics for completed alignment acquisitions.
 
     Beamline usage is ``show_energy_alignment_debug(outer_or_acquisition_uids,
-    pixel_size_um=(x_scale, y_scale))``. ``uids`` accepts one direct acquisition
-    or outer Blop optimization UID, or an ordered sequence containing either.
-    Set ``energy_field`` when the recorded energy signal is not ``dcm_energy``.
-    Scan-energy pages advance with Right and reverse with Left, wrapping at both
-    ends.
+    pixel_size_um=(x_scale, y_scale))``. One direct acquisition or outer Blop
+    optimization UID renders its per-energy acquisition grid. An ordered
+    sequence spanning multiple per-energy runs adds an ``all energies`` overlay
+    built from those runs in caller order. Set ``energy_field`` when a run's
+    recorded energy signal is not ``dcm_energy``.
 
     This viewer only reads completed runs from the configured Tiled catalog. It
     does not validate, read, or move profile actuators or sensors.
@@ -762,32 +813,19 @@ def show_energy_alignment_debug(
         )
         for resolved_uid in resolved_uids
     )
-    modes = {acquisition.mode for acquisition in acquisitions}
-    if len(modes) != 1:
-        details = ", ".join(
-            f"{acquisition.uid!r} ({acquisition.mode})"
-            for acquisition in acquisitions
-        )
-        raise ValueError(
-            "Cannot mix per-energy and scan-energy acquisitions: " + details
-        )
+    source_count = len({resolved_uid.source_uid for resolved_uid in resolved_uids})
 
     from matplotlib import pyplot as plt
 
-    if modes == {"per-energy"}:
-        figure = _render_per_energy_debug(
-            acquisitions,
-            profile=resolved_profile,
-            pixel_size_um=pixel_size,
-            pyplot=plt,
-        )
-    else:
-        figure = _render_scan_energy_debug(
-            acquisitions,
-            profile=resolved_profile,
-            pixel_size_um=pixel_size,
-            pyplot=plt,
-        )
+    renderer = (
+        _render_multi_energy_debug if source_count > 1 else _render_per_energy_debug
+    )
+    figure = renderer(
+        acquisitions,
+        profile=resolved_profile,
+        pixel_size_um=pixel_size,
+        pyplot=plt,
+    )
     plt.show(block=False)
     return figure
 
@@ -905,61 +943,17 @@ class ImageEvaluation:
         return outcomes
 
 
-@plan
-def scan_energy(
-    detectors: Sequence[Readable],
-    step: Mapping[Movable, Any],
-    pos_cache: dict[Movable, Any],
-    *,
-    change_edge_plan: Callable[..., MsgGenerator[None]],
-    energy_readable: Readable,
-    elements: Sequence[str],
-    energy_change: EnergyChangeConfig = EnergyChangeConfig(),
-) -> MsgGenerator[None]:
-    """Change edge, restore the suggestion, and acquire at every element."""
-    motors = tuple(step)
-    devices = [*detectors, *motors, energy_readable]
-
-    for element in elements:
-        yield from checkpoint()
-        # Keep any optional change_edge scans separate from the data run.
-        yield from set_run_key_wrapper(
-            change_edge_plan(
-                element,
-                focus=energy_change.focus,
-                no_hslits=energy_change.no_hslits,
-                mirror=energy_change.mirror,
-                tune=False,
-                preserve_dcm_roll=True,
-            ),
-            "change_edge",
+def acquire_target_position(sensors: Sequence[Readable]) -> MsgGenerator[str]:
+    """Record supplied sensor values and DOF positions at the target state."""
+    return (
+        yield from count(
+            sensors,
+            num=1,
+            md={"plan_name": "acquire_target_position"},
         )
-        yield from move_per_step(step, pos_cache)
-        yield from trigger_and_read(devices)
-
-
-def make_energy_scan_acquisition_plan(
-    change_edge_plan: Callable[..., MsgGenerator[None]],
-    energy_readable: Readable,
-    elements: Sequence[str],
-    *,
-    energy_change: EnergyChangeConfig = EnergyChangeConfig(),
-) -> AcquisitionPlan:
-    """Compose Blop's default acquisition with an inner element-edge scan."""
-    element_names = tuple(elements)
-    if not element_names:
-        raise ValueError("Energy scan requires at least one element")
-
-    return partial(
-        default_acquire,
-        per_step=partial(
-            scan_energy,
-            change_edge_plan=change_edge_plan,
-            energy_readable=energy_readable,
-            elements=element_names,
-            energy_change=energy_change,
-        ),
     )
+
+
 
 
 def make_energy_alignment_agent(
@@ -969,6 +963,7 @@ def make_energy_alignment_agent(
     resources: EnergyAlignmentResources | None = None,
     evaluation_function: EvaluationFunction | None = None,
     acquisition_plan: AcquisitionPlan | None = None,
+    subscribe_to_dash: bool = True,
 ) -> Agent:
     """Construct a fresh Blop agent from a reusable alignment profile."""
     resolved_profile = get_energy_alignment_profile(profile)
@@ -993,6 +988,10 @@ def make_energy_alignment_agent(
         initialization_budget=resolved_profile.optimization.initialization_budget,
         initialize_with_center=resolved_profile.optimization.initialize_with_center,
     )
+
+    if subscribe_to_dash:
+        subscribe_dash_to_agent(agent)
+
     return agent
 
 
@@ -1014,13 +1013,13 @@ def _write_energy_map(
 
 def search_for_optimal_positions(
     energies: list[str],
-    reference_scan_uid: str,
-    energy_map_filename: str | Path | None = None,
     *,
+    reference_scan_uid: str | None = None,
+    energy_map_filename: str | Path | None = None,
     profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
 ) -> MsgGenerator[dict[str, Any]]:
-    """Optimize motor positions at each energy using a named or custom profile."""
+    """Optimize each energy against a supplied or newly acquired target run."""
     resolved_profile = get_energy_alignment_profile(profile)
     resolved_resources = _resolve_resources(resources)
     _validate_resources(resolved_resources, resolved_profile)
@@ -1028,7 +1027,24 @@ def search_for_optimal_positions(
 
     def main_plan() -> MsgGenerator[dict[str, Any]]:
         energy_map: dict[str, Any] = {}
-        evaluation_function: EvaluationFunction | None = None
+        if not energies:
+            return energy_map
+
+        target_uid = reference_scan_uid
+        if target_uid is None:
+            target_readables: list[Readable] = [
+                resolved_resources.sensors[name] for name in resolved_profile.sensors
+            ]
+            target_readables.extend(
+                cast(Readable, dof.actuator)
+                for dof in _bind_dofs(resolved_resources, resolved_profile)
+            )
+            target_uid = yield from acquire_target_position(target_readables)
+        evaluation_function = ImageEvaluation(
+            resolved_resources.catalog,
+            reference_scan_uid=target_uid,
+            parameters=resolved_profile.evaluation,
+        )
         resolved_resources.prompt_state.prompt = False
 
         for energy in energies:
@@ -1040,14 +1056,8 @@ def search_for_optimal_positions(
                 mirror=energy_change.mirror,
             )
 
-            if evaluation_function is None:
-                evaluation_function = ImageEvaluation(
-                    resolved_resources.catalog,
-                    reference_scan_uid=reference_scan_uid,
-                    parameters=resolved_profile.evaluation,
-                )
             agent = make_energy_alignment_agent(
-                reference_scan_uid,
+                target_uid,
                 profile=resolved_profile,
                 resources=resolved_resources,
                 evaluation_function=evaluation_function,
@@ -1055,7 +1065,7 @@ def search_for_optimal_positions(
             optimize_plan = optimization_metadata_wrapper(
                 agent.optimize(resolved_profile.optimization.iterations),
                 energy,
-                reference_scan_uid,
+                target_uid,
                 profile=resolved_profile,
                 resources=resolved_resources,
             )
@@ -1078,11 +1088,23 @@ def search_for_optimal_positions(
     return (yield from finalize_wrapper(main_plan(), cleanup_plan()))
 
 
+# --------- Dash live plotting registration ---------
+
+def subscribe_dash_to_agent(agent):
+    try:
+        viz = SurrogateModelDashCallback(agent, resolution=41)
+        agent.subscribe(viz)
+
+        # run alongside the RunEngine
+        threading.Thread(target=viz.serve, kwargs={"port": 8050}, daemon=True).start()
+    except Exception as e:
+        print(f"Failed to register agent to dash callback with error {e}")
+
+
 # --------- Acquired-image debug viewer ---------
 
-
-def _to_list(value: Any) -> list[Any]:
-    """Coerce a scalar, NumPy array, or iterable into a plain list."""
+def _to_list(value: Any) -> list:
+    """Coerce a scalar, numpy array, or iterable into a plain list."""
     if hasattr(value, "tolist"):
         result = value.tolist()
         return result if isinstance(result, list) else [result]
@@ -1092,7 +1114,7 @@ def _to_list(value: Any) -> list[Any]:
 
 
 def _py(value: Any) -> Any:
-    """Convert a NumPy scalar to its native Python equivalent."""
+    """Convert a numpy scalar to its native Python equivalent."""
     return value.item() if hasattr(value, "item") else value
 
 def _run_start_metadata(run: Any) -> Mapping[str, Any]:
@@ -1272,25 +1294,20 @@ def _describe_energy_alignment_acquisition(
         suggestions = tuple(suggestion_values)
 
     suggestion_count = len(suggestions)
-    energy_field_present = energy_field in data
-    if energy_field_present:
+    if energy_field in data:
         energies = _numeric_debug_samples(
             data[energy_field].read(), uid=uid, field=energy_field
         )
-        energy_count = len(energies)
-        if energy_count < suggestion_count or energy_count % suggestion_count:
+        if len(energies) != suggestion_count:
             raise ValueError(
-                f"UID {uid!r} field {energy_field!r} has {energy_count} samples "
-                f"for {suggestion_count} suggestions; expected one per suggestion "
-                "or an evenly divisible scan"
+                f"UID {uid!r} field {energy_field!r} has {len(energies)} "
+                f"samples for {suggestion_count} suggestions; per-energy debug "
+                "requires one energy per suggestion. Supply multiple per-energy "
+                "run UIDs instead of a scan-shaped acquisition."
             )
-        frames_per_suggestion = energy_count // suggestion_count
-        mode = "scan-energy" if frames_per_suggestion > 1 else "per-energy"
     else:
         energies = tuple(None for _ in suggestions)
-        frames_per_suggestion = 1
-        mode = "per-energy"
-    event_count = suggestion_count * frames_per_suggestion
+    event_count = suggestion_count
 
     if evaluation.intensity_field not in data:
         raise ValueError(
@@ -1306,7 +1323,7 @@ def _describe_energy_alignment_acquisition(
         raise ValueError(
             f"UID {uid!r} field {evaluation.intensity_field!r} has "
             f"{len(intensities)} samples; expected {event_count} to match "
-            f"{suggestion_count} suggestions and field {energy_field!r}"
+            "the per-energy suggestion count"
         )
 
     return _EnergyAlignmentDebugAcquisition(
@@ -1319,12 +1336,9 @@ def _describe_energy_alignment_acquisition(
         energies=energies,
         intensities=intensities,
         event_count=event_count,
-        frames_per_suggestion=frames_per_suggestion,
-        mode=mode,
         image_field=evaluation.image_field,
         intensity_field=evaluation.intensity_field,
         energy_field=energy_field,
-        energy_field_present=energy_field_present,
     )
 
 
@@ -1340,17 +1354,11 @@ def _read_energy_alignment_debug_frames(
     elif raw.ndim >= 3 and raw.shape[0] == acquisition.event_count:
         return raw
 
-    if acquisition.energy_field_present:
-        detail = (
-            f"expected {acquisition.event_count} frames to match field "
-            f"{acquisition.energy_field!r}"
-        )
-    else:
-        detail = (
-            "multiple per-energy frames require matching "
-            "'start.blop_suggestions' records; scan-energy data requires "
-            f"the recorded energy_field instead of {acquisition.energy_field!r}"
-        )
+    detail = (
+        f"expected {acquisition.event_count} frames for "
+        f"{len(acquisition.suggestions)} per-energy suggestions; scan-shaped "
+        "acquisitions are unsupported, so supply multiple per-energy run UIDs"
+    )
     raise ValueError(
         f"UID {acquisition.uid!r} field {acquisition.image_field!r} has shape "
         f"{raw.shape!r}; {detail}"
@@ -1737,14 +1745,11 @@ def _debug_figure_title(
     )
 
 
-def _render_per_energy_debug(
+def _collect_energy_alignment_debug_columns(
     acquisitions: Sequence[_EnergyAlignmentDebugAcquisition],
-    *,
-    profile: EnergyAlignmentProfile,
-    pixel_size_um: tuple[float, float],
-    pyplot: Any,
-) -> Figure:
-    columns: list[_DebugFrameColumn] = []
+    parameters: BeamEvaluationConfig,
+) -> list[_DebugFrameColumn]:
+    columns = []
     for acquisition in acquisitions:
         frames = _read_energy_alignment_debug_frames(acquisition)
         for suggestion_index, image in enumerate(frames):
@@ -1754,16 +1759,68 @@ def _render_per_energy_debug(
                     image,
                     suggestion_index=suggestion_index,
                     event_index=suggestion_index,
-                    parameters=profile.evaluation,
+                    parameters=parameters,
                 )
             )
+    return columns
 
-    row_names = _configured_image_stage_names(profile.evaluation)
-    figure = pyplot.figure(
-        figsize=(max(7.0, 3.2 * len(columns)), max(5.0, 2.6 * len(row_names))),
-        constrained_layout=True,
+
+def _debug_overlay_label(column: _DebugFrameColumn, uid_prefix: str) -> str:
+    acquisition = column.acquisition
+    energy = acquisition.energies[column.event_index]
+    if energy is not None:
+        energy_label = f"{acquisition.energy_field}={energy:.6g}"
+    elif (
+        beamline_energy := _debug_metadata_value(
+            acquisition, "Beamline", "energy"
+        )
+    ) is not None:
+        energy_label = f"Beamline.energy={_format_debug_value(beamline_energy)}"
+    elif (
+        requested_energy := _debug_metadata_value(
+            acquisition, "BMM_agent", "requested_energy"
+        )
+    ) is not None:
+        energy_label = f"requested_energy={_format_debug_value(requested_energy)}"
+    else:
+        energy_label = "energy unavailable"
+
+    suggestion = acquisition.suggestions[column.suggestion_index]
+    suggestion_id = (
+        f", _id={_format_debug_value(suggestion['_id'])}"
+        if "_id" in suggestion
+        else ""
     )
-    grid = figure.add_gridspec(len(row_names), len(columns))
+    return f"{energy_label} | UID={uid_prefix}{suggestion_id}"
+
+
+def _render_energy_alignment_debug_grid(
+    acquisitions: Sequence[_EnergyAlignmentDebugAcquisition],
+    *,
+    profile: EnergyAlignmentProfile,
+    pixel_size_um: tuple[float, float],
+    include_overlay: bool,
+    mode: str,
+    pyplot: Any,
+) -> Figure:
+    columns = _collect_energy_alignment_debug_columns(
+        acquisitions, profile.evaluation
+    )
+    row_names = _configured_image_stage_names(profile.evaluation)
+    column_count = len(columns) + int(include_overlay)
+    figure = pyplot.figure(
+        figsize=(max(8.0, 4.0 * column_count), max(6.0, 3.2 * len(row_names)))
+    )
+    grid = figure.add_gridspec(
+        len(row_names),
+        column_count,
+        left=0.06,
+        right=0.98,
+        bottom=0.06,
+        top=0.88,
+        hspace=0.42,
+        wspace=0.32,
+    )
     uid_prefixes = _shortest_unique_uid_prefixes(
         [column.acquisition.uid for column in columns]
     )
@@ -1804,123 +1861,13 @@ def _render_per_energy_debug(
                 pyplot=pyplot,
             )
 
-    figure.suptitle(
-        _debug_figure_title(
-            "per-energy",
-            acquisitions,
-            profile=profile,
-            pixel_size_um=pixel_size_um,
-        )
-    )
-    return figure
-
-
-def _debug_suggestion_summary(suggestion: Mapping[str, Any]) -> str:
-    if not suggestion:
-        return "suggestion unnamed"
-    values = []
-    if "_id" in suggestion:
-        values.append(f"_id={_format_debug_value(suggestion['_id'])}")
-    values.extend(
-        f"{name}={_format_debug_value(value)}"
-        for name, value in suggestion.items()
-        if name != "_id"
-    )
-    return "suggestion " + ", ".join(values)
-
-
-def _render_scan_energy_debug(
-    acquisitions: Sequence[_EnergyAlignmentDebugAcquisition],
-    *,
-    profile: EnergyAlignmentProfile,
-    pixel_size_um: tuple[float, float],
-    pyplot: Any,
-) -> Figure:
-    pages = tuple(
-        (acquisition, suggestion_index)
-        for acquisition in acquisitions
-        for suggestion_index in range(len(acquisition.suggestions))
-    )
-    row_names = _configured_image_stage_names(profile.evaluation)
-    uid_prefixes = _shortest_unique_uid_prefixes(
-        [acquisition.uid for acquisition in acquisitions]
-    )
-    figure = pyplot.figure(constrained_layout=True)
-    page_index = 0
-    loaded_uid: str | None = None
-    loaded_frames: np.ndarray | None = None
-
-    def render_page() -> None:
-        nonlocal loaded_frames, loaded_uid
-        acquisition, suggestion_index = pages[page_index]
-        figure.clear()
-        if loaded_uid != acquisition.uid:
-            loaded_frames = None
-            loaded_uid = None
-            loaded_frames = _read_energy_alignment_debug_frames(acquisition)
-            loaded_uid = acquisition.uid
-        assert loaded_frames is not None
-
-        first_event = suggestion_index * acquisition.frames_per_suggestion
-        last_event = first_event + acquisition.frames_per_suggestion
-        columns = [
-            _process_energy_alignment_debug_frame(
-                acquisition,
-                loaded_frames[event_index],
-                suggestion_index=suggestion_index,
-                event_index=event_index,
-                parameters=profile.evaluation,
-            )
-            for event_index in range(first_event, last_event)
-        ]
-        column_count = len(columns) + 1
-        figure.set_size_inches(
-            max(7.0, 3.2 * column_count),
-            max(5.0, 2.6 * len(row_names)),
-            forward=True,
-        )
-        grid = figure.add_gridspec(len(row_names), column_count)
-        row_limits = [
-            _debug_panel_limits(
-                [
-                    column.stages[row_index]
-                    for column in columns
-                    if column.stages is not None
-                ]
-            )
-            for row_index in range(len(row_names))
-        ]
-
-        for row_index, row_name in enumerate(row_names):
-            for column_index, column in enumerate(columns):
-                _render_energy_alignment_debug_panel(
-                    figure,
-                    grid[row_index, column_index],
-                    stage=(
-                        column.stages[row_index]
-                        if column.stages is not None
-                        else None
-                    ),
-                    pixel_size_um=pixel_size_um,
-                    row_label=row_name if column_index == 0 else "",
-                    column_label=(
-                        _debug_column_label(
-                            column,
-                            uid_prefixes[acquisition.uid],
-                        )
-                        if row_index == 0
-                        else ""
-                    ),
-                    final_stage=row_index == len(row_names) - 1,
-                    limits=row_limits[row_index],
-                    error=column.error,
-                    pyplot=pyplot,
-                )
-
+        if include_overlay:
             overlay = tuple(
                 (
-                    f"{acquisition.energy_field}="
-                    f"{acquisition.energies[column.event_index]:.6g}",
+                    _debug_overlay_label(
+                        column,
+                        uid_prefixes[column.acquisition.uid],
+                    ),
                     column.stages[row_index],
                 )
                 for column in columns
@@ -1934,8 +1881,11 @@ def _render_scan_energy_debug(
                         for column in columns
                         if column.error is not None
                     ),
-                    f"UID {acquisition.uid!r}: no processable images",
+                    "No processable per-energy images",
                 )
+            source_count = len(
+                {column.acquisition.source_uid for column in columns}
+            )
             _render_energy_alignment_debug_panel(
                 figure,
                 grid[row_index, -1],
@@ -1945,81 +1895,120 @@ def _render_scan_energy_debug(
                 pixel_size_um=pixel_size_um,
                 column_label=(
                     "all energies\n"
-                    f"UID={uid_prefixes[acquisition.uid]}\n"
-                    + _debug_suggestion_summary(
-                        acquisition.suggestions[suggestion_index]
-                    )
+                    f"{len(columns)} frames from {source_count} per-energy runs"
                     if row_index == 0
                     else ""
                 ),
                 pyplot=pyplot,
             )
 
-        figure.suptitle(
-            _debug_figure_title(
-                "scan-energy",
-                (acquisition,),
-                profile=profile,
-                pixel_size_um=pixel_size_um,
-            )
-            + f"\npage {page_index + 1}/{len(pages)} | UID={acquisition.uid} | "
-            + _debug_suggestion_summary(acquisition.suggestions[suggestion_index])
-            + " | Left/Right: change page"
+    figure.suptitle(
+        _debug_figure_title(
+            mode,
+            acquisitions,
+            profile=profile,
+            pixel_size_um=pixel_size_um,
         )
-
-    def on_key(event: Any) -> None:
-        nonlocal page_index
-        if event.key == "right":
-            page_index = (page_index + 1) % len(pages)
-        elif event.key == "left":
-            page_index = (page_index - 1) % len(pages)
-        else:
-            return
-        render_page()
-        figure.canvas.draw_idle()
-
-    render_page()
-    figure.canvas.mpl_connect("key_press_event", on_key)
+    )
     return figure
+
+
+def _render_per_energy_debug(
+    acquisitions: Sequence[_EnergyAlignmentDebugAcquisition],
+    *,
+    profile: EnergyAlignmentProfile,
+    pixel_size_um: tuple[float, float],
+    pyplot: Any,
+) -> Figure:
+    return _render_energy_alignment_debug_grid(
+        acquisitions,
+        profile=profile,
+        pixel_size_um=pixel_size_um,
+        include_overlay=False,
+        mode="per-energy",
+        pyplot=pyplot,
+    )
+
+
+def _render_multi_energy_debug(
+    acquisitions: Sequence[_EnergyAlignmentDebugAcquisition],
+    *,
+    profile: EnergyAlignmentProfile,
+    pixel_size_um: tuple[float, float],
+    pyplot: Any,
+) -> Figure:
+    return _render_energy_alignment_debug_grid(
+        acquisitions,
+        profile=profile,
+        pixel_size_um=pixel_size_um,
+        include_overlay=True,
+        mode="multi-energy from per-energy runs",
+        pyplot=pyplot,
+    )
 
 
 # --------- Dash live plotting callback ---------
 
 
 class SurrogateModelDashCallback(CallbackBase):
-    """Serve a live 2-D heatmap of an Agent's surrogate-model mean.
+    """A Bluesky callback that serves a live 2D surrogate-model heatmap via Plotly Dash.
 
-    Dash is imported only by :meth:`build_app`, so optimization and figure
-    construction remain usable when the optional Dash dependency is absent.
+    Subscribe an instance to an :class:`~blop.ax.agent.Agent` (via
+    :meth:`Agent.subscribe <blop.ax.agent.Agent.subscribe>`) and call :meth:`serve`
+    to start the Dash server. As the agent ingests new trials during an optimization
+    run, the callback bumps an internal version counter; the Dash app polls this
+    counter on a timer and re-renders the surrogate heatmap whenever new data arrives.
+
+    Parameters
+    ----------
+    agent : Agent
+        The Ax agent whose surrogate model will be visualized. The callback reads the
+        agent's DOFs, objectives, and underlying Ax ``Client`` for predictions.
+    resolution : int, optional
+        The number of grid points per axis used to sample the surrogate model for
+        continuous DOFs. Default is 41.
+    update_interval_ms : int, optional
+        How often (in milliseconds) the Dash app checks for new data. Default is 2000.
+
+    See Also
+    --------
+    blop.ax.agent.Agent.plot_objective : One-off contour plot via Ax analyses.
+
+    Examples
+    --------
+    >>> from blop.callbacks.surrogate_dash import SurrogateModelDashCallback
+    >>> viz = SurrogateModelDashCallback(agent)
+    >>> agent.subscribe(viz)
+    >>> # In a separate thread or process, start the server:
+    >>> viz.serve(port=8050)  # doctest: +SKIP
     """
 
     def __init__(
         self,
         agent: _AxAgentMixin,
         resolution: int = 41,
-        update_interval_ms: int = 100,
+        update_interval_ms: int = 500,
     ) -> None:
         super().__init__()
-        if resolution < 2:
-            raise ValueError("Dash plot resolution must be at least two")
-        if update_interval_ms < 1:
-            raise ValueError("Dash update interval must be positive")
-
+        # Imported here (not at module scope) so that ax is only required when the
+        # callback is actually constructed against an agent.
         from ax.core.parameter import ChoiceParameter, ParameterType, RangeParameter
 
         self._agent = agent
         self._resolution = resolution
         self._update_interval_ms = update_interval_ms
+
         self._lock = threading.Lock()
         self._version = 0
         self._observed: dict[str, list[Any]] = {}
+        self._metric_observations: dict[str, list[tuple[int, float]]] = {}
+        self._pending_trial_indices: list[int] = []
+        self._trial_index = -1
 
-        experiment = agent.ax_client._experiment
-        if experiment is None:
-            raise ValueError("The agent's Ax experiment has not been configured")
-
+        # Extract DOF metadata from the underlying Ax experiment.
+        parameters = agent.ax_client._experiment.parameters
         self._param_info: dict[str, dict[str, Any]] = {}
-        for name, parameter in experiment.parameters.items():
+        for name, parameter in parameters.items():
             if isinstance(parameter, RangeParameter):
                 self._param_info[name] = {
                     "kind": "range",
@@ -2030,60 +2019,114 @@ class SurrogateModelDashCallback(CallbackBase):
             elif isinstance(parameter, ChoiceParameter):
                 self._param_info[name] = {
                     "kind": "choice",
-                    "values": [_py(value) for value in parameter.values],
+                    "values": [_py(v) for v in parameter.values],
                 }
-        self._dof_names = list(self._param_info)
-        if not self._dof_names:
-            raise ValueError("The agent has no plottable degrees of freedom")
+        self._dof_names = list(self._param_info.keys())
 
-        optimization_config = experiment.optimization_config
-        if optimization_config is None:
-            raise ValueError(
-                "The agent's optimization has not been configured; "
-                "no objectives to plot"
-            )
-        self._objective_names = list(optimization_config.objective.metric_names)
-        if not self._objective_names:
-            raise ValueError("The agent has no objectives to plot")
+        # Extract objective (metric) names.
+        opt_config = agent.ax_client._experiment.optimization_config
+        if opt_config is None:
+            raise ValueError("The agent's optimization has not been configured; no objectives to plot.")
+        self._objective_names = list(opt_config.objective.metric_names)
+        self._metric_minimize = self._metric_minimize_map(opt_config)
+
+    def _metric_minimize_map(self, opt_config) -> dict[str, bool]:
+        """Return whether each metric should be minimized when computing best-so-far."""
+        minimize_by_metric: dict[str, bool] = {}
+        objective = opt_config.objective
+
+        objectives = getattr(objective, "objectives", None)
+        if objectives is not None:
+            for obj in objectives:
+                minimize_by_metric[obj.metric.name] = bool(obj.minimize)
+        else:
+            # presumably a single objective
+            minimize_by_metric[objective.metric_names[0]] = bool(objective.minimize)
+        if hasattr(objective, "metric"):
+            minimize_by_metric[objective.metric.name] = bool(objective.minimize)
+
+
+        for metric_name in opt_config.objective.metric_names:
+            minimize_by_metric.setdefault(metric_name, False)
+        return minimize_by_metric
+
+    # -- Bluesky callback hooks ------------------------------------------------
 
     def start(self, doc: RunStart) -> None:
-        """Mark the plot stale at the start of an optimization run."""
+        """Bump the version so the app refreshes at the start of a run."""
+        suggestions = doc.get("blop_suggestions", [])
         with self._lock:
+            self._pending_trial_indices = [int(suggestion["_id"]) for suggestion in suggestions if "_id" in suggestion]
             self._version += 1
 
     def event(self, doc: Event) -> Event:
-        """Record observed DOF values and mark the plot stale."""
+        """Record observed DOF and metric values and bump the version on each new trial."""
         data = doc.get("data", {})
+        trial_indices = self._event_trial_indices(data)
         with self._lock:
             for name in self._dof_names:
                 if name in data:
                     self._observed.setdefault(name, []).extend(_to_list(data[name]))
+            for metric_name in self._objective_names:
+                if metric_name in data:
+                    values = _to_list(data[metric_name])
+                    for trial_index, value in zip(trial_indices, values):
+                        self._metric_observations.setdefault(metric_name, []).append((trial_index, float(value)))
             self._version += 1
         return doc
 
-    def stop(self, doc: RunStop) -> RunStop:
-        """Mark the plot stale at the end of an optimization run."""
+    def _event_trial_indices(self, data: dict[str, Any]) -> list[int]:
+        max_len = 1
+        for name in (*self._dof_names, *self._objective_names):
+            if name in data:
+                max_len = max(max_len, len(_to_list(data[name])))
+
+        explicit_indices = None
+        for key in ("trial_index", "trial_indices"):
+            if key in data:
+                explicit_indices = [int(v) for v in _to_list(data[key])]
+                break
+        if explicit_indices:
+            indices = explicit_indices[:max_len]
+        elif self._pending_trial_indices:
+            indices = self._pending_trial_indices[:max_len]
+        else:
+            indices = list(range(self._trial_index + 1, self._trial_index + 1 + max_len))
+
+        if len(indices) < max_len:
+            start = indices[-1] + 1 if indices else self._trial_index + 1
+            indices.extend(range(start, start + max_len - len(indices)))
+        self._trial_index = max(self._trial_index, max(indices))
+        return indices
+
+    def stop(self, doc: RunStop) -> RunStop | None:
+        """Bump the version at the end of a run."""
         with self._lock:
             self._version += 1
         return doc
 
+    # -- Public accessors ------------------------------------------------------
+
     @property
     def dof_names(self) -> list[str]:
-        """Return the degrees of freedom available for the plot axes."""
+        """The names of the degrees of freedom available for the x/y axes."""
         return list(self._dof_names)
 
     @property
     def objective_names(self) -> list[str]:
-        """Return the objectives available for visualization."""
+        """The names of the objectives available to visualize."""
         return list(self._objective_names)
 
     @property
     def version(self) -> int:
-        """Return the version incremented whenever optimization data changes."""
+        """A monotonically increasing counter that changes when new data arrives."""
         with self._lock:
             return self._version
 
+    # -- Grid / figure construction --------------------------------------------
+
     def _axis_values(self, name: str, resolution: int) -> tuple[np.ndarray, bool]:
+        """Return the sample values for an axis and whether it is discrete."""
         info = self._param_info[name]
         if info["kind"] == "range":
             values = np.linspace(info["lower"], info["upper"], resolution)
@@ -2093,13 +2136,15 @@ class SurrogateModelDashCallback(CallbackBase):
         return np.array(info["values"], dtype=object), True
 
     def _fixed_value(self, name: str) -> Any:
+        """Return the held-fixed value for a DOF not on the x/y axes."""
         info = self._param_info[name]
         if info["kind"] == "range":
-            midpoint = (info["lower"] + info["upper"]) / 2.0
-            return int(round(midpoint)) if info["is_int"] else midpoint
+            mid = (info["lower"] + info["upper"]) / 2.0
+            return int(round(mid)) if info["is_int"] else mid
         return info["values"][0]
 
     def _coerce(self, name: str, value: Any) -> Any:
+        """Coerce a grid value to the DOF's expected Python type."""
         info = self._param_info[name]
         if info["kind"] == "range" and info["is_int"]:
             return int(round(float(value)))
@@ -2112,53 +2157,56 @@ class SurrogateModelDashCallback(CallbackBase):
         objective_name: str,
         resolution: int | None = None,
     ) -> go.Figure:
-        """Build a heatmap of predicted mean with observed trials overlaid."""
+        """Build a Plotly heatmap of the surrogate model's predicted mean.
+
+        Parameters
+        ----------
+        x_name : str
+            The DOF to place on the x axis.
+        y_name : str
+            The DOF to place on the y axis.
+        objective_name : str
+            The objective (metric) whose predicted mean is shown.
+        resolution : int | None, optional
+            Grid resolution per axis. Defaults to the value passed at construction.
+
+        Returns
+        -------
+        plotly.graph_objects.Figure
+            The heatmap figure. If the surrogate model cannot yet make predictions
+            (e.g. too few trials), a figure with an explanatory annotation is returned.
+        """
         import plotly.graph_objects as go
 
-        if x_name not in self._param_info or y_name not in self._param_info:
-            return self._message_figure("Select available degrees of freedom")
-        if objective_name not in self._objective_names:
-            return self._message_figure(
-                f"Objective {objective_name!r} is not configured"
-            )
-        if x_name == y_name:
-            return self._message_figure(
-                "Select two different DOFs for the x and y axes"
-            )
+        resolution = resolution or self._resolution
 
-        plot_resolution = self._resolution if resolution is None else resolution
-        if plot_resolution < 2:
-            raise ValueError("Dash plot resolution must be at least two")
-        x_values, _ = self._axis_values(x_name, plot_resolution)
-        y_values, _ = self._axis_values(y_name, plot_resolution)
+        if x_name == y_name:
+            return self._message_figure("Select two different DOFs for the x and y axes.")
+
+        x_values, _ = self._axis_values(x_name, resolution)
+        y_values, _ = self._axis_values(y_name, resolution)
 
         fixed = {name: self._fixed_value(name) for name in self._dof_names}
         points: list[dict[str, Any]] = []
-        for y_value in y_values:
-            for x_value in x_values:
+        for y_val in y_values:
+            for x_val in x_values:
                 point = dict(fixed)
-                point[x_name] = self._coerce(x_name, x_value)
-                point[y_name] = self._coerce(y_name, y_value)
+                point[x_name] = self._coerce(x_name, x_val)
+                point[y_name] = self._coerce(y_name, y_val)
                 points.append(point)
 
         try:
             predictions = self._agent.ax_client.predict(points)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - surface any model-not-ready error to the UI
             return self._message_figure(
-                "Surrogate model is not ready to predict yet.<br>"
-                "Run more trials to continue.<br><br>"
-                f"({exc})"
+                f"Surrogate model is not ready to predict yet.<br>Run more trials to continue.<br><br>({exc})"
             )
 
         try:
-            z = np.array(
-                [prediction[objective_name][0] for prediction in predictions],
-                dtype=float,
-            )
+            z = np.array([pred[objective_name][0] for pred in predictions], dtype=float)
         except KeyError:
-            return self._message_figure(
-                f"Objective {objective_name!r} is not available in model predictions"
-            )
+            return self._message_figure(f"Objective '{objective_name}' is not available in the model predictions.")
+
         z = z.reshape(len(y_values), len(x_values))
 
         figure = go.Figure(
@@ -2168,37 +2216,29 @@ class SurrogateModelDashCallback(CallbackBase):
                 z=z,
                 colorscale="Viridis",
                 colorbar={"title": objective_name},
-                hovertemplate=(
-                    f"{x_name}: %{{x}}<br>{y_name}: %{{y}}<br>"
-                    f"{objective_name}: %{{z:.4g}}<extra></extra>"
-                ),
+                hovertemplate=f"{x_name}: %{{x}}<br>{y_name}: %{{y}}<br>{objective_name}: %{{z:.4g}}<extra></extra>",
             )
         )
 
+        # Overlay observed trials, if any.
         with self._lock:
             observed_x = list(self._observed.get(x_name, []))
             observed_y = list(self._observed.get(y_name, []))
-        observed_count = min(len(observed_x), len(observed_y))
-        if observed_count:
+        n_observed = min(len(observed_x), len(observed_y))
+        if n_observed:
             figure.add_trace(
                 go.Scatter(
-                    x=observed_x[:observed_count],
-                    y=observed_y[:observed_count],
+                    x=observed_x[:n_observed],
+                    y=observed_y[:n_observed],
                     mode="markers",
-                    marker={
-                        "color": "white",
-                        "size": 7,
-                        "line": {"color": "black", "width": 1},
-                    },
+                    marker={"color": "white", "size": 7, "line": {"color": "black", "width": 1}},
                     name="observed",
-                    hovertemplate=(
-                        f"{x_name}: %{{x}}<br>{y_name}: %{{y}}<extra>observed</extra>"
-                    ),
+                    hovertemplate=f"{x_name}: %{{x}}<br>{y_name}: %{{y}}<extra>observed</extra>",
                 )
             )
 
         figure.update_layout(
-            title=f"Surrogate mean of {objective_name!r}",
+            title=f"Surrogate mean of '{objective_name}'",
             xaxis_title=x_name,
             yaxis_title=y_name,
             margin={"l": 60, "r": 30, "t": 50, "b": 50},
@@ -2206,20 +2246,99 @@ class SurrogateModelDashCallback(CallbackBase):
         )
         return figure
 
+    def _best_observed_data_from_ax(self, metric_name: str) -> tuple[list[tuple[int, float]], bool] | None:
+        try:
+            df = self._agent.ax_client._experiment.lookup_data().df
+        except Exception:
+            return None
+
+        if df is None or df.empty or not {"metric_name", "mean", "trial_index"}.issubset(df.columns):
+            return None
+
+        metric_df = df[df["metric_name"] == metric_name]
+        if metric_df.empty:
+            return None
+
+        minimize = self._metric_minimize.get(metric_name, False)
+        observations = []
+        for trial_index in sorted(metric_df["trial_index"].dropna().unique()):
+            values = metric_df.loc[metric_df["trial_index"] == trial_index, "mean"].dropna()
+            if values.empty:
+                continue
+            value = values.min() if minimize else values.max()
+            observations.append((int(trial_index), float(value)))
+        return observations, minimize
+
+    def compute_best_observed_figure(self, metric_name: str) -> go.Figure:
+        """Build a trial-index trace of observed values and best observed value so far."""
+        import plotly.graph_objects as go
+
+        ax_data = self._best_observed_data_from_ax(metric_name)
+        if ax_data is None:
+            with self._lock:
+                observations = list(self._metric_observations.get(metric_name, []))
+                minimize = self._metric_minimize.get(metric_name, False)
+        else:
+            observations, minimize = ax_data
+
+        if not observations:
+            return self._message_figure(f"No observations recorded for metric '{metric_name}' yet.")
+
+        observations.sort(key=lambda item: item[0])
+        trial_indices = [trial_index for trial_index, _value in observations]
+        values = [value for _trial_index, value in observations]
+
+        running_best = []
+        best = None
+        for value in values:
+            if best is None:
+                best = value
+            elif minimize:
+                best = min(best, value)
+            else:
+                best = max(best, value)
+            running_best.append(best)
+
+        direction = "minimum" if minimize else "maximum"
+        figure = go.Figure()
+        figure.add_trace(
+            go.Scatter(
+                x=trial_indices,
+                y=values,
+                mode="markers",
+                name="observed value",
+                marker={"color": "rgba(128, 90, 213, 0.75)", "size": 8},
+                hovertemplate=f"trial: %{{x}}<br>{metric_name}: %{{y:.4g}}<extra>observed</extra>",
+            )
+        )
+        figure.add_trace(
+            go.Scatter(
+                x=trial_indices,
+                y=running_best,
+                mode="lines+markers",
+                line={"color": "#1f77b4", "shape": "hv", "width": 2},
+                marker={"size": 5},
+                name=f"best observed {direction}",
+                hovertemplate=f"trial: %{{x}}<br>best {metric_name}: %{{y:.4g}}<extra></extra>",
+            )
+        )
+        figure.update_layout(
+            title=f"Best observed '{metric_name}' by trial",
+            xaxis_title="Trial index",
+            yaxis_title=metric_name,
+            margin={"l": 60, "r": 30, "t": 50, "b": 50},
+            template="plotly_white",
+            legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
+        )
+        return figure
+
     @staticmethod
     def _message_figure(message: str) -> go.Figure:
+        """Return an empty figure displaying a centered message."""
         import plotly.graph_objects as go
 
         figure = go.Figure()
-        figure.add_annotation(
-            text=message,
-            showarrow=False,
-            font={"size": 14},
-            xref="paper",
-            yref="paper",
-            x=0.5,
-            y=0.5,
-        )
+        figure.add_annotation(text=message, showarrow=False, font={"size": 14}, xref="paper", yref="paper", x=0.5, y=0.5)
         figure.update_layout(
             xaxis={"visible": False},
             yaxis={"visible": False},
@@ -2228,14 +2347,26 @@ class SurrogateModelDashCallback(CallbackBase):
         )
         return figure
 
+    # -- Dash app --------------------------------------------------------------
+
     def build_app(self, **dash_kwargs: Any):
-        """Build a Dash app; importing Dash is deferred until this call."""
-        from dash import Dash, Input, Output, State, dcc, html
+        """Build and return a Dash app that renders the live surrogate heatmap.
+
+        Parameters
+        ----------
+        **dash_kwargs : Any
+            Additional keyword arguments forwarded to :class:`dash.Dash`.
+
+        Returns
+        -------
+        dash.Dash
+            The configured Dash application. Call ``app.run(...)`` to start it, or use
+            :meth:`serve` for convenience.
+        """
+        from dash import Dash, Input, Output, dcc, html
 
         default_x = self._dof_names[0]
-        default_y = (
-            self._dof_names[1] if len(self._dof_names) > 1 else self._dof_names[0]
-        )
+        default_y = self._dof_names[1] if len(self._dof_names) > 1 else self._dof_names[0]
         default_objective = self._objective_names[0]
 
         app = Dash(__name__, **dash_kwargs)
@@ -2248,10 +2379,7 @@ class SurrogateModelDashCallback(CallbackBase):
                             [
                                 html.Label("X axis"),
                                 dcc.Dropdown(
-                                    options=[
-                                        {"label": name, "value": name}
-                                        for name in self._dof_names
-                                    ],
+                                    options=[{"label": n, "value": n} for n in self._dof_names],
                                     value=default_x,
                                     id="surrogate-x-dropdown",
                                     clearable=False,
@@ -2263,10 +2391,7 @@ class SurrogateModelDashCallback(CallbackBase):
                             [
                                 html.Label("Y axis"),
                                 dcc.Dropdown(
-                                    options=[
-                                        {"label": name, "value": name}
-                                        for name in self._dof_names
-                                    ],
+                                    options=[{"label": n, "value": n} for n in self._dof_names],
                                     value=default_y,
                                     id="surrogate-y-dropdown",
                                     clearable=False,
@@ -2278,10 +2403,7 @@ class SurrogateModelDashCallback(CallbackBase):
                             [
                                 html.Label("Objective"),
                                 dcc.Dropdown(
-                                    options=[
-                                        {"label": name, "value": name}
-                                        for name in self._objective_names
-                                    ],
+                                    options=[{"label": n, "value": n} for n in self._objective_names],
                                     value=default_objective,
                                     id="surrogate-objective-dropdown",
                                     clearable=False,
@@ -2289,58 +2411,76 @@ class SurrogateModelDashCallback(CallbackBase):
                             ],
                             style={"flex": "1", "padding": "0 8px"},
                         ),
+                        html.Div(
+                            [
+                                html.Label("Best-observed metric"),
+                                dcc.Dropdown(
+                                    options=[{"label": n, "value": n} for n in self._objective_names],
+                                    value=default_objective,
+                                    id="best-observed-metric-dropdown",
+                                    clearable=False,
+                                ),
+                            ],
+                            style={"flex": "1", "padding": "0 8px"},
+                        ),
                     ],
-                    style={
-                        "display": "flex",
-                        "maxWidth": "900px",
-                        "margin": "0 auto",
-                    },
+                    style={"display": "flex", "maxWidth": "1100px", "margin": "0 auto"},
                 ),
-                dcc.Graph(id="surrogate-graph", style={"height": "70vh"}),
-                dcc.Interval(
-                    id="surrogate-interval",
-                    interval=self._update_interval_ms,
-                    n_intervals=0,
-                ),
+                dcc.Graph(id="surrogate-graph", style={"height": "58vh"}),
+                dcc.Graph(id="best-observed-graph", style={"height": "34vh"}),
+                dcc.Interval(id="surrogate-interval", interval=self._update_interval_ms, n_intervals=0),
                 dcc.Store(id="surrogate-rendered-version", data=-1),
             ]
         )
 
         @app.callback(
             Output("surrogate-graph", "figure"),
+            Output("best-observed-graph", "figure"),
             Output("surrogate-rendered-version", "data"),
             Input("surrogate-x-dropdown", "value"),
             Input("surrogate-y-dropdown", "value"),
             Input("surrogate-objective-dropdown", "value"),
+            Input("best-observed-metric-dropdown", "value"),
             Input("surrogate-interval", "n_intervals"),
-            State("surrogate-rendered-version", "data"),
+            Input("surrogate-rendered-version", "data"),
         )
-        def _update_graph(
-            x_name,
-            y_name,
-            objective_name,
-            _n_intervals,
-            rendered_version,
-        ):
+        def _update_graph(x_name, y_name, objective_name, best_metric_name, _n_intervals, rendered_version):
             from dash import ctx, no_update
 
             current_version = self.version
+            # On a timer tick, only recompute when new data has arrived. Dropdown
+            # changes always force a recompute.
             triggered_by_timer = ctx.triggered_id == "surrogate-interval"
             if triggered_by_timer and current_version == rendered_version:
-                return no_update, no_update
+                return no_update, no_update, no_update
 
             figure = self.compute_figure(x_name, y_name, objective_name)
-            return figure, current_version
+            best_observed_figure = self.compute_best_observed_figure(best_metric_name)
+            return figure, best_observed_figure, current_version
 
         return app
 
-    def serve(
-        self,
-        host: str = "127.0.0.1",
-        port: int = 8050,
-        debug: bool = False,
-        **run_kwargs: Any,
-    ) -> None:
-        """Build the Dash app and run its blocking development server."""
+    def serve(self, host: str = "127.0.0.1", port: int = 8050, debug: bool = False, **run_kwargs: Any) -> None:
+        """Build the Dash app and start the development server (blocking).
+
+        Parameters
+        ----------
+        host : str, optional
+            The host interface to bind to. Default is ``"127.0.0.1"``.
+        port : int, optional
+            The port to serve on. Default is 8050.
+        debug : bool, optional
+            Whether to run Dash in debug mode. Default is False.
+        **run_kwargs : Any
+            Additional keyword arguments forwarded to ``dash.Dash.run``.
+
+        Notes
+        -----
+        This call blocks. To run alongside a Bluesky ``RunEngine`` in the same process,
+        start it in a background thread, e.g.::
+
+            import threading
+            threading.Thread(target=viz.serve, kwargs={"port": 8050}, daemon=True).start()
+        """
         app = self.build_app()
         app.run(host=host, port=port, debug=debug, **run_kwargs)
