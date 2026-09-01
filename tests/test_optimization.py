@@ -4,6 +4,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from blop.ax import Objective, RangeDOF
+from ax import RangeParameterConfig
+from blop.ax.objective import to_ax_objective_str
+from blop.ax.optimizer import AxOptimizer
 from blop.plans import default_acquire
 from bluesky import RunEngine
 from bluesky.plan_stubs import null
@@ -16,17 +19,21 @@ import BMM.optimization as optimization_module
 from BMM.optimization import (
     ENERGY_ALIGNMENT_PROFILES,
     PER_ENERGY_ALIGNMENT,
+    AlignmentCostConfig,
     BeamEvaluationConfig,
     EnergyAlignmentResources,
     ImageEvaluation,
     SurrogateModelDashCallback,
+    UnusableBeamError,
     _optimization_metadata,
     _full_width_half_maximum,
     _compute_processed_image_stats,
     _image_processing_stages,
     _preprocess_image,
+    _resolve_search_space,
     _write_energy_map,
     acquire_target_position,
+    compute_alignment_cost,
     compute_image_stats,
     compute_multi_energy_alignment_metrics,
     compute_multi_energy_alignment_metrics_from_catalog,
@@ -102,11 +109,16 @@ def make_profile_and_resources():
                 ),
             ),
             evaluation=parameters,
-            optimization=replace(PER_ENERGY_ALIGNMENT.optimization, iterations=2),
+            search_half_widths=None,
+            optimization=replace(
+                PER_ENERGY_ALIGNMENT.optimization,
+                iterations=2,
+                initialization_budget=1,
+            ),
         )
         resources = EnergyAlignmentResources(
             catalog=(
-                {"reference": run_with_fields(image=gaussian_image())}
+                {"reference": run_with_fields(image=gaussian_image(), motor=0.25)}
                 if catalog is None
                 else catalog
             ),
@@ -396,6 +408,8 @@ def test_multi_energy_alignment_metrics_from_catalog_reads_existing_runs():
         "centroid_y",
         "centroid_distance",
         "intensity",
+        "centroid_x_distance",
+        "alignment_cost",
     ],
 )
 def test_profile_accepts_image_evaluation_outcomes(outcome):
@@ -417,6 +431,16 @@ def test_profile_rejects_unsupported_evaluation_outcome():
         )
 
 
+def test_profile_rejects_unknown_search_half_width_dof():
+    with pytest.raises(ValueError, match="unknown"):
+        replace(PER_ENERGY_ALIGNMENT, search_half_widths={"not_a_dof": 1.0})
+
+
+def test_profile_rejects_non_positive_search_half_width():
+    with pytest.raises(ValueError, match="must all be positive"):
+        replace(PER_ENERGY_ALIGNMENT, search_half_widths={"dcm_roll": 0.0})
+
+
 def make_image_evaluator():
     parameters = BeamEvaluationConfig(
         image_field="image",
@@ -424,7 +448,15 @@ def make_image_evaluator():
         x_crop=(4, 37),
     )
     catalog = {"reference": run_with_fields(image=gaussian_image())}
-    return ImageEvaluation(catalog, "reference", parameters), catalog
+    evaluator = ImageEvaluation(
+        catalog,
+        "reference",
+        parameters,
+        cost=AlignmentCostConfig(),
+        nominal_dof_values={"motor": 0.0},
+        dof_half_ranges={"motor": 1.0},
+    )
+    return evaluator, catalog
 
 
 def test_image_evaluation_pairs_acquisition_metadata_with_suggestions():
@@ -445,7 +477,7 @@ def test_image_evaluation_pairs_acquisition_metadata_with_suggestions():
 
     outcomes = evaluator(
         "acquired",
-        [{"_id": "first"}, {"_id": "second"}],
+        [{"_id": "first", "motor": 0.1}, {"_id": "second", "motor": -0.2}],
     )
 
     assert [outcome["_id"] for outcome in outcomes] == ["first", "second"]
@@ -459,7 +491,9 @@ def test_image_evaluation_pairs_acquisition_metadata_with_suggestions():
         "centroid_x",
         "centroid_y",
         "centroid_distance",
+        "centroid_x_distance",
         "intensity",
+        "alignment_cost",
     }
     assert set(outcomes[0]) == {"_id", *metric_names}
     assert all(
@@ -467,6 +501,7 @@ def test_image_evaluation_pairs_acquisition_metadata_with_suggestions():
         for outcome in outcomes
         for metric in metric_names
     )
+    assert all(np.isfinite(outcome["alignment_cost"]) for outcome in outcomes)
     assert outcomes[0]["centroid_distance"] == pytest.approx(2, abs=0.05)
     assert outcomes[1]["centroid_distance"] == pytest.approx(2, abs=0.05)
     assert outcomes[0]["fwhm_y"] > outcomes[1]["fwhm_y"]
@@ -504,7 +539,7 @@ def test_image_evaluation_accepts_one_scalar_ion_reading(intensity_data):
         i0=intensity_data,
     )
 
-    outcomes = evaluator("acquired", [{"_id": "only"}])
+    outcomes = evaluator("acquired", [{"_id": "only", "motor": 0.0}])
 
     assert outcomes[0]["intensity"] == 1_250_000.0
 
@@ -612,7 +647,6 @@ def test_energy_alignment_debug_expands_outer_run_and_renders_per_energy_grid(
 
     figure = show_energy_alignment_debug(
         "outer",
-        pixel_size_um=(2.0, 3.0),
         profile=profile,
         resources=resources,
     )
@@ -658,10 +692,10 @@ def test_energy_alignment_debug_expands_outer_run_and_renders_per_energy_grid(
             displayed.sum(axis=1)
         )
         assert x_axes[0].lines[0].get_xdata() == pytest.approx(
-            np.arange(first_images.shape[2]) * 2.0
+            np.arange(first_images.shape[2])
         )
         assert y_axes[0].lines[0].get_ydata() == pytest.approx(
-            np.arange(first_images.shape[1]) * 3.0
+            np.arange(first_images.shape[1])
         )
         assert len({axis.images[0].get_clim() for axis in image_axes[:3]}) == 1
 
@@ -669,8 +703,8 @@ def test_energy_alignment_debug_expands_outer_run_and_renders_per_energy_grid(
             text.get_text() for text in image_axes[-3].texts
         )
         stats = compute_image_stats(first_images[0], profile.evaluation)
-        assert f"{stats.fwhm_x * 2.0:.3g} µm" in final_text
-        assert f"{stats.fwhm_y * 3.0:.3g} µm" in final_text
+        assert f"FWHM x = {stats.fwhm_x:.3g} px" in final_text
+        assert f"FWHM y = {stats.fwhm_y:.3g} px" in final_text
         assert "centroid x" in final_text and "px" in final_text
         assert any(
             "threshold =" in text.get_text()
@@ -693,7 +727,7 @@ def test_energy_alignment_debug_expands_outer_run_and_renders_per_energy_grid(
         assert "per-energy" in title and f"profile={profile.name}" in title
         assert first_uid in title and second_uid in title
         assert "reference-full-uid" in title
-        assert "x=2 µm/px, y=3 µm/px" in title
+        assert "µm" not in title
         assert outer["primary"]["data"]["acquisition_uid"].read_count == 1
         assert first["primary"]["data"]["image"].read_count == 1
         assert second["primary"]["data"]["image"].read_count == 1
@@ -752,7 +786,6 @@ def test_energy_alignment_debug_overlays_multiple_per_energy_runs(
     profile, resources = make_profile_and_resources(catalog=catalog)
     figure = show_energy_alignment_debug(
         outer_uids,
-        pixel_size_um=(2.0, 3.0),
         profile=profile,
         resources=resources,
     )
@@ -843,7 +876,6 @@ def test_energy_alignment_debug_rejects_invalid_inputs(
     make_profile_and_resources,
 ):
     image = gaussian_image()
-    pixel_size_um = (2.0, 3.0)
     uids = "direct"
     catalog = {
         "direct": run_with_fields(
@@ -929,7 +961,6 @@ def test_energy_alignment_debug_rejects_invalid_inputs(
         with pytest.raises(ValueError, match=message):
             show_energy_alignment_debug(
                 uids,
-                pixel_size_um=pixel_size_um,
                 profile=profile,
                 resources=resources,
             )
@@ -1010,7 +1041,14 @@ def test_metadata_uses_profile_and_live_resources(make_profile_and_resources):
     assert agent_metadata["iterations"] == 2
     assert agent_metadata["dofs"][0]["name"] == "motor"
     assert agent_metadata["sensors"] == ["camera"]
-    assert agent_metadata["objectives"] == ["centroid_distance"]
+    assert agent_metadata["objectives"] == ["alignment_cost"]
+    assert agent_metadata["outcome_constraints"] == ["intensity >= 0.5 * baseline"]
+    assert agent_metadata["cost"] == {
+        "position_tolerance_px": 5.0,
+        "focus_weight": 0.5,
+        "dof_weight": 0.1,
+    }
+    assert agent_metadata["search_half_widths"] is None
 
 
 def test_dash_callback_builds_app(make_profile_and_resources):
@@ -1024,11 +1062,11 @@ def test_dash_callback_builds_app(make_profile_and_resources):
 
     callback = SurrogateModelDashCallback(agent)
     callback.event({"data": {"motor": 0.25}})
-    figure = callback.compute_figure("motor", "motor", "centroid_distance")
+    figure = callback.compute_figure("motor", "motor", "alignment_cost")
     app = callback.build_app()
 
     assert callback.dof_names == ["motor"]
-    assert callback.objective_names == ["centroid_distance"]
+    assert callback.objective_names == ["alignment_cost"]
     assert callback.version == 1
     assert "two different DOFs" in figure.layout.annotations[0].text
     assert app.layout is not None
@@ -1049,11 +1087,18 @@ def test_search_captures_and_reuses_target_reference(
     make_profile_and_resources,
     monkeypatch,
 ):
+    agent_events = []
+
     class FakeAgent:
         def __init__(self, acquisition_plan):
             self.acquisition_plan = acquisition_plan
 
+        def acquire_baseline(self, nominal_dof_values):
+            agent_events.append(("baseline", dict(nominal_dof_values)))
+            yield from null()
+
         def optimize(self, iterations):
+            agent_events.append(("optimize", iterations))
             yield from self.acquisition_plan(
                 [{"_id": "test", "motor": 0.0}],
                 [resources.actuators["motor"]],
@@ -1064,7 +1109,11 @@ def test_search_captures_and_reuses_target_reference(
             return [(0, {"motor": 0.0}, {"centroid_distance": (0.0, 0.0)})]
 
     reference_image = Field(gaussian_image())
-    catalog = {"target": {"primary": {"data": {"image": reference_image}}}}
+    catalog = {
+        "target": {
+            "primary": {"data": {"image": reference_image, "motor": Field(0.25)}}
+        }
+    }
     lifecycle = []
     acquired_readables = []
 
@@ -1144,6 +1193,13 @@ def test_search_captures_and_reuses_target_reference(
     assert len(evaluation_functions) == 2
     assert evaluation_functions[0] is evaluation_functions[1]
     assert reference_image.read_count == 1
+    assert [event[0] for event in agent_events] == [
+        "baseline",
+        "optimize",
+        "baseline",
+        "optimize",
+    ]
+    assert agent_events[0][1] == {"motor": 0.25}
 
 
 def test_search_uses_supplied_target_reference(
@@ -1151,6 +1207,9 @@ def test_search_uses_supplied_target_reference(
     monkeypatch,
 ):
     class FakeAgent:
+        def acquire_baseline(self, nominal_dof_values):
+            yield from null()
+
         def optimize(self, iterations):
             yield from null()
 
@@ -1226,7 +1285,7 @@ def test_search_restores_prompt_after_failure(
         raise RuntimeError("energy change failed")
 
     profile, resources = make_profile_and_resources(
-        catalog={"target": run_with_fields(image=gaussian_image())},
+        catalog={"target": run_with_fields(image=gaussian_image(), motor=0.25)},
         change_edge_plan=failing_change_edge,
     )
     prompt_state = resources.prompt_state
@@ -1274,3 +1333,236 @@ def test_search_with_no_energies_skips_target_acquisition(
 
     assert result.plan_result == {}
     assert resources.prompt_state.prompt is original_prompt
+
+
+def test_compute_alignment_cost_matches_reference_formula():
+    cost = compute_alignment_cost(
+        centroid_x=105.0,
+        reference_centroid_x=100.0,
+        fwhm_x=10.0,
+        reference_fwhm_x=10.0,
+        dof_values={"motor": 0.5},
+        nominal_dof_values={"motor": 0.5},
+        dof_half_ranges={"motor": 10.0},
+        config=AlignmentCostConfig(),
+    )
+    # (5 / 5) ** 2 + 0.5 * (10 / 10) + 0.1 * 0 == 1.5
+    assert cost == pytest.approx(1.5)
+
+
+def test_compute_alignment_cost_increases_with_offset_and_dof_deviation():
+    fixed = dict(
+        reference_centroid_x=100.0,
+        fwhm_x=10.0,
+        reference_fwhm_x=10.0,
+        nominal_dof_values={"motor": 0.0},
+        dof_half_ranges={"motor": 10.0},
+        config=AlignmentCostConfig(),
+    )
+    aligned = compute_alignment_cost(
+        centroid_x=100.0, dof_values={"motor": 0.0}, **fixed
+    )
+    off_position = compute_alignment_cost(
+        centroid_x=110.0, dof_values={"motor": 0.0}, **fixed
+    )
+    off_nominal = compute_alignment_cost(
+        centroid_x=100.0, dof_values={"motor": 8.0}, **fixed
+    )
+    assert off_position > aligned
+    assert off_nominal > aligned
+
+
+def test_unusable_beam_error_subclasses_value_error():
+    assert issubclass(UnusableBeamError, ValueError)
+
+
+@pytest.mark.parametrize(
+    ("image", "parameters"),
+    [
+        pytest.param(
+            np.ones((31, 41)),
+            BeamEvaluationConfig("image", "i0", (8, 29), (4, 21)),
+            id="constant-image",
+        ),
+        pytest.param(
+            gaussian_image(center_x=8),
+            BeamEvaluationConfig("image", "i0", (8, 29), (4, 21)),
+            id="beam-at-crop-boundary",
+        ),
+    ],
+)
+def test_compute_image_stats_raises_unusable_beam_error(image, parameters):
+    with pytest.raises(UnusableBeamError):
+        compute_image_stats(image, parameters)
+
+
+@pytest.mark.parametrize(
+    ("image", "parameters"),
+    [
+        pytest.param(
+            gaussian_image(),
+            BeamEvaluationConfig("image", "i0", (8, 8), (4, 21)),
+            id="empty-x-crop",
+        ),
+        pytest.param(
+            np.full((31, 41), np.nan),
+            BeamEvaluationConfig("image", "i0", (8, 29), (4, 21)),
+            id="non-finite-pixels",
+        ),
+    ],
+)
+def test_structural_errors_are_not_unusable_beam_errors(image, parameters):
+    with pytest.raises(ValueError) as excinfo:
+        compute_image_stats(image, parameters)
+    assert not isinstance(excinfo.value, UnusableBeamError)
+
+
+def test_image_evaluation_reports_unusable_frame_as_partial_observation():
+    evaluator, catalog = make_image_evaluator()
+    catalog["acquired"] = run_with_fields(
+        image=np.ones((31, 41))[np.newaxis, ...],
+        i0=np.array([1_250_000.0]),
+    )
+
+    [outcome] = evaluator("acquired", [{"_id": "only", "motor": 0.3}])
+
+    assert outcome["intensity"] == 1_250_000.0
+    assert np.isnan(outcome["alignment_cost"])
+    assert np.isnan(outcome["centroid_distance"])
+    assert np.isnan(outcome["centroid_x_distance"])
+    assert np.isnan(outcome["fwhm_x"])
+    assert set(outcome) == {
+        "_id",
+        "fwhm_x",
+        "fwhm_y",
+        "centroid_x",
+        "centroid_y",
+        "centroid_distance",
+        "centroid_x_distance",
+        "intensity",
+        "alignment_cost",
+    }
+
+
+@pytest.mark.parametrize(
+    ("nominal", "half_width", "expected_bounds"),
+    [
+        (0.4, 0.5, (-0.1, 0.9)),
+        (0.9, 0.5, (0.4, 1.0)),
+        (-0.9, 0.5, (-1.0, -0.4)),
+    ],
+    ids=["interior", "clamped-upper", "clamped-lower"],
+)
+def test_resolve_search_space_recenters_and_clamps(
+    make_profile_and_resources, nominal, half_width, expected_bounds
+):
+    profile, resources = make_profile_and_resources(
+        catalog={"target": run_with_fields(image=gaussian_image(), motor=nominal)},
+    )
+    profile = replace(profile, search_half_widths={"motor": half_width})
+
+    resolved_dofs, nominal_values, half_ranges = _resolve_search_space(
+        resources.catalog, "target", resources, profile
+    )
+
+    assert nominal_values == {"motor": pytest.approx(nominal)}
+    assert resolved_dofs[0].bounds == pytest.approx(expected_bounds)
+    assert half_ranges["motor"] == pytest.approx(
+        (expected_bounds[1] - expected_bounds[0]) / 2
+    )
+
+
+def test_resolve_search_space_keeps_bounds_without_half_widths(
+    make_profile_and_resources,
+):
+    profile, resources = make_profile_and_resources(
+        catalog={"target": run_with_fields(image=gaussian_image(), motor=0.4)},
+    )
+
+    resolved_dofs, _, half_ranges = _resolve_search_space(
+        resources.catalog, "target", resources, profile
+    )
+
+    assert resolved_dofs[0].bounds == (-1, 1)
+    assert half_ranges["motor"] == pytest.approx(1.0)
+
+
+def test_agent_uses_relative_intensity_constraint(make_profile_and_resources):
+    profile, resources = make_profile_and_resources()
+    agent = make_energy_alignment_agent(
+        "reference",
+        profile=profile,
+        resources=resources,
+        subscribe_to_dash=False,
+    )
+
+    optimization_config = agent.ax_client._experiment.optimization_config
+    assert optimization_config.objective.metric_names == ["alignment_cost"]
+    assert optimization_config.objective.minimize is True
+    [constraint] = optimization_config.outcome_constraints
+    assert constraint.metric_names == ["intensity"]
+    assert constraint.relative is True
+    assert constraint.expression == "intensity >= 0.5 * baseline"
+
+
+def test_agent_ingest_baseline_sets_status_quo(make_profile_and_resources):
+    profile, resources = make_profile_and_resources()
+    agent = make_energy_alignment_agent(
+        "reference",
+        profile=profile,
+        resources=resources,
+        subscribe_to_dash=False,
+    )
+
+    agent.ingest(
+        [
+            {
+                "motor": 0.25,
+                "alignment_cost": 0.5,
+                "intensity": 1_000_000.0,
+                "_id": "baseline",
+            }
+        ]
+    )
+
+    summary = agent.ax_client.summarize()
+    assert "baseline" in set(summary["arm_name"])
+
+
+def test_nan_objective_dropped_and_baseline_wins_best_point():
+    # Pins the Ax semantics in §3.3: a NaN objective mean is a missing
+    # measurement (dropped from the objective GP), the finite intensity still
+    # drives the relative constraint, and best-point selection returns the
+    # feasible baseline, never the unusable NaN trial, without raising.
+    optimizer = AxOptimizer(
+        parameters=[
+            RangeParameterConfig(
+                name="motor", bounds=(-1.0, 1.0), parameter_type="float"
+            )
+        ],
+        objective=to_ax_objective_str(PER_ENERGY_ALIGNMENT.objectives),
+        outcome_constraints=[
+            str(constraint)
+            for constraint in PER_ENERGY_ALIGNMENT.outcome_constraints
+        ],
+    )
+    optimizer.ingest(
+        [
+            {
+                "motor": 0.25,
+                "alignment_cost": 0.5,
+                "intensity": 1_000_000.0,
+                "_id": "baseline",
+            }
+        ]
+    )
+    optimizer.ingest(
+        [{"motor": 0.9, "alignment_cost": float("nan"), "intensity": 10.0}]
+    )
+
+    best_points = optimizer.get_best_points()
+
+    assert len(best_points) == 1
+    _, parameters, metrics = best_points[0]
+    assert parameters["motor"] == pytest.approx(0.25)
+    assert metrics["alignment_cost"][0] == pytest.approx(0.5)

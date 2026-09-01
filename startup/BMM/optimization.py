@@ -15,7 +15,7 @@ internal dataflow are trusted as-is.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from functools import partial
 from numbers import Real
 from pathlib import Path
@@ -108,8 +108,26 @@ class EnergyChangeConfig:
     mirror: bool = False
 
 
+@dataclass(frozen=True)
+class AlignmentCostConfig:
+    """Weights for the scalar per-energy alignment objective (`compute_alignment_cost`)."""
+
+    position_tolerance_px: float = 5.0
+    focus_weight: float = 0.5
+    dof_weight: float = 0.1
+
+
 _IMAGE_EVALUATION_OUTCOMES = frozenset(
-    {"fwhm_x", "fwhm_y", "centroid_x", "centroid_y", "centroid_distance", "intensity"}
+    {
+        "fwhm_x",
+        "fwhm_y",
+        "centroid_x",
+        "centroid_y",
+        "centroid_distance",
+        "centroid_x_distance",
+        "intensity",
+        "alignment_cost",
+    }
 )
 
 
@@ -150,6 +168,8 @@ class EnergyAlignmentProfile:
     evaluation: BeamEvaluationConfig
     optimization: OptimizationConfig
     energy_change: EnergyChangeConfig = EnergyChangeConfig()
+    cost: AlignmentCostConfig = AlignmentCostConfig()
+    search_half_widths: Mapping[str, float] | None = None
 
     def __post_init__(self) -> None:
         if not self.sensors:
@@ -182,6 +202,18 @@ class EnergyAlignmentProfile:
             raise ValueError(
                 "Initialization budget must be between zero and the iteration count"
             )
+        if self.search_half_widths is not None:
+            dof_names = {dof.parameter_name for dof in self.dofs}
+            unknown = set(self.search_half_widths) - dof_names
+            if unknown:
+                raise ValueError(
+                    f"Profile {self.name!r} search_half_widths references unknown "
+                    f"DOFs: {sorted(unknown)!r}"
+                )
+            if any(half <= 0 for half in self.search_half_widths.values()):
+                raise ValueError(
+                    f"Profile {self.name!r} search_half_widths must all be positive"
+                )
 
 
 _ALIGNMENT_DOFS = (
@@ -213,18 +245,22 @@ PER_ENERGY_ALIGNMENT = EnergyAlignmentProfile(
     name="per-energy-alignment",
     sensors=("camera", "i0"),
     dofs=_ALIGNMENT_DOFS,
-    objectives=(Objective(name="centroid_distance", minimize=True),),
+    objectives=(Objective(name="alignment_cost", minimize=True),),
     outcome_constraints=(
         OutcomeConstraint(
-            "x >= 1000000",
-            x=IMetric(name="intensity"),
+            "i >= 0.5 * baseline",
+            i=IMetric(name="intensity"),
         ),
     ),
     evaluation=_BEAM_EVALUATION,
     optimization=OptimizationConfig(
         iterations=20,
-        initialization_budget=1,
+        initialization_budget=5,
         initialize_with_center=False,
+    ),
+    cost=AlignmentCostConfig(),
+    search_half_widths=MappingProxyType(
+        {"dcm_roll": 1.0, "m2_yaw": 0.5, "m2_lateral": 0.5}
     ),
 )
 
@@ -268,6 +304,15 @@ class _ImageProcessingStage:
     x_coordinates: np.ndarray
     y_coordinates: np.ndarray
     threshold: float | None = None
+
+
+class UnusableBeamError(ValueError):
+    """Raised when a camera frame carries no usable beam signal.
+
+    Subclasses ``ValueError`` so existing beam-quality error handling keeps
+    working; :class:`ImageEvaluation` catches it to reject a single frame as a
+    partial observation instead of aborting the per-energy optimization.
+    """
 
 
 def _image_processing_stages(
@@ -340,7 +385,7 @@ def _image_processing_stages(
     threshold = float(threshold_otsu(filtered))
     thresholded = np.where(filtered > threshold, filtered, 0.0)
     if not np.any(thresholded > 0):
-        raise ValueError("Image has no positive signal after Otsu thresholding")
+        raise UnusableBeamError("Image has no positive signal after Otsu thresholding")
     stages.append(
         _ImageProcessingStage(
             "Otsu threshold",
@@ -393,13 +438,13 @@ def _full_width_half_maximum(
     peak_index = int(np.argmax(profile))
     peak = profile[peak_index]
     if peak <= 0:
-        raise ValueError(error)
+        raise UnusableBeamError(error)
     half_maximum = peak / 2
 
     left_below = np.flatnonzero(profile[:peak_index] < half_maximum)
     right_below = np.flatnonzero(profile[peak_index + 1 :] < half_maximum)
     if left_below.size == 0 or right_below.size == 0:
-        raise ValueError(error)
+        raise UnusableBeamError(error)
 
     left_outer = int(left_below[-1])
     left_inner = left_outer + 1
@@ -435,7 +480,7 @@ def _compute_processed_image_stats(
     y_profile = image.sum(axis=1)
     mass = float(x_profile.sum())
     if mass <= 0:
-        raise ValueError("Image has no positive signal after Otsu thresholding")
+        raise UnusableBeamError("Image has no positive signal after Otsu thresholding")
 
     return BeamStats(
         fwhm_x=_full_width_half_maximum(x_profile, x_coordinates, axis="x"),
@@ -456,6 +501,34 @@ def compute_image_stats(
         processed.x_coordinates,
         processed.y_coordinates,
     )
+
+
+def compute_alignment_cost(
+    *,
+    centroid_x: float,
+    reference_centroid_x: float,
+    fwhm_x: float,
+    reference_fwhm_x: float,
+    dof_values: Mapping[str, float],
+    nominal_dof_values: Mapping[str, float],
+    dof_half_ranges: Mapping[str, float],
+    config: AlignmentCostConfig,
+) -> float:
+    """Scalar per-energy alignment objective (smaller is better).
+
+    Combines three dimensionless terms: horizontal position error relative to the
+    reference spot, horizontal focus (width ratio), and a Tikhonov penalty pulling
+    each DOF toward its manually-aligned nominal, normalized by the actual search
+    half-range so mrad and mm deviations are comparable without camera calibration.
+    """
+    dx = abs(centroid_x - reference_centroid_x)
+    position_term = (dx / config.position_tolerance_px) ** 2
+    focus_term = config.focus_weight * (fwhm_x / reference_fwhm_x)
+    dof_term = sum(
+        ((dof_values[name] - nominal) / dof_half_ranges[name]) ** 2
+        for name, nominal in nominal_dof_values.items()
+    )
+    return float(position_term + focus_term + config.dof_weight * dof_term)
 
 
 # ---------------------------------------------------------------------------
@@ -549,6 +622,64 @@ def _bind_dofs(
     )
 
 
+def _read_nominal_dofs(
+    catalog: Container | Mapping[str, Any],
+    reference_scan_uid: str,
+    names: Sequence[str],
+) -> dict[str, float]:
+    """Read each DOF's settled (last) readback value from the target run."""
+    data = _primary_data(catalog[reference_scan_uid])
+    nominal: dict[str, float] = {}
+    for name in names:
+        samples = np.atleast_1d(
+            np.asarray(data[name].read(), dtype=np.float64).squeeze()
+        )
+        nominal[name] = float(samples[-1])
+    return nominal
+
+
+def _recenter_dof(dof: RangeDOF, nominal: float, half_width: float | None) -> RangeDOF:
+    """Re-center a DOF box on *nominal*, clamped to its original (safety) bounds."""
+    if half_width is None:
+        return dof
+    lower, upper = dof.bounds
+    return replace(
+        dof,
+        bounds=(max(nominal - half_width, lower), min(nominal + half_width, upper)),
+    )
+
+
+def _resolve_search_space(
+    catalog: Container | Mapping[str, Any],
+    reference_scan_uid: str,
+    resources: EnergyAlignmentResources,
+    profile: EnergyAlignmentProfile,
+) -> tuple[tuple[DOF, ...], dict[str, float], dict[str, float]]:
+    """Bind DOFs, read the nominal, and re-center the search box when requested.
+
+    Returns the bound (possibly re-centered) DOFs, the nominal DOF values, and the
+    per-DOF half-ranges taken from the *final* bounds, so the nominal penalty
+    normalizer in :func:`compute_alignment_cost` always matches the actual box.
+    """
+    bound_dofs = _bind_dofs(resources, profile)
+    names = [dof.parameter_name for dof in bound_dofs]
+    nominal_dof_values = _read_nominal_dofs(catalog, reference_scan_uid, names)
+    half_widths = profile.search_half_widths
+    resolved_dofs = tuple(
+        _recenter_dof(
+            dof,
+            nominal_dof_values[dof.parameter_name],
+            half_widths.get(dof.parameter_name) if half_widths is not None else None,
+        )
+        for dof in bound_dofs
+    )
+    dof_half_ranges = {
+        dof.parameter_name: (dof.bounds[1] - dof.bounds[0]) / 2
+        for dof in resolved_dofs
+    }
+    return resolved_dofs, nominal_dof_values, dof_half_ranges
+
+
 # ---------------------------------------------------------------------------
 # Tiled-backed evaluation (destination: blop utilities)
 # ---------------------------------------------------------------------------
@@ -569,16 +700,24 @@ class ImageEvaluation:
         tiled_client: Container,
         reference_scan_uid: str,
         parameters: BeamEvaluationConfig,
+        *,
+        cost: AlignmentCostConfig,
+        nominal_dof_values: Mapping[str, float],
+        dof_half_ranges: Mapping[str, float],
     ):
         self.tiled_client = tiled_client
         self.reference_scan_uid = reference_scan_uid
         self.parameters = parameters
+        self.cost = cost
+        self.nominal_dof_values = dict(nominal_dof_values)
+        self.dof_half_ranges = dict(dof_half_ranges)
         reference_image = _primary_data(tiled_client[reference_scan_uid])[
             parameters.image_field
         ].read()
         reference_stats = compute_image_stats(reference_image, parameters)
         self.reference_centroid_x = reference_stats.centroid_x
         self.reference_centroid_y = reference_stats.centroid_y
+        self.reference_fwhm_x = reference_stats.fwhm_x
 
     def __call__(self, uid: str, suggestions: list[dict]) -> list[dict]:
         if not suggestions:
@@ -615,7 +754,31 @@ class ImageEvaluation:
         outcomes = []
         for suggestion in suggestions:
             image, intensity = paired_by_id[suggestion["_id"]]
-            stats = compute_image_stats(image, self.parameters)
+            # A blank/unusable frame is a partial observation: the objective and
+            # its diagnostics are missing (NaN, dropped by Ax as unmeasured), but
+            # the I0 reading is always finite and keeps training the constraint.
+            try:
+                stats = compute_image_stats(image, self.parameters)
+            except UnusableBeamError:
+                stats = None
+            if stats is None:
+                outcomes.append(
+                    {
+                        "_id": suggestion["_id"],
+                        "fwhm_x": float("nan"),
+                        "fwhm_y": float("nan"),
+                        "centroid_x": float("nan"),
+                        "centroid_y": float("nan"),
+                        "centroid_distance": float("nan"),
+                        "centroid_x_distance": float("nan"),
+                        "intensity": intensity,
+                        "alignment_cost": float("nan"),
+                    }
+                )
+                continue
+            dof_values = {
+                name: float(suggestion[name]) for name in self.nominal_dof_values
+            }
             outcomes.append(
                 {
                     "_id": suggestion["_id"],
@@ -629,7 +792,20 @@ class ImageEvaluation:
                             self.reference_centroid_y - stats.centroid_y,
                         )
                     ),
+                    "centroid_x_distance": float(
+                        abs(stats.centroid_x - self.reference_centroid_x)
+                    ),
                     "intensity": intensity,
+                    "alignment_cost": compute_alignment_cost(
+                        centroid_x=stats.centroid_x,
+                        reference_centroid_x=self.reference_centroid_x,
+                        fwhm_x=stats.fwhm_x,
+                        reference_fwhm_x=self.reference_fwhm_x,
+                        dof_values=dof_values,
+                        nominal_dof_values=self.nominal_dof_values,
+                        dof_half_ranges=self.dof_half_ranges,
+                        config=self.cost,
+                    ),
                 }
             )
         return outcomes
@@ -774,6 +950,12 @@ def _optimization_metadata(
             "outcome_constraints": [
                 str(constraint) for constraint in resolved_profile.outcome_constraints
             ],
+            "cost": asdict(resolved_profile.cost),
+            "search_half_widths": (
+                dict(resolved_profile.search_half_widths)
+                if resolved_profile.search_half_widths is not None
+                else None
+            ),
         },
     }
 
@@ -791,16 +973,25 @@ def make_energy_alignment_agent(
     resolved_profile = get_energy_alignment_profile(profile)
     resolved_resources = _resolve_resources(resources)
     _validate_resources(resolved_resources, resolved_profile)
+    bound_dofs, nominal_dof_values, dof_half_ranges = _resolve_search_space(
+        resolved_resources.catalog,
+        reference_scan_uid,
+        resolved_resources,
+        resolved_profile,
+    )
     if evaluation_function is None:
         evaluation_function = ImageEvaluation(
             resolved_resources.catalog,
             reference_scan_uid=reference_scan_uid,
             parameters=resolved_profile.evaluation,
+            cost=resolved_profile.cost,
+            nominal_dof_values=nominal_dof_values,
+            dof_half_ranges=dof_half_ranges,
         )
 
     agent = Agent(
         sensors=[resolved_resources.sensors[name] for name in resolved_profile.sensors],
-        dofs=_bind_dofs(resolved_resources, resolved_profile),
+        dofs=bound_dofs,
         objectives=resolved_profile.objectives,
         evaluation_function=evaluation_function,
         acquisition_plan=acquisition_plan,
@@ -809,6 +1000,7 @@ def make_energy_alignment_agent(
     agent.ax_client.configure_generation_strategy(
         initialization_budget=resolved_profile.optimization.initialization_budget,
         initialize_with_center=resolved_profile.optimization.initialize_with_center,
+        use_existing_trials_for_initialization=False,
     )
 
     if subscribe_to_dash:
@@ -878,10 +1070,19 @@ def search_for_optimal_positions(
                 for dof in _bind_dofs(resolved_resources, resolved_profile)
             )
             target_uid = yield from acquire_target_position(target_readables)
+        _, nominal_dof_values, dof_half_ranges = _resolve_search_space(
+            resolved_resources.catalog,
+            target_uid,
+            resolved_resources,
+            resolved_profile,
+        )
         evaluation_function = ImageEvaluation(
             resolved_resources.catalog,
             reference_scan_uid=target_uid,
             parameters=resolved_profile.evaluation,
+            cost=resolved_profile.cost,
+            nominal_dof_values=nominal_dof_values,
+            dof_half_ranges=dof_half_ranges,
         )
         resolved_resources.prompt_state.prompt = False
 
@@ -909,6 +1110,7 @@ def search_for_optimal_positions(
                     ),
                 ),
             )
+            yield from agent.acquire_baseline(nominal_dof_values)
             yield from agent.optimize(resolved_profile.optimization.iterations)
 
             best_points = agent.get_best_points()
@@ -968,16 +1170,15 @@ class _DebugPanelLimits:
 def show_energy_alignment_debug(
     uids: str | Sequence[str],
     *,
-    pixel_size_um: tuple[float, float],
     energy_field: str = "dcm_energy",
     profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
 ) -> Figure:
     """Show image-processing diagnostics for completed alignment acquisitions.
 
-    Beamline usage is ``show_energy_alignment_debug(outer_or_acquisition_uids,
-    pixel_size_um=(x_scale, y_scale))``. One direct acquisition or outer Blop
-    optimization UID renders its per-energy acquisition grid. An ordered
+    Beamline usage is ``show_energy_alignment_debug(outer_or_acquisition_uids)``.
+    One direct acquisition or outer Blop optimization UID renders its per-energy
+    acquisition grid. An ordered
     sequence spanning multiple per-energy runs adds an ``all energies`` overlay
     built from those runs in caller order. Set ``energy_field`` when a run's
     recorded energy signal is not ``dcm_energy``.
@@ -985,8 +1186,6 @@ def show_energy_alignment_debug(
     This viewer only reads completed runs from the configured Tiled catalog. It
     does not validate, read, or move profile actuators or sensors.
     """
-    x_scale, y_scale = pixel_size_um
-    pixel_size = (float(x_scale), float(y_scale))
     resolved_profile = get_energy_alignment_profile(profile)
     resolved_resources = _resolve_resources(resources)
     acquisitions = _resolve_energy_alignment_acquisitions(
@@ -1002,7 +1201,6 @@ def show_energy_alignment_debug(
     figure = _render_energy_alignment_debug_grid(
         acquisitions,
         profile=resolved_profile,
-        pixel_size_um=pixel_size,
         include_overlay=source_count > 1,
         mode=(
             "multi-energy from per-energy runs" if source_count > 1 else "per-energy"
@@ -1192,7 +1390,6 @@ def _render_energy_alignment_debug_grid(
     acquisitions: Sequence[_EnergyAlignmentDebugAcquisition],
     *,
     profile: EnergyAlignmentProfile,
-    pixel_size_um: tuple[float, float],
     include_overlay: bool,
     mode: str,
     pyplot: Any,
@@ -1242,7 +1439,6 @@ def _render_energy_alignment_debug_grid(
                 figure,
                 grid[row_index, column_index],
                 stage=(column.stages[row_index] if column.stages is not None else None),
-                pixel_size_um=pixel_size_um,
                 row_label=row_name if column_index == 0 else "",
                 column_label=(
                     _debug_column_label(
@@ -1283,7 +1479,6 @@ def _render_energy_alignment_debug_grid(
                 stage=None,
                 overlay=overlay,
                 error=overlay_error,
-                pixel_size_um=pixel_size_um,
                 column_label=(
                     "all energies\n"
                     f"{len(columns)} frames from {source_count} per-energy runs"
@@ -1298,7 +1493,6 @@ def _render_energy_alignment_debug_grid(
             mode,
             acquisitions,
             profile=profile,
-            pixel_size_um=pixel_size_um,
         )
     )
     return figure
@@ -1309,7 +1503,6 @@ def _render_energy_alignment_debug_panel(
     cell: Any,
     *,
     stage: _ImageProcessingStage | None,
-    pixel_size_um: tuple[float, float],
     row_label: str = "",
     column_label: str = "",
     final_stage: bool = False,
@@ -1358,12 +1551,11 @@ def _render_energy_alignment_debug_panel(
             )
         return image_axis, x_axis, y_axis
 
-    x_scale, y_scale = pixel_size_um
     if stage is not None:
         if overlay:
             raise ValueError("A debug panel cannot be both ordinary and overlaid")
-        x_coordinates = stage.x_coordinates * x_scale
-        y_coordinates = stage.y_coordinates * y_scale
+        x_coordinates = stage.x_coordinates
+        y_coordinates = stage.y_coordinates
         x_limits = _coordinate_extent(x_coordinates)
         y_limits = _coordinate_extent(y_coordinates)
         panel_limits = limits or _debug_panel_limits((stage,))
@@ -1398,8 +1590,8 @@ def _render_energy_alignment_debug_panel(
                 annotations.append(str(exc))
             else:
                 image_axis.plot(
-                    stats.centroid_x * x_scale,
-                    stats.centroid_y * y_scale,
+                    stats.centroid_x,
+                    stats.centroid_y,
                     marker="+",
                     markersize=10,
                     markeredgewidth=1.5,
@@ -1407,14 +1599,10 @@ def _render_energy_alignment_debug_panel(
                 )
                 annotations.extend(
                     (
-                        f"centroid x = {stats.centroid_x:.3g} px = "
-                        f"{stats.centroid_x * x_scale:.3g} µm",
-                        f"centroid y = {stats.centroid_y:.3g} px = "
-                        f"{stats.centroid_y * y_scale:.3g} µm",
-                        f"FWHM x = {stats.fwhm_x:.3g} px = "
-                        f"{stats.fwhm_x * x_scale:.3g} µm",
-                        f"FWHM y = {stats.fwhm_y:.3g} px = "
-                        f"{stats.fwhm_y * y_scale:.3g} µm",
+                        f"centroid x = {stats.centroid_x:.3g} px",
+                        f"centroid y = {stats.centroid_y:.3g} px",
+                        f"FWHM x = {stats.fwhm_x:.3g} px",
+                        f"FWHM y = {stats.fwhm_y:.3g} px",
                     )
                 )
         if annotations:
@@ -1437,8 +1625,8 @@ def _render_energy_alignment_debug_panel(
         for (label, overlay_stage), color in zip(overlay, colors, strict=True):
             peak = float(np.max(overlay_stage.image))
             normalized = overlay_stage.image / peak
-            x_coordinates = overlay_stage.x_coordinates * x_scale
-            y_coordinates = overlay_stage.y_coordinates * y_scale
+            x_coordinates = overlay_stage.x_coordinates
+            y_coordinates = overlay_stage.y_coordinates
             x_extent = _coordinate_extent(x_coordinates)
             y_extent = _coordinate_extent(y_coordinates)
             x_min, x_max = min(x_min, x_extent[0]), max(x_max, x_extent[1])
@@ -1480,8 +1668,8 @@ def _render_energy_alignment_debug_panel(
     else:
         raise ValueError("A debug panel requires a stage, overlay, or error")
 
-    image_axis.set_xlabel("x (µm)")
-    image_axis.set_ylabel(f"{row_label}\ny (µm)" if row_label else "y (µm)")
+    image_axis.set_xlabel("x (px)")
+    image_axis.set_ylabel(f"{row_label}\ny (px)" if row_label else "y (px)")
     x_axis.set_ylabel("Σy")
     y_axis.set_xlabel("Σx")
     x_axis.tick_params(labelbottom=False)
@@ -1638,7 +1826,6 @@ def _debug_figure_title(
     acquisitions: Sequence[_EnergyAlignmentDebugAcquisition],
     *,
     profile: EnergyAlignmentProfile,
-    pixel_size_um: tuple[float, float],
 ) -> str:
     acquisition_uids = tuple(dict.fromkeys(item.uid for item in acquisitions))
     reference_uids = _debug_reference_uids(acquisitions)
@@ -1646,8 +1833,7 @@ def _debug_figure_title(
     return (
         f"Energy alignment debug — {mode}\n"
         f"profile={profile.name} | acquisition UIDs={', '.join(acquisition_uids)} | "
-        f"reference UIDs={references} | pixel calibration: "
-        f"x={pixel_size_um[0]:.6g} µm/px, y={pixel_size_um[1]:.6g} µm/px"
+        f"reference UIDs={references}"
     )
 
 
