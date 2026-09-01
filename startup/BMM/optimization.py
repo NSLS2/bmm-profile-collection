@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from functools import partial
 from numbers import Real
 from pathlib import Path
 import pickle
@@ -32,11 +33,12 @@ from blop.ax import (
     RangeDOF,
     ScalarizedObjective,
 )
+from blop.plans import default_acquire
 from blop.protocols import AcquisitionPlan, Actuator, EvaluationFunction, Sensor
 from bluesky.callbacks import CallbackBase
 from bluesky.plan_stubs import null
 from bluesky.plans import count
-from bluesky.preprocessors import finalize_wrapper, inject_md_wrapper
+from bluesky.preprocessors import finalize_wrapper
 from bluesky.protocols import Readable
 from bluesky.utils import MsgGenerator
 from event_model import Event, RunStart, RunStop
@@ -154,10 +156,7 @@ class EnergyAlignmentProfile:
             raise ValueError(f"Profile {self.name!r} must define at least one sensor")
         if not self.dofs:
             raise ValueError(f"Profile {self.name!r} must define at least one DOF")
-        if (
-            not isinstance(self.objectives, ScalarizedObjective)
-            and not self.objectives
-        ):
+        if not isinstance(self.objectives, ScalarizedObjective) and not self.objectives:
             raise ValueError(
                 f"Profile {self.name!r} must define at least one objective"
             )
@@ -175,8 +174,10 @@ class EnergyAlignmentProfile:
             )
         if self.optimization.iterations < 1:
             raise ValueError("Optimization iterations must be at least one")
-        if not 0 <= self.optimization.initialization_budget <= (
-            self.optimization.iterations
+        if (
+            not 0
+            <= self.optimization.initialization_budget
+            <= (self.optimization.iterations)
         ):
             raise ValueError(
                 "Initialization budget must be between zero and the iteration count"
@@ -307,18 +308,14 @@ def _image_processing_stages(
 
     x_coordinates = np.arange(width, dtype=np.float64)
     y_coordinates = np.arange(height, dtype=np.float64)
-    stages = [
-        _ImageProcessingStage("grayscale", gray, x_coordinates, y_coordinates)
-    ]
+    stages = [_ImageProcessingStage("grayscale", gray, x_coordinates, y_coordinates)]
 
     cropped = gray[y_start:y_stop, x_start:x_stop]
     x_coordinates = x_coordinates[x_start:x_stop]
     y_coordinates = y_coordinates[y_start:y_stop]
     if parameters.x_crop is not None or parameters.y_crop is not None:
         stages.append(
-            _ImageProcessingStage(
-                "crop", cropped, x_coordinates, y_coordinates
-            )
+            _ImageProcessingStage("crop", cropped, x_coordinates, y_coordinates)
         )
 
     if parameters.blur_sigma is None:
@@ -365,12 +362,8 @@ def _image_processing_stages(
             preserve_range=True,
             anti_aliasing=False,
         )
-        x_coordinates = (
-            x_start + (np.arange(processed.shape[1]) + 0.5) / scale - 0.5
-        )
-        y_coordinates = (
-            y_start + (np.arange(processed.shape[0]) + 0.5) / scale - 0.5
-        )
+        x_coordinates = x_start + (np.arange(processed.shape[1]) + 0.5) / scale - 0.5
+        y_coordinates = y_start + (np.arange(processed.shape[0]) + 0.5) / scale - 0.5
         stages.append(
             _ImageProcessingStage(
                 f"resize ×{scale}", processed, x_coordinates, y_coordinates
@@ -785,24 +778,6 @@ def _optimization_metadata(
     }
 
 
-def optimization_metadata_wrapper(
-    plan,
-    energy: str,
-    reference_scan_uid: str | None = None,
-    *,
-    profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
-    resources: EnergyAlignmentResources | None = None,
-):
-    """Inject profile and live beamline metadata into every optimization run."""
-    md = _optimization_metadata(
-        energy,
-        reference_scan_uid,
-        profile=profile,
-        resources=resources,
-    )
-    return inject_md_wrapper(plan, md)
-
-
 def make_energy_alignment_agent(
     reference_scan_uid: str,
     *,
@@ -924,15 +899,17 @@ def search_for_optimal_positions(
                 profile=resolved_profile,
                 resources=resolved_resources,
                 evaluation_function=evaluation_function,
+                acquisition_plan=partial(
+                    default_acquire,
+                    md=_optimization_metadata(
+                        energy,
+                        target_uid,
+                        profile=resolved_profile,
+                        resources=resolved_resources,
+                    ),
+                ),
             )
-            optimize_plan = optimization_metadata_wrapper(
-                agent.optimize(resolved_profile.optimization.iterations),
-                energy,
-                target_uid,
-                profile=resolved_profile,
-                resources=resolved_resources,
-            )
-            yield from optimize_plan
+            yield from agent.optimize(resolved_profile.optimization.iterations)
 
             best_points = agent.get_best_points()
             print(f"best point for {energy} is {best_points}")
@@ -1028,9 +1005,7 @@ def show_energy_alignment_debug(
         pixel_size_um=pixel_size,
         include_overlay=source_count > 1,
         mode=(
-            "multi-energy from per-energy runs"
-            if source_count > 1
-            else "per-energy"
+            "multi-energy from per-energy runs" if source_count > 1 else "per-energy"
         ),
         pyplot=plt,
     )
@@ -1130,9 +1105,7 @@ def _describe_energy_alignment_acquisition(
     suggestion_count = len(suggestions)
 
     if energy_field in data:
-        energies: tuple[float | None, ...] = _numeric_samples(
-            data[energy_field].read()
-        )
+        energies: tuple[float | None, ...] = _numeric_samples(data[energy_field].read())
         if len(energies) != suggestion_count:
             raise ValueError(
                 f"UID {uid!r} field {energy_field!r} has {len(energies)} "
@@ -1171,9 +1144,7 @@ def _read_energy_alignment_debug_frames(
 ) -> np.ndarray:
     """Read one image frame per suggestion, with a leading frame axis."""
     frame_count = len(acquisition.suggestions)
-    raw = np.asarray(
-        _primary_data(acquisition.run)[acquisition.image_field].read()
-    )
+    raw = np.asarray(_primary_data(acquisition.run)[acquisition.image_field].read())
     if frame_count == 1:
         image = raw.squeeze()
         if image.ndim == 2 or (image.ndim == 3 and image.shape[-1] in (3, 4)):
@@ -1226,9 +1197,7 @@ def _render_energy_alignment_debug_grid(
     mode: str,
     pyplot: Any,
 ) -> Figure:
-    columns = _collect_energy_alignment_debug_columns(
-        acquisitions, profile.evaluation
-    )
+    columns = _collect_energy_alignment_debug_columns(acquisitions, profile.evaluation)
     # Row names come from the stages actually computed, so grid rows always
     # match the evaluation pipeline exactly.
     row_names = next(
@@ -1272,11 +1241,7 @@ def _render_energy_alignment_debug_grid(
             _render_energy_alignment_debug_panel(
                 figure,
                 grid[row_index, column_index],
-                stage=(
-                    column.stages[row_index]
-                    if column.stages is not None
-                    else None
-                ),
+                stage=(column.stages[row_index] if column.stages is not None else None),
                 pixel_size_um=pixel_size_um,
                 row_label=row_name if column_index == 0 else "",
                 column_label=(
@@ -1308,16 +1273,10 @@ def _render_energy_alignment_debug_grid(
             overlay_error = None
             if not overlay:
                 overlay_error = next(
-                    (
-                        column.error
-                        for column in columns
-                        if column.error is not None
-                    ),
+                    (column.error for column in columns if column.error is not None),
                     "No processable per-energy images",
                 )
-            source_count = len(
-                {column.acquisition.source_uid for column in columns}
-            )
+            source_count = len({column.acquisition.source_uid for column in columns})
             _render_energy_alignment_debug_panel(
                 figure,
                 grid[row_index, -1],
@@ -1471,9 +1430,7 @@ def _render_energy_alignment_debug_panel(
                 transform=image_axis.transAxes,
             )
     elif overlay:
-        colors = pyplot.get_cmap("viridis")(
-            np.linspace(0.0, 1.0, len(overlay))
-        )
+        colors = pyplot.get_cmap("viridis")(np.linspace(0.0, 1.0, len(overlay)))
         x_min = y_min = np.inf
         x_max = y_max = -np.inf
         threshold_labels = []
@@ -1541,12 +1498,8 @@ def _debug_panel_limits(
     image_max = max(float(np.max(stage.image)) for stage in stages)
     if image_max <= image_min:
         image_max = image_min + 1.0
-    x_marginal_max = max(
-        float(np.max(stage.image.sum(axis=0))) for stage in stages
-    )
-    y_marginal_max = max(
-        float(np.max(stage.image.sum(axis=1))) for stage in stages
-    )
+    x_marginal_max = max(float(np.max(stage.image.sum(axis=0))) for stage in stages)
+    y_marginal_max = max(float(np.max(stage.image.sum(axis=1))) for stage in stages)
     return _DebugPanelLimits(
         image_min=image_min,
         image_max=image_max,
@@ -1595,8 +1548,7 @@ def _shortest_unique_uid_prefixes(uids: Sequence[str]) -> dict[str, str]:
     for uid in unique_uids:
         length = min(8, len(uid))
         while length < len(uid) and any(
-            other != uid and other.startswith(uid[:length])
-            for other in unique_uids
+            other != uid and other.startswith(uid[:length]) for other in unique_uids
         ):
             length += 1
         prefixes[uid] = uid[:length]
@@ -1648,9 +1600,7 @@ def _debug_overlay_label(column: _DebugFrameColumn, uid_prefix: str) -> str:
     if energy is not None:
         energy_label = f"{acquisition.energy_field}={energy:.6g}"
     elif (
-        beamline_energy := _debug_metadata_value(
-            acquisition, "Beamline", "energy"
-        )
+        beamline_energy := _debug_metadata_value(acquisition, "Beamline", "energy")
     ) is not None:
         energy_label = f"Beamline.energy={_format_debug_value(beamline_energy)}"
     elif (
@@ -1664,9 +1614,7 @@ def _debug_overlay_label(column: _DebugFrameColumn, uid_prefix: str) -> str:
 
     suggestion = acquisition.suggestions[column.frame_index]
     suggestion_id = (
-        f", _id={_format_debug_value(suggestion['_id'])}"
-        if "_id" in suggestion
-        else ""
+        f", _id={_format_debug_value(suggestion['_id'])}" if "_id" in suggestion else ""
     )
     return f"{energy_label} | UID={uid_prefix}{suggestion_id}"
 
@@ -1972,9 +1920,7 @@ class SurrogateModelDashCallback(CallbackBase):
             )
 
         try:
-            z = np.array(
-                [pred[objective_name][0] for pred in predictions], dtype=float
-            )
+            z = np.array([pred[objective_name][0] for pred in predictions], dtype=float)
         except KeyError:
             return self._message_figure(
                 f"Objective '{objective_name}' is not available in the model "
@@ -2274,7 +2220,12 @@ class SurrogateModelDashCallback(CallbackBase):
             Input("surrogate-rendered-version", "data"),
         )
         def _update_graph(
-            x_name, y_name, objective_name, best_metric_name, _n_intervals, rendered_version
+            x_name,
+            y_name,
+            objective_name,
+            best_metric_name,
+            _n_intervals,
+            rendered_version,
         ):
             from dash import ctx, no_update
 

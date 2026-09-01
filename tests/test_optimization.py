@@ -4,8 +4,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from blop.ax import Objective, RangeDOF
+from blop.plans import default_acquire
 from bluesky import RunEngine
-from bluesky.plan_stubs import close_run, null, open_run
+from bluesky.plan_stubs import null
 from matplotlib import pyplot as plt
 import numpy as np
 from ophyd.sim import SynAxis, SynSignal
@@ -32,7 +33,6 @@ from BMM.optimization import (
     compute_stats,
     get_energy_alignment_profile,
     make_energy_alignment_agent,
-    optimization_metadata_wrapper,
     search_for_optimal_positions,
     show_energy_alignment_debug,
 )
@@ -1013,32 +1013,6 @@ def test_metadata_uses_profile_and_live_resources(make_profile_and_resources):
     assert agent_metadata["objectives"] == ["centroid_distance"]
 
 
-def test_metadata_wrapper_injects_start_document(make_profile_and_resources):
-    profile, resources = make_profile_and_resources(read_energy=lambda: 7112.5)
-    documents = []
-
-    def plan():
-        yield from open_run(md={"purpose": "metadata-test"})
-        yield from close_run()
-
-    run_engine = RunEngine({})
-    run_engine.subscribe(lambda name, doc: documents.append((name, doc)))
-    run_engine(
-        optimization_metadata_wrapper(
-            plan(),
-            "Fe",
-            "reference",
-            profile=profile,
-            resources=resources,
-        )
-    )
-
-    start = next(doc for name, doc in documents if name == "start")
-    assert start["purpose"] == "metadata-test"
-    assert start["BMM_agent"]["profile"] == "test"
-    assert start["Beamline"]["energy"] == 7112.5
-
-
 def test_dash_callback_builds_app(make_profile_and_resources):
     profile, resources = make_profile_and_resources()
     agent = make_energy_alignment_agent(
@@ -1076,8 +1050,15 @@ def test_search_captures_and_reuses_target_reference(
     monkeypatch,
 ):
     class FakeAgent:
+        def __init__(self, acquisition_plan):
+            self.acquisition_plan = acquisition_plan
+
         def optimize(self, iterations):
-            yield from null()
+            yield from self.acquisition_plan(
+                [{"_id": "test", "motor": 0.0}],
+                [resources.actuators["motor"]],
+                [resources.sensors["camera"]],
+            )
 
         def get_best_points(self):
             return [(0, {"motor": 0.0}, {"centroid_distance": (0.0, 0.0)})]
@@ -1103,17 +1084,19 @@ def test_search_captures_and_reuses_target_reference(
     )
     evaluation_functions = []
     reference_scan_uids = []
-    metadata_references = []
-    fake_agent = FakeAgent()
+    acquisition_plans = []
 
-    def make_agent(reference_scan_uid, *, evaluation_function=None, **kwargs):
+    def make_agent(
+        reference_scan_uid,
+        *,
+        evaluation_function=None,
+        acquisition_plan=None,
+        **kwargs,
+    ):
         reference_scan_uids.append(reference_scan_uid)
         evaluation_functions.append(evaluation_function)
-        return fake_agent
-
-    def add_metadata(plan, energy, reference_scan_uid, **kwargs):
-        metadata_references.append((energy, reference_scan_uid))
-        return plan
+        acquisition_plans.append(acquisition_plan)
+        return FakeAgent(acquisition_plan)
 
     monkeypatch.setattr(
         optimization_module,
@@ -1125,12 +1108,10 @@ def test_search_captures_and_reuses_target_reference(
         "make_energy_alignment_agent",
         make_agent,
     )
-    monkeypatch.setattr(
-        optimization_module,
-        "optimization_metadata_wrapper",
-        add_metadata,
-    )
-    RunEngine({})(
+    documents = []
+    run_engine = RunEngine({})
+    run_engine.subscribe(lambda name, doc: documents.append((name, doc)))
+    run_engine(
         search_for_optimal_positions(
             ["Fe", "Cu"],
             profile=profile,
@@ -1143,7 +1124,23 @@ def test_search_captures_and_reuses_target_reference(
         (resources.sensors["camera"], resources.actuators["motor"])
     ]
     assert reference_scan_uids == ["target", "target"]
-    assert metadata_references == [("Fe", "target"), ("Cu", "target")]
+    assert [plan.func for plan in acquisition_plans] == [default_acquire] * 2
+    acquisition_metadata = [plan.keywords["md"] for plan in acquisition_plans]
+    assert [
+        (
+            metadata["BMM_agent"]["requested_energy"],
+            metadata["BMM_agent"]["reference_scan_uid"],
+        )
+        for metadata in acquisition_metadata
+    ] == [("Fe", "target"), ("Cu", "target")]
+    starts = [doc for name, doc in documents if name == "start"]
+    assert [
+        (
+            start["BMM_agent"]["requested_energy"],
+            start["BMM_agent"]["reference_scan_uid"],
+        )
+        for start in starts
+    ] == [("Fe", "target"), ("Cu", "target")]
     assert len(evaluation_functions) == 2
     assert evaluation_functions[0] is evaluation_functions[1]
     assert reference_image.read_count == 1
@@ -1168,17 +1165,20 @@ def test_search_uses_supplied_target_reference(
     reference_image = resources.catalog["reference"]["primary"]["data"]["image"]
     evaluation_functions = []
     reference_scan_uids = []
-    metadata_references = []
+    acquisition_plans = []
     fake_agent = FakeAgent()
 
-    def make_agent(reference_scan_uid, *, evaluation_function=None, **kwargs):
+    def make_agent(
+        reference_scan_uid,
+        *,
+        evaluation_function=None,
+        acquisition_plan=None,
+        **kwargs,
+    ):
         reference_scan_uids.append(reference_scan_uid)
         evaluation_functions.append(evaluation_function)
+        acquisition_plans.append(acquisition_plan)
         return fake_agent
-
-    def add_metadata(plan, energy, reference_scan_uid, **kwargs):
-        metadata_references.append((energy, reference_scan_uid))
-        return plan
 
     monkeypatch.setattr(
         optimization_module,
@@ -1190,11 +1190,6 @@ def test_search_uses_supplied_target_reference(
         "make_energy_alignment_agent",
         make_agent,
     )
-    monkeypatch.setattr(
-        optimization_module,
-        "optimization_metadata_wrapper",
-        add_metadata,
-    )
     RunEngine({})(
         search_for_optimal_positions(
             ["Fe", "Cu"],
@@ -1205,7 +1200,14 @@ def test_search_uses_supplied_target_reference(
     )
 
     assert reference_scan_uids == ["reference", "reference"]
-    assert metadata_references == [("Fe", "reference"), ("Cu", "reference")]
+    assert [plan.func for plan in acquisition_plans] == [default_acquire] * 2
+    assert [
+        (
+            plan.keywords["md"]["BMM_agent"]["requested_energy"],
+            plan.keywords["md"]["BMM_agent"]["reference_scan_uid"],
+        )
+        for plan in acquisition_plans
+    ] == [("Fe", "reference"), ("Cu", "reference")]
     assert len(evaluation_functions) == 2
     assert evaluation_functions[0] is evaluation_functions[1]
     assert reference_image.read_count == 1
