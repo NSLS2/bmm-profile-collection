@@ -848,10 +848,10 @@ def test_agent_factory_returns_fresh_agents(make_profile_and_resources):
     profile, resources = make_profile_and_resources()
 
     first = make_energy_alignment_agent(
-        "reference", profile=profile, resources=resources
+        "reference", profile=profile, resources=resources, subscribe_to_dash=False
     )
     second = make_energy_alignment_agent(
-        "reference", profile=profile, resources=resources
+        "reference", profile=profile, resources=resources, subscribe_to_dash=False
     )
 
     assert first is not second
@@ -859,6 +859,23 @@ def test_agent_factory_returns_fresh_agents(make_profile_and_resources):
     assert profile.dofs[0].step_size == 0.1
     assert first.acquisition_plan is None
     assert second.acquisition_plan is None
+
+
+def test_agent_factory_subscribes_to_dash_by_default(
+    make_profile_and_resources,
+    monkeypatch,
+):
+    profile, resources = make_profile_and_resources()
+    subscribed_agents = []
+    monkeypatch.setattr(optimization_module, "subscribe_dash_to_agent", subscribed_agents.append)
+
+    agent = make_energy_alignment_agent(
+        "reference",
+        profile=profile,
+        resources=resources,
+    )
+
+    assert subscribed_agents == [agent]
 
 
 def test_per_energy_agent_factory_rejects_energy_scan_profile(make_profile_and_resources):
@@ -1199,6 +1216,7 @@ def test_agent_optimization_nests_energy_scan_acquisition(
         resources=resources,
         evaluation_function=evaluate,
         acquisition_plan=acquisition_plan,
+        subscribe_to_dash=False,
     )
     run_engine = RunEngine({})
     run_engine.subscribe(lambda name, doc: documents.append((name, doc)))
@@ -1319,6 +1337,7 @@ def test_dash_callback_builds_app(make_profile_and_resources):
         "reference",
         profile=profile,
         resources=resources,
+        subscribe_to_dash=False,
     )
 
     callback = SurrogateModelDashCallback(agent)

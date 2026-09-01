@@ -1000,6 +1000,7 @@ def make_energy_alignment_agent(
     resources: EnergyAlignmentResources | None = None,
     evaluation_function: EvaluationFunction | None = None,
     acquisition_plan: AcquisitionPlan | None = None,
+    subscribe_to_dash: bool = True,
 ) -> Agent:
     """Construct a fresh per-energy Blop agent from a reusable profile."""
     resolved_profile = get_energy_alignment_profile(profile)
@@ -1016,12 +1017,15 @@ def make_energy_alignment_agent(
             reference_scan_uid=reference_scan_uid,
             parameters=resolved_profile.evaluation,
         )
-    return _build_energy_alignment_agent(
+    agent = _build_energy_alignment_agent(
         resolved_profile,
         resolved_resources,
         evaluation_function,
         acquisition_plan,
     )
+    if subscribe_to_dash:
+        subscribe_dash_to_agent(agent)
+    return agent
 
 
 def make_energy_range_alignment_agent(
@@ -1085,6 +1089,7 @@ def make_energy_range_alignment_agent(
         evaluation_function,
         acquisition_plan,
     )
+
 
 
 def _write_energy_map(
@@ -1178,9 +1183,19 @@ def search_for_optimal_positions(
 
 # --------- Dash live plotting callback ---------
 
+def subscribe_dash_to_agent(agent):
+    try:
+        viz = SurrogateModelDashCallback(agent, resolution=41)
+        agent.subscribe(viz)
 
-def _to_list(value: Any) -> list[Any]:
-    """Coerce a scalar, NumPy array, or iterable into a plain list."""
+        # run alongside the RunEngine
+        threading.Thread(target=viz.serve, kwargs={"port": 8050}, daemon=True).start()
+    except Exception as e:
+        print(f"Failed to register agent to dash callback with error {e}")
+
+
+def _to_list(value: Any) -> list:
+    """Coerce a scalar, numpy array, or iterable into a plain list."""
     if hasattr(value, "tolist"):
         result = value.tolist()
         return result if isinstance(result, list) else [result]
@@ -1190,44 +1205,69 @@ def _to_list(value: Any) -> list[Any]:
 
 
 def _py(value: Any) -> Any:
-    """Convert a NumPy scalar to its native Python equivalent."""
+    """Convert a numpy scalar to its native Python equivalent."""
     return value.item() if hasattr(value, "item") else value
 
 
 class SurrogateModelDashCallback(CallbackBase):
-    """Serve a live 2-D heatmap of an Agent's surrogate-model mean.
+    """A Bluesky callback that serves a live 2D surrogate-model heatmap via Plotly Dash.
 
-    Dash is imported only by :meth:`build_app`, so optimization and figure
-    construction remain usable when the optional Dash dependency is absent.
+    Subscribe an instance to an :class:`~blop.ax.agent.Agent` (via
+    :meth:`Agent.subscribe <blop.ax.agent.Agent.subscribe>`) and call :meth:`serve`
+    to start the Dash server. As the agent ingests new trials during an optimization
+    run, the callback bumps an internal version counter; the Dash app polls this
+    counter on a timer and re-renders the surrogate heatmap whenever new data arrives.
+
+    Parameters
+    ----------
+    agent : Agent
+        The Ax agent whose surrogate model will be visualized. The callback reads the
+        agent's DOFs, objectives, and underlying Ax ``Client`` for predictions.
+    resolution : int, optional
+        The number of grid points per axis used to sample the surrogate model for
+        continuous DOFs. Default is 41.
+    update_interval_ms : int, optional
+        How often (in milliseconds) the Dash app checks for new data. Default is 2000.
+
+    See Also
+    --------
+    blop.ax.agent.Agent.plot_objective : One-off contour plot via Ax analyses.
+
+    Examples
+    --------
+    >>> from blop.callbacks.surrogate_dash import SurrogateModelDashCallback
+    >>> viz = SurrogateModelDashCallback(agent)
+    >>> agent.subscribe(viz)
+    >>> # In a separate thread or process, start the server:
+    >>> viz.serve(port=8050)  # doctest: +SKIP
     """
 
     def __init__(
         self,
         agent: _AxAgentMixin,
         resolution: int = 41,
-        update_interval_ms: int = 100,
+        update_interval_ms: int = 500,
     ) -> None:
         super().__init__()
-        if resolution < 2:
-            raise ValueError("Dash plot resolution must be at least two")
-        if update_interval_ms < 1:
-            raise ValueError("Dash update interval must be positive")
-
+        # Imported here (not at module scope) so that ax is only required when the
+        # callback is actually constructed against an agent.
         from ax.core.parameter import ChoiceParameter, ParameterType, RangeParameter
 
         self._agent = agent
         self._resolution = resolution
         self._update_interval_ms = update_interval_ms
+
         self._lock = threading.Lock()
         self._version = 0
         self._observed: dict[str, list[Any]] = {}
+        self._metric_observations: dict[str, list[tuple[int, float]]] = {}
+        self._pending_trial_indices: list[int] = []
+        self._trial_index = -1
 
-        experiment = agent.ax_client._experiment
-        if experiment is None:
-            raise ValueError("The agent's Ax experiment has not been configured")
-
+        # Extract DOF metadata from the underlying Ax experiment.
+        parameters = agent.ax_client._experiment.parameters
         self._param_info: dict[str, dict[str, Any]] = {}
-        for name, parameter in experiment.parameters.items():
+        for name, parameter in parameters.items():
             if isinstance(parameter, RangeParameter):
                 self._param_info[name] = {
                     "kind": "range",
@@ -1238,60 +1278,114 @@ class SurrogateModelDashCallback(CallbackBase):
             elif isinstance(parameter, ChoiceParameter):
                 self._param_info[name] = {
                     "kind": "choice",
-                    "values": [_py(value) for value in parameter.values],
+                    "values": [_py(v) for v in parameter.values],
                 }
-        self._dof_names = list(self._param_info)
-        if not self._dof_names:
-            raise ValueError("The agent has no plottable degrees of freedom")
+        self._dof_names = list(self._param_info.keys())
 
-        optimization_config = experiment.optimization_config
-        if optimization_config is None:
-            raise ValueError(
-                "The agent's optimization has not been configured; "
-                "no objectives to plot"
-            )
-        self._objective_names = list(optimization_config.objective.metric_names)
-        if not self._objective_names:
-            raise ValueError("The agent has no objectives to plot")
+        # Extract objective (metric) names.
+        opt_config = agent.ax_client._experiment.optimization_config
+        if opt_config is None:
+            raise ValueError("The agent's optimization has not been configured; no objectives to plot.")
+        self._objective_names = list(opt_config.objective.metric_names)
+        self._metric_minimize = self._metric_minimize_map(opt_config)
+
+    def _metric_minimize_map(self, opt_config) -> dict[str, bool]:
+        """Return whether each metric should be minimized when computing best-so-far."""
+        minimize_by_metric: dict[str, bool] = {}
+        objective = opt_config.objective
+
+        objectives = getattr(objective, "objectives", None)
+        if objectives is not None:
+            for obj in objectives:
+                minimize_by_metric[obj.metric.name] = bool(obj.minimize)
+        else:
+            # presumably a single objective
+            minimize_by_metric[objective.metric_names[0]] = bool(objective.minimize)
+        if hasattr(objective, "metric"):
+            minimize_by_metric[objective.metric.name] = bool(objective.minimize)
+
+
+        for metric_name in opt_config.objective.metric_names:
+            minimize_by_metric.setdefault(metric_name, False)
+        return minimize_by_metric
+
+    # -- Bluesky callback hooks ------------------------------------------------
 
     def start(self, doc: RunStart) -> None:
-        """Mark the plot stale at the start of an optimization run."""
+        """Bump the version so the app refreshes at the start of a run."""
+        suggestions = doc.get("blop_suggestions", [])
         with self._lock:
+            self._pending_trial_indices = [int(suggestion["_id"]) for suggestion in suggestions if "_id" in suggestion]
             self._version += 1
 
     def event(self, doc: Event) -> Event:
-        """Record observed DOF values and mark the plot stale."""
+        """Record observed DOF and metric values and bump the version on each new trial."""
         data = doc.get("data", {})
+        trial_indices = self._event_trial_indices(data)
         with self._lock:
             for name in self._dof_names:
                 if name in data:
                     self._observed.setdefault(name, []).extend(_to_list(data[name]))
+            for metric_name in self._objective_names:
+                if metric_name in data:
+                    values = _to_list(data[metric_name])
+                    for trial_index, value in zip(trial_indices, values):
+                        self._metric_observations.setdefault(metric_name, []).append((trial_index, float(value)))
             self._version += 1
         return doc
 
-    def stop(self, doc: RunStop) -> RunStop:
-        """Mark the plot stale at the end of an optimization run."""
+    def _event_trial_indices(self, data: dict[str, Any]) -> list[int]:
+        max_len = 1
+        for name in (*self._dof_names, *self._objective_names):
+            if name in data:
+                max_len = max(max_len, len(_to_list(data[name])))
+
+        explicit_indices = None
+        for key in ("trial_index", "trial_indices"):
+            if key in data:
+                explicit_indices = [int(v) for v in _to_list(data[key])]
+                break
+        if explicit_indices:
+            indices = explicit_indices[:max_len]
+        elif self._pending_trial_indices:
+            indices = self._pending_trial_indices[:max_len]
+        else:
+            indices = list(range(self._trial_index + 1, self._trial_index + 1 + max_len))
+
+        if len(indices) < max_len:
+            start = indices[-1] + 1 if indices else self._trial_index + 1
+            indices.extend(range(start, start + max_len - len(indices)))
+        self._trial_index = max(self._trial_index, max(indices))
+        return indices
+
+    def stop(self, doc: RunStop) -> RunStop | None:
+        """Bump the version at the end of a run."""
         with self._lock:
             self._version += 1
         return doc
 
+    # -- Public accessors ------------------------------------------------------
+
     @property
     def dof_names(self) -> list[str]:
-        """Return the degrees of freedom available for the plot axes."""
+        """The names of the degrees of freedom available for the x/y axes."""
         return list(self._dof_names)
 
     @property
     def objective_names(self) -> list[str]:
-        """Return the objectives available for visualization."""
+        """The names of the objectives available to visualize."""
         return list(self._objective_names)
 
     @property
     def version(self) -> int:
-        """Return the version incremented whenever optimization data changes."""
+        """A monotonically increasing counter that changes when new data arrives."""
         with self._lock:
             return self._version
 
+    # -- Grid / figure construction --------------------------------------------
+
     def _axis_values(self, name: str, resolution: int) -> tuple[np.ndarray, bool]:
+        """Return the sample values for an axis and whether it is discrete."""
         info = self._param_info[name]
         if info["kind"] == "range":
             values = np.linspace(info["lower"], info["upper"], resolution)
@@ -1301,13 +1395,15 @@ class SurrogateModelDashCallback(CallbackBase):
         return np.array(info["values"], dtype=object), True
 
     def _fixed_value(self, name: str) -> Any:
+        """Return the held-fixed value for a DOF not on the x/y axes."""
         info = self._param_info[name]
         if info["kind"] == "range":
-            midpoint = (info["lower"] + info["upper"]) / 2.0
-            return int(round(midpoint)) if info["is_int"] else midpoint
+            mid = (info["lower"] + info["upper"]) / 2.0
+            return int(round(mid)) if info["is_int"] else mid
         return info["values"][0]
 
     def _coerce(self, name: str, value: Any) -> Any:
+        """Coerce a grid value to the DOF's expected Python type."""
         info = self._param_info[name]
         if info["kind"] == "range" and info["is_int"]:
             return int(round(float(value)))
@@ -1320,53 +1416,56 @@ class SurrogateModelDashCallback(CallbackBase):
         objective_name: str,
         resolution: int | None = None,
     ) -> go.Figure:
-        """Build a heatmap of predicted mean with observed trials overlaid."""
+        """Build a Plotly heatmap of the surrogate model's predicted mean.
+
+        Parameters
+        ----------
+        x_name : str
+            The DOF to place on the x axis.
+        y_name : str
+            The DOF to place on the y axis.
+        objective_name : str
+            The objective (metric) whose predicted mean is shown.
+        resolution : int | None, optional
+            Grid resolution per axis. Defaults to the value passed at construction.
+
+        Returns
+        -------
+        plotly.graph_objects.Figure
+            The heatmap figure. If the surrogate model cannot yet make predictions
+            (e.g. too few trials), a figure with an explanatory annotation is returned.
+        """
         import plotly.graph_objects as go
 
-        if x_name not in self._param_info or y_name not in self._param_info:
-            return self._message_figure("Select available degrees of freedom")
-        if objective_name not in self._objective_names:
-            return self._message_figure(
-                f"Objective {objective_name!r} is not configured"
-            )
-        if x_name == y_name:
-            return self._message_figure(
-                "Select two different DOFs for the x and y axes"
-            )
+        resolution = resolution or self._resolution
 
-        plot_resolution = self._resolution if resolution is None else resolution
-        if plot_resolution < 2:
-            raise ValueError("Dash plot resolution must be at least two")
-        x_values, _ = self._axis_values(x_name, plot_resolution)
-        y_values, _ = self._axis_values(y_name, plot_resolution)
+        if x_name == y_name:
+            return self._message_figure("Select two different DOFs for the x and y axes.")
+
+        x_values, _ = self._axis_values(x_name, resolution)
+        y_values, _ = self._axis_values(y_name, resolution)
 
         fixed = {name: self._fixed_value(name) for name in self._dof_names}
         points: list[dict[str, Any]] = []
-        for y_value in y_values:
-            for x_value in x_values:
+        for y_val in y_values:
+            for x_val in x_values:
                 point = dict(fixed)
-                point[x_name] = self._coerce(x_name, x_value)
-                point[y_name] = self._coerce(y_name, y_value)
+                point[x_name] = self._coerce(x_name, x_val)
+                point[y_name] = self._coerce(y_name, y_val)
                 points.append(point)
 
         try:
             predictions = self._agent.ax_client.predict(points)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - surface any model-not-ready error to the UI
             return self._message_figure(
-                "Surrogate model is not ready to predict yet.<br>"
-                "Run more trials to continue.<br><br>"
-                f"({exc})"
+                f"Surrogate model is not ready to predict yet.<br>Run more trials to continue.<br><br>({exc})"
             )
 
         try:
-            z = np.array(
-                [prediction[objective_name][0] for prediction in predictions],
-                dtype=float,
-            )
+            z = np.array([pred[objective_name][0] for pred in predictions], dtype=float)
         except KeyError:
-            return self._message_figure(
-                f"Objective {objective_name!r} is not available in model predictions"
-            )
+            return self._message_figure(f"Objective '{objective_name}' is not available in the model predictions.")
+
         z = z.reshape(len(y_values), len(x_values))
 
         figure = go.Figure(
@@ -1376,37 +1475,29 @@ class SurrogateModelDashCallback(CallbackBase):
                 z=z,
                 colorscale="Viridis",
                 colorbar={"title": objective_name},
-                hovertemplate=(
-                    f"{x_name}: %{{x}}<br>{y_name}: %{{y}}<br>"
-                    f"{objective_name}: %{{z:.4g}}<extra></extra>"
-                ),
+                hovertemplate=f"{x_name}: %{{x}}<br>{y_name}: %{{y}}<br>{objective_name}: %{{z:.4g}}<extra></extra>",
             )
         )
 
+        # Overlay observed trials, if any.
         with self._lock:
             observed_x = list(self._observed.get(x_name, []))
             observed_y = list(self._observed.get(y_name, []))
-        observed_count = min(len(observed_x), len(observed_y))
-        if observed_count:
+        n_observed = min(len(observed_x), len(observed_y))
+        if n_observed:
             figure.add_trace(
                 go.Scatter(
-                    x=observed_x[:observed_count],
-                    y=observed_y[:observed_count],
+                    x=observed_x[:n_observed],
+                    y=observed_y[:n_observed],
                     mode="markers",
-                    marker={
-                        "color": "white",
-                        "size": 7,
-                        "line": {"color": "black", "width": 1},
-                    },
+                    marker={"color": "white", "size": 7, "line": {"color": "black", "width": 1}},
                     name="observed",
-                    hovertemplate=(
-                        f"{x_name}: %{{x}}<br>{y_name}: %{{y}}<extra>observed</extra>"
-                    ),
+                    hovertemplate=f"{x_name}: %{{x}}<br>{y_name}: %{{y}}<extra>observed</extra>",
                 )
             )
 
         figure.update_layout(
-            title=f"Surrogate mean of {objective_name!r}",
+            title=f"Surrogate mean of '{objective_name}'",
             xaxis_title=x_name,
             yaxis_title=y_name,
             margin={"l": 60, "r": 30, "t": 50, "b": 50},
@@ -1414,20 +1505,99 @@ class SurrogateModelDashCallback(CallbackBase):
         )
         return figure
 
+    def _best_observed_data_from_ax(self, metric_name: str) -> tuple[list[tuple[int, float]], bool] | None:
+        try:
+            df = self._agent.ax_client._experiment.lookup_data().df
+        except Exception:
+            return None
+
+        if df is None or df.empty or not {"metric_name", "mean", "trial_index"}.issubset(df.columns):
+            return None
+
+        metric_df = df[df["metric_name"] == metric_name]
+        if metric_df.empty:
+            return None
+
+        minimize = self._metric_minimize.get(metric_name, False)
+        observations = []
+        for trial_index in sorted(metric_df["trial_index"].dropna().unique()):
+            values = metric_df.loc[metric_df["trial_index"] == trial_index, "mean"].dropna()
+            if values.empty:
+                continue
+            value = values.min() if minimize else values.max()
+            observations.append((int(trial_index), float(value)))
+        return observations, minimize
+
+    def compute_best_observed_figure(self, metric_name: str) -> go.Figure:
+        """Build a trial-index trace of observed values and best observed value so far."""
+        import plotly.graph_objects as go
+
+        ax_data = self._best_observed_data_from_ax(metric_name)
+        if ax_data is None:
+            with self._lock:
+                observations = list(self._metric_observations.get(metric_name, []))
+                minimize = self._metric_minimize.get(metric_name, False)
+        else:
+            observations, minimize = ax_data
+
+        if not observations:
+            return self._message_figure(f"No observations recorded for metric '{metric_name}' yet.")
+
+        observations.sort(key=lambda item: item[0])
+        trial_indices = [trial_index for trial_index, _value in observations]
+        values = [value for _trial_index, value in observations]
+
+        running_best = []
+        best = None
+        for value in values:
+            if best is None:
+                best = value
+            elif minimize:
+                best = min(best, value)
+            else:
+                best = max(best, value)
+            running_best.append(best)
+
+        direction = "minimum" if minimize else "maximum"
+        figure = go.Figure()
+        figure.add_trace(
+            go.Scatter(
+                x=trial_indices,
+                y=values,
+                mode="markers",
+                name="observed value",
+                marker={"color": "rgba(128, 90, 213, 0.75)", "size": 8},
+                hovertemplate=f"trial: %{{x}}<br>{metric_name}: %{{y:.4g}}<extra>observed</extra>",
+            )
+        )
+        figure.add_trace(
+            go.Scatter(
+                x=trial_indices,
+                y=running_best,
+                mode="lines+markers",
+                line={"color": "#1f77b4", "shape": "hv", "width": 2},
+                marker={"size": 5},
+                name=f"best observed {direction}",
+                hovertemplate=f"trial: %{{x}}<br>best {metric_name}: %{{y:.4g}}<extra></extra>",
+            )
+        )
+        figure.update_layout(
+            title=f"Best observed '{metric_name}' by trial",
+            xaxis_title="Trial index",
+            yaxis_title=metric_name,
+            margin={"l": 60, "r": 30, "t": 50, "b": 50},
+            template="plotly_white",
+            legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
+        )
+        return figure
+
     @staticmethod
     def _message_figure(message: str) -> go.Figure:
+        """Return an empty figure displaying a centered message."""
         import plotly.graph_objects as go
 
         figure = go.Figure()
-        figure.add_annotation(
-            text=message,
-            showarrow=False,
-            font={"size": 14},
-            xref="paper",
-            yref="paper",
-            x=0.5,
-            y=0.5,
-        )
+        figure.add_annotation(text=message, showarrow=False, font={"size": 14}, xref="paper", yref="paper", x=0.5, y=0.5)
         figure.update_layout(
             xaxis={"visible": False},
             yaxis={"visible": False},
@@ -1436,14 +1606,26 @@ class SurrogateModelDashCallback(CallbackBase):
         )
         return figure
 
+    # -- Dash app --------------------------------------------------------------
+
     def build_app(self, **dash_kwargs: Any):
-        """Build a Dash app; importing Dash is deferred until this call."""
-        from dash import Dash, Input, Output, State, dcc, html
+        """Build and return a Dash app that renders the live surrogate heatmap.
+
+        Parameters
+        ----------
+        **dash_kwargs : Any
+            Additional keyword arguments forwarded to :class:`dash.Dash`.
+
+        Returns
+        -------
+        dash.Dash
+            The configured Dash application. Call ``app.run(...)`` to start it, or use
+            :meth:`serve` for convenience.
+        """
+        from dash import Dash, Input, Output, dcc, html
 
         default_x = self._dof_names[0]
-        default_y = (
-            self._dof_names[1] if len(self._dof_names) > 1 else self._dof_names[0]
-        )
+        default_y = self._dof_names[1] if len(self._dof_names) > 1 else self._dof_names[0]
         default_objective = self._objective_names[0]
 
         app = Dash(__name__, **dash_kwargs)
@@ -1456,10 +1638,7 @@ class SurrogateModelDashCallback(CallbackBase):
                             [
                                 html.Label("X axis"),
                                 dcc.Dropdown(
-                                    options=[
-                                        {"label": name, "value": name}
-                                        for name in self._dof_names
-                                    ],
+                                    options=[{"label": n, "value": n} for n in self._dof_names],
                                     value=default_x,
                                     id="surrogate-x-dropdown",
                                     clearable=False,
@@ -1471,10 +1650,7 @@ class SurrogateModelDashCallback(CallbackBase):
                             [
                                 html.Label("Y axis"),
                                 dcc.Dropdown(
-                                    options=[
-                                        {"label": name, "value": name}
-                                        for name in self._dof_names
-                                    ],
+                                    options=[{"label": n, "value": n} for n in self._dof_names],
                                     value=default_y,
                                     id="surrogate-y-dropdown",
                                     clearable=False,
@@ -1486,10 +1662,7 @@ class SurrogateModelDashCallback(CallbackBase):
                             [
                                 html.Label("Objective"),
                                 dcc.Dropdown(
-                                    options=[
-                                        {"label": name, "value": name}
-                                        for name in self._objective_names
-                                    ],
+                                    options=[{"label": n, "value": n} for n in self._objective_names],
                                     value=default_objective,
                                     id="surrogate-objective-dropdown",
                                     clearable=False,
@@ -1497,58 +1670,76 @@ class SurrogateModelDashCallback(CallbackBase):
                             ],
                             style={"flex": "1", "padding": "0 8px"},
                         ),
+                        html.Div(
+                            [
+                                html.Label("Best-observed metric"),
+                                dcc.Dropdown(
+                                    options=[{"label": n, "value": n} for n in self._objective_names],
+                                    value=default_objective,
+                                    id="best-observed-metric-dropdown",
+                                    clearable=False,
+                                ),
+                            ],
+                            style={"flex": "1", "padding": "0 8px"},
+                        ),
                     ],
-                    style={
-                        "display": "flex",
-                        "maxWidth": "900px",
-                        "margin": "0 auto",
-                    },
+                    style={"display": "flex", "maxWidth": "1100px", "margin": "0 auto"},
                 ),
-                dcc.Graph(id="surrogate-graph", style={"height": "70vh"}),
-                dcc.Interval(
-                    id="surrogate-interval",
-                    interval=self._update_interval_ms,
-                    n_intervals=0,
-                ),
+                dcc.Graph(id="surrogate-graph", style={"height": "58vh"}),
+                dcc.Graph(id="best-observed-graph", style={"height": "34vh"}),
+                dcc.Interval(id="surrogate-interval", interval=self._update_interval_ms, n_intervals=0),
                 dcc.Store(id="surrogate-rendered-version", data=-1),
             ]
         )
 
         @app.callback(
             Output("surrogate-graph", "figure"),
+            Output("best-observed-graph", "figure"),
             Output("surrogate-rendered-version", "data"),
             Input("surrogate-x-dropdown", "value"),
             Input("surrogate-y-dropdown", "value"),
             Input("surrogate-objective-dropdown", "value"),
+            Input("best-observed-metric-dropdown", "value"),
             Input("surrogate-interval", "n_intervals"),
-            State("surrogate-rendered-version", "data"),
+            Input("surrogate-rendered-version", "data"),
         )
-        def _update_graph(
-            x_name,
-            y_name,
-            objective_name,
-            _n_intervals,
-            rendered_version,
-        ):
+        def _update_graph(x_name, y_name, objective_name, best_metric_name, _n_intervals, rendered_version):
             from dash import ctx, no_update
 
             current_version = self.version
+            # On a timer tick, only recompute when new data has arrived. Dropdown
+            # changes always force a recompute.
             triggered_by_timer = ctx.triggered_id == "surrogate-interval"
             if triggered_by_timer and current_version == rendered_version:
-                return no_update, no_update
+                return no_update, no_update, no_update
 
             figure = self.compute_figure(x_name, y_name, objective_name)
-            return figure, current_version
+            best_observed_figure = self.compute_best_observed_figure(best_metric_name)
+            return figure, best_observed_figure, current_version
 
         return app
 
-    def serve(
-        self,
-        host: str = "127.0.0.1",
-        port: int = 8050,
-        debug: bool = False,
-        **run_kwargs: Any,
-    ) -> None:
-        """Build the Dash app and run its blocking development server."""
+    def serve(self, host: str = "127.0.0.1", port: int = 8050, debug: bool = False, **run_kwargs: Any) -> None:
+        """Build the Dash app and start the development server (blocking).
+
+        Parameters
+        ----------
+        host : str, optional
+            The host interface to bind to. Default is ``"127.0.0.1"``.
+        port : int, optional
+            The port to serve on. Default is 8050.
+        debug : bool, optional
+            Whether to run Dash in debug mode. Default is False.
+        **run_kwargs : Any
+            Additional keyword arguments forwarded to ``dash.Dash.run``.
+
+        Notes
+        -----
+        This call blocks. To run alongside a Bluesky ``RunEngine`` in the same process,
+        start it in a background thread, e.g.::
+
+            import threading
+            threading.Thread(target=viz.serve, kwargs={"port": 8050}, daemon=True).start()
+        """
         app = self.build_app()
         app.run(host=host, port=port, debug=debug, **run_kwargs)
