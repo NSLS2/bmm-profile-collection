@@ -23,6 +23,7 @@ import pickle
 import threading
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Protocol, cast
+from urllib.parse import quote
 
 from ax.api.protocols import IMetric
 from blop.ax import (
@@ -36,7 +37,7 @@ from blop.ax import (
 from blop.plans import default_acquire
 from blop.protocols import AcquisitionPlan, Actuator, EvaluationFunction, Sensor
 from bluesky.callbacks import CallbackBase
-from bluesky.plan_stubs import null
+from bluesky.plan_stubs import checkpoint, null
 from bluesky.plans import count
 from bluesky.preprocessors import finalize_wrapper
 from bluesky.protocols import Readable
@@ -674,8 +675,7 @@ def _resolve_search_space(
         for dof in bound_dofs
     )
     dof_half_ranges = {
-        dof.parameter_name: (dof.bounds[1] - dof.bounds[0]) / 2
-        for dof in resolved_dofs
+        dof.parameter_name: (dof.bounds[1] - dof.bounds[0]) / 2 for dof in resolved_dofs
     }
     return resolved_dofs, nominal_dof_values, dof_half_ranges
 
@@ -911,6 +911,7 @@ def _optimization_metadata(
     *,
     profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
+    iterations: int | None = None,
 ) -> dict[str, Any]:
     resolved_profile = get_energy_alignment_profile(profile)
     resolved_resources = _resolve_resources(resources)
@@ -930,7 +931,11 @@ def _optimization_metadata(
             "profile": resolved_profile.name,
             "requested_energy": energy,
             "reference_scan_uid": reference_scan_uid,
-            "iterations": resolved_profile.optimization.iterations,
+            "iterations": (
+                resolved_profile.optimization.iterations
+                if iterations is None
+                else iterations
+            ),
             "dofs": [
                 {
                     "name": dof.parameter_name,
@@ -967,9 +972,11 @@ def make_energy_alignment_agent(
     resources: EnergyAlignmentResources | None = None,
     evaluation_function: EvaluationFunction | None = None,
     acquisition_plan: AcquisitionPlan | None = None,
+    checkpoint_path: str | Path | None = None,
+    resume: bool = False,
     subscribe_to_dash: bool = True,
 ) -> Agent:
-    """Construct a fresh Blop agent from a reusable alignment profile."""
+    """Construct or restore a Blop agent for an alignment profile."""
     resolved_profile = get_energy_alignment_profile(profile)
     resolved_resources = _resolve_resources(resources)
     _validate_resources(resolved_resources, resolved_profile)
@@ -989,19 +996,39 @@ def make_energy_alignment_agent(
             dof_half_ranges=dof_half_ranges,
         )
 
-    agent = Agent(
-        sensors=[resolved_resources.sensors[name] for name in resolved_profile.sensors],
-        dofs=bound_dofs,
-        objectives=resolved_profile.objectives,
-        evaluation_function=evaluation_function,
-        acquisition_plan=acquisition_plan,
-        outcome_constraints=resolved_profile.outcome_constraints,
-    )
-    agent.ax_client.configure_generation_strategy(
-        initialization_budget=resolved_profile.optimization.initialization_budget,
-        initialize_with_center=resolved_profile.optimization.initialize_with_center,
-        use_existing_trials_for_initialization=False,
-    )
+    sensors = [
+        resolved_resources.sensors[name] for name in resolved_profile.sensors
+    ]
+    if resume:
+        agent = Agent.from_checkpoint(
+            str(checkpoint_path),
+            actuators=[cast(Actuator, dof.actuator) for dof in bound_dofs],
+            sensors=sensors,
+            evaluation_function=evaluation_function,
+            acquisition_plan=acquisition_plan,
+        )
+        optimizer = agent.to_optimization_problem().optimizer
+        # Blop checkpoints persist the Ax client, but its current loader does not
+        # restore this optional policy. Fresh BMM agents use no stopping policy.
+        if not hasattr(optimizer, "_stopping_strategy"):
+            optimizer._stopping_strategy = None  # type: ignore[attr-defined]
+    else:
+        agent = Agent(
+            sensors=sensors,
+            dofs=bound_dofs,
+            objectives=resolved_profile.objectives,
+            evaluation_function=evaluation_function,
+            acquisition_plan=acquisition_plan,
+            outcome_constraints=resolved_profile.outcome_constraints,
+            checkpoint_path=(
+                str(checkpoint_path) if checkpoint_path is not None else None
+            ),
+        )
+        agent.ax_client.configure_generation_strategy(
+            initialization_budget=resolved_profile.optimization.initialization_budget,
+            initialize_with_center=resolved_profile.optimization.initialize_with_center,
+            use_existing_trials_for_initialization=False,
+        )
 
     if subscribe_to_dash:
         subscribe_dash_to_agent(agent)
@@ -1041,26 +1068,102 @@ def _write_energy_map(
         raise
 
 
+def _read_energy_map(filename: str | Path) -> dict[str, Any]:
+    """Read an existing energy map, or return an empty map when absent."""
+    source = Path(filename)
+    if not source.is_file():
+        return {}
+    with source.open("rb") as stream:
+        return pickle.load(stream)
+
+
+def _agent_checkpoint_path(directory: Path, energy: str) -> Path:
+    return directory / f"agent-{quote(energy, safe='')}.json"
+
+
+def _write_agent_checkpoint(agent: Agent, filename: Path) -> None:
+    """Atomically persist an agent without exposing a partial Ax JSON file."""
+    temporary = filename.with_name(f".{filename.name}.tmp")
+    previous_path = agent.checkpoint_path
+    try:
+        agent.checkpoint_path = str(temporary)
+        agent.checkpoint()
+        temporary.replace(filename)
+        agent.checkpoint_path = str(filename)
+    except BaseException:
+        agent.checkpoint_path = previous_path
+        temporary.unlink(missing_ok=True)
+        raise
+
+
 def search_for_optimal_positions(
     energies: list[str],
     *,
     reference_scan_uid: str | None = None,
     energy_map_filename: str | Path | None = None,
+    checkpoint_directory: str | Path | None = None,
+    checkpoint_interval: int = 1,
+    iterations: int | None = None,
+    resume: bool = False,
     profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
 ) -> MsgGenerator[dict[str, Any]]:
-    """Optimize each energy against a supplied or newly acquired target run."""
+    """Optimize each energy against a supplied or newly acquired target run.
+
+    With ``checkpoint_directory`` set, each energy's Ax agent is checkpointed
+    after its baseline and after every ``checkpoint_interval`` optimization
+    iterations. On restart, ``resume=True`` reads completed energies from
+    ``energy_map_filename`` and restores the first unfinished energy's agent when
+    its checkpoint exists. Supply the original ``reference_scan_uid`` when
+    resuming. ``iterations`` is the number of additional iterations to perform
+    for every unfinished energy; by default the profile's iteration count is used.
+
+    Bluesky checkpoints bracket target acquisition, energy changes, baseline
+    acquisition, optimization chunks, and energy-map writes for deferred pauses.
+    """
     resolved_profile = get_energy_alignment_profile(profile)
     resolved_resources = _resolve_resources(resources)
     _validate_resources(resolved_resources, resolved_profile)
     previous_prompt = resolved_resources.prompt_state.prompt
 
     def main_plan() -> MsgGenerator[dict[str, Any]]:
-        energy_map: dict[str, Any] = {}
-        if not energies:
+        requested_energies = tuple(energies)
+        if not requested_energies:
+            return {}
+
+        requested_iterations = (
+            resolved_profile.optimization.iterations
+            if iterations is None
+            else iterations
+        )
+
+        checkpoint_root = (
+            Path(checkpoint_directory) if checkpoint_directory is not None else None
+        )
+        if checkpoint_root is not None:
+            checkpoint_root.mkdir(parents=True, exist_ok=True)
+
+        if resume:
+            existing_energy_map = _read_energy_map(energy_map_filename)
+            energy_map = {
+                energy: existing_energy_map[energy]
+                for energy in requested_energies
+                if energy in existing_energy_map
+            }
+        else:
+            energy_map: dict[str, Any] = {}
+            if energy_map_filename is not None:
+                _write_energy_map(energy_map_filename, energy_map)
+
+        pending_energies = [
+            energy for energy in requested_energies if energy not in energy_map
+        ]
+        if not pending_energies:
+            print(f"energy_map={energy_map}")
             return energy_map
 
         target_uid = reference_scan_uid
+        yield from checkpoint()
         if target_uid is None:
             target_readables: list[Readable] = [
                 resolved_resources.sensors[name] for name in resolved_profile.sensors
@@ -1070,6 +1173,8 @@ def search_for_optimal_positions(
                 for dof in _bind_dofs(resolved_resources, resolved_profile)
             )
             target_uid = yield from acquire_target_position(target_readables)
+        yield from checkpoint()
+
         _, nominal_dof_values, dof_half_ranges = _resolve_search_space(
             resolved_resources.catalog,
             target_uid,
@@ -1086,7 +1191,8 @@ def search_for_optimal_positions(
         )
         resolved_resources.prompt_state.prompt = False
 
-        for energy in energies:
+        for energy in pending_energies:
+            yield from checkpoint()
             energy_change = resolved_profile.energy_change
             yield from resolved_resources.change_edge_plan(
                 energy,
@@ -1094,7 +1200,18 @@ def search_for_optimal_positions(
                 no_hslits=energy_change.no_hslits,
                 mirror=energy_change.mirror,
             )
+            yield from checkpoint()
 
+            agent_checkpoint = (
+                _agent_checkpoint_path(checkpoint_root, energy)
+                if checkpoint_root is not None
+                else None
+            )
+            resume_agent = (
+                resume
+                and agent_checkpoint is not None
+                and agent_checkpoint.is_file()
+            )
             agent = make_energy_alignment_agent(
                 target_uid,
                 profile=resolved_profile,
@@ -1107,18 +1224,43 @@ def search_for_optimal_positions(
                         target_uid,
                         profile=resolved_profile,
                         resources=resolved_resources,
+                        iterations=requested_iterations,
                     ),
                 ),
+                checkpoint_path=agent_checkpoint,
+                resume=resume_agent,
             )
-            yield from agent.acquire_baseline(nominal_dof_values)
-            yield from agent.optimize(resolved_profile.optimization.iterations)
+
+            if not resume_agent:
+                yield from agent.acquire_baseline(nominal_dof_values)
+                if agent_checkpoint is not None:
+                    _write_agent_checkpoint(agent, agent_checkpoint)
+                yield from checkpoint()
+
+            if agent_checkpoint is None:
+                if requested_iterations:
+                    yield from agent.optimize(requested_iterations)
+                    yield from checkpoint()
+            else:
+                for first_iteration in range(
+                    0,
+                    requested_iterations,
+                    checkpoint_interval,
+                ):
+                    chunk_iterations = min(
+                        checkpoint_interval,
+                        requested_iterations - first_iteration,
+                    )
+                    yield from agent.optimize(chunk_iterations)
+                    _write_agent_checkpoint(agent, agent_checkpoint)
+                    yield from checkpoint()
 
             best_points = agent.get_best_points()
             print(f"best point for {energy} is {best_points}")
             energy_map[energy] = best_points
-
             if energy_map_filename is not None:
                 _write_energy_map(energy_map_filename, energy_map)
+            yield from checkpoint()
 
         print(f"energy_map={energy_map}")
         return energy_map

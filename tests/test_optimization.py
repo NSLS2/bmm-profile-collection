@@ -9,7 +9,8 @@ from blop.ax.objective import to_ax_objective_str
 from blop.ax.optimizer import AxOptimizer
 from blop.plans import default_acquire
 from bluesky import RunEngine
-from bluesky.plan_stubs import null
+from bluesky.plan_stubs import deferred_pause, null
+from bluesky.utils import RunEngineInterrupted
 from matplotlib import pyplot as plt
 import numpy as np
 from ophyd.sim import SynAxis, SynSignal
@@ -31,6 +32,7 @@ from BMM.optimization import (
     _image_processing_stages,
     _preprocess_image,
     _resolve_search_space,
+    _write_agent_checkpoint,
     _write_energy_map,
     acquire_target_position,
     compute_alignment_cost,
@@ -991,6 +993,45 @@ def test_agent_factory_returns_fresh_agents(make_profile_and_resources):
     assert second.acquisition_plan is None
 
 
+def test_agent_factory_restores_checkpointed_optimizer(
+    tmp_path,
+    make_profile_and_resources,
+):
+    profile, resources = make_profile_and_resources()
+    checkpoint_path = tmp_path / "agent.json"
+    original = make_energy_alignment_agent(
+        "reference",
+        profile=profile,
+        resources=resources,
+        checkpoint_path=checkpoint_path,
+        subscribe_to_dash=False,
+    )
+    original.ingest(
+        [
+            {
+                "motor": 0.25,
+                "alignment_cost": 0.5,
+                "intensity": 1_000_000.0,
+                "_id": "baseline",
+            }
+        ]
+    )
+
+    _write_agent_checkpoint(original, checkpoint_path)
+    restored = make_energy_alignment_agent(
+        "reference",
+        profile=profile,
+        resources=resources,
+        checkpoint_path=checkpoint_path,
+        resume=True,
+        subscribe_to_dash=False,
+    )
+
+    assert restored.checkpoint_path == str(checkpoint_path)
+    assert "baseline" in set(restored.ax_client.summarize()["arm_name"])
+    assert restored.to_optimization_problem().optimizer.should_stop() == (False, None)
+
+
 def test_acquire_target_position_records_supplied_readables():
     camera_value = np.array([[1.0, 2.0], [3.0, 4.0]])
     ion_chamber_value = 1_250_000.0
@@ -1333,6 +1374,207 @@ def test_search_with_no_energies_skips_target_acquisition(
 
     assert result.plan_result == {}
     assert resources.prompt_state.prompt is original_prompt
+
+
+def test_search_honors_deferred_pause_after_optimization(
+    make_profile_and_resources,
+    monkeypatch,
+):
+    pause_requested = False
+
+    class FakeAgent:
+        def acquire_baseline(self, nominal_dof_values):
+            yield from null()
+
+        def optimize(self, iterations):
+            nonlocal pause_requested
+            if not pause_requested:
+                pause_requested = True
+                yield from deferred_pause()
+            yield from null()
+
+        def get_best_points(self):
+            return [(0, {"motor": 0.0}, {"centroid_distance": (0.0, 0.0)})]
+
+    profile, resources = make_profile_and_resources()
+    monkeypatch.setattr(
+        optimization_module,
+        "make_energy_alignment_agent",
+        lambda *args, **kwargs: FakeAgent(),
+    )
+    run_engine = RunEngine({}, call_returns_result=True)
+    plan = search_for_optimal_positions(
+        ["Fe"],
+        reference_scan_uid="reference",
+        profile=profile,
+        resources=resources,
+    )
+
+    with pytest.raises(RunEngineInterrupted):
+        run_engine(plan)
+
+    assert run_engine.state == "paused"
+    assert resources.prompt_state.prompt is False
+
+    result = run_engine.resume()
+
+    assert result.plan_result == {
+        "Fe": [(0, {"motor": 0.0}, {"centroid_distance": (0.0, 0.0)})]
+    }
+    assert resources.prompt_state.prompt is True
+
+
+def test_search_resumes_latest_incomplete_energy_from_agent_checkpoint(
+    tmp_path,
+    make_profile_and_resources,
+    monkeypatch,
+):
+    events = []
+    fail_during_cu = True
+
+    class FakeAgent:
+        def __init__(self, energy, checkpoint_path, completed_iterations=0):
+            self.energy = energy
+            self.checkpoint_path = checkpoint_path
+            self.completed_iterations = completed_iterations
+
+        def acquire_baseline(self, nominal_dof_values):
+            events.append(("baseline", self.energy))
+            yield from null()
+
+        def optimize(self, iterations):
+            nonlocal fail_during_cu
+            start = self.completed_iterations
+            events.append(("optimize", self.energy, start, iterations))
+            yield from null()
+            if self.energy == "Cu" and start == 2 and fail_during_cu:
+                raise RuntimeError("interrupted optimization")
+            self.completed_iterations += iterations
+
+        def checkpoint(self):
+            with open(self.checkpoint_path, "wb") as stream:
+                pickle.dump(self.completed_iterations, stream)
+
+        def get_best_points(self):
+            return [
+                (
+                    0,
+                    {"motor": float(self.completed_iterations)},
+                    {"centroid_distance": (0.0, 0.0)},
+                )
+            ]
+
+    def make_agent(
+        reference_scan_uid,
+        *,
+        acquisition_plan,
+        checkpoint_path=None,
+        resume=False,
+        **kwargs,
+    ):
+        assert reference_scan_uid == "reference"
+        energy = acquisition_plan.keywords["md"]["BMM_agent"]["requested_energy"]
+        completed_iterations = 0
+        if resume:
+            with open(checkpoint_path, "rb") as stream:
+                completed_iterations = pickle.load(stream)
+        events.append(("agent", energy, resume, completed_iterations))
+        return FakeAgent(energy, checkpoint_path, completed_iterations)
+
+    edge_changes = []
+
+    def change_edge(energy, **kwargs):
+        edge_changes.append(energy)
+        yield from null()
+
+    profile, resources = make_profile_and_resources(change_edge_plan=change_edge)
+    monkeypatch.setattr(
+        optimization_module,
+        "make_energy_alignment_agent",
+        make_agent,
+    )
+    checkpoint_directory = tmp_path / "optimization-checkpoints"
+    energy_map_filename = tmp_path / "energy-map.pickle"
+
+    with pytest.raises(RuntimeError, match="interrupted optimization"):
+        RunEngine({})(
+            search_for_optimal_positions(
+                ["Fe", "Cu"],
+                reference_scan_uid="reference",
+                energy_map_filename=energy_map_filename,
+                checkpoint_directory=checkpoint_directory,
+                checkpoint_interval=2,
+                iterations=4,
+                profile=profile,
+                resources=resources,
+            )
+        )
+
+    with energy_map_filename.open("rb") as stream:
+        assert pickle.load(stream) == {
+            "Fe": [
+                (0, {"motor": 4.0}, {"centroid_distance": (0.0, 0.0)})
+            ]
+        }
+    assert resources.prompt_state.prompt is True
+
+    fail_during_cu = False
+    result = RunEngine({}, call_returns_result=True)(
+        search_for_optimal_positions(
+            ["Fe", "Cu"],
+            reference_scan_uid="reference",
+            energy_map_filename=energy_map_filename,
+            checkpoint_directory=checkpoint_directory,
+            checkpoint_interval=2,
+            iterations=3,
+            resume=True,
+            profile=profile,
+            resources=resources,
+        )
+    )
+
+    assert [event for event in events if event[0] == "baseline"] == [
+        ("baseline", "Fe"),
+        ("baseline", "Cu"),
+    ]
+    assert [event for event in events if event[0] == "agent"] == [
+        ("agent", "Fe", False, 0),
+        ("agent", "Cu", False, 0),
+        ("agent", "Cu", True, 2),
+    ]
+    assert [event[2:] for event in events if event[:2] == ("optimize", "Cu")] == [
+        (0, 2),
+        (2, 2),
+        (2, 2),
+        (4, 1),
+    ]
+    assert edge_changes == ["Fe", "Cu", "Cu"]
+    assert result.plan_result == {
+        "Fe": [(0, {"motor": 4.0}, {"centroid_distance": (0.0, 0.0)})],
+        "Cu": [(0, {"motor": 5.0}, {"centroid_distance": (0.0, 0.0)})],
+    }
+    with energy_map_filename.open("rb") as stream:
+        assert pickle.load(stream) == result.plan_result
+    assert sorted(path.name for path in checkpoint_directory.iterdir()) == [
+        "agent-Cu.json",
+        "agent-Fe.json",
+    ]
+
+    event_count = len(events)
+    completed = RunEngine({}, call_returns_result=True)(
+        search_for_optimal_positions(
+            ["Fe", "Cu"],
+            reference_scan_uid="reference",
+            energy_map_filename=energy_map_filename,
+            checkpoint_directory=checkpoint_directory,
+            iterations=10,
+            resume=True,
+            profile=profile,
+            resources=resources,
+        )
+    )
+    assert completed.plan_result == result.plan_result
+    assert len(events) == event_count
 
 
 def test_compute_alignment_cost_matches_reference_formula():
