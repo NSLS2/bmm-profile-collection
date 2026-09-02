@@ -996,9 +996,7 @@ def make_energy_alignment_agent(
             dof_half_ranges=dof_half_ranges,
         )
 
-    sensors = [
-        resolved_resources.sensors[name] for name in resolved_profile.sensors
-    ]
+    sensors = [resolved_resources.sensors[name] for name in resolved_profile.sensors]
     if resume:
         agent = Agent.from_checkpoint(
             str(checkpoint_path),
@@ -1208,9 +1206,7 @@ def search_for_optimal_positions(
                 else None
             )
             resume_agent = (
-                resume
-                and agent_checkpoint is not None
-                and agent_checkpoint.is_file()
+                resume and agent_checkpoint is not None and agent_checkpoint.is_file()
             )
             agent = make_energy_alignment_agent(
                 target_uid,
