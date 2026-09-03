@@ -3,10 +3,6 @@ import pickle
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from blop.ax import Objective, RangeDOF
-from ax import RangeParameterConfig
-from blop.ax.objective import to_ax_objective_str
-from blop.ax.optimizer import AxOptimizer
 from blop.plans import default_acquire
 from bluesky import RunEngine
 from bluesky.plan_stubs import deferred_pause, null
@@ -19,11 +15,12 @@ import pytest
 import BMM.optimization as optimization_module
 from BMM.optimization import (
     ENERGY_ALIGNMENT_PROFILES,
-    PER_ENERGY_ALIGNMENT,
+    XAS_SI111_ALIGNMENT,
     AlignmentCostConfig,
     BeamEvaluationConfig,
     EnergyAlignmentResources,
     ImageEvaluation,
+    OptimizationConfig,
     SurrogateModelDashCallback,
     UnusableBeamError,
     _optimization_metadata,
@@ -77,11 +74,7 @@ def gaussian_image(
 ):
     y, x = np.indices((31, 41))
     return 100 * np.exp(
-        -0.5
-        * (
-            ((x - center_x) / sigma_x) ** 2
-            + ((y - center_y) / sigma_y) ** 2
-        )
+        -0.5 * (((x - center_x) / sigma_x) ** 2 + ((y - center_y) / sigma_y) ** 2)
     )
 
 
@@ -99,33 +92,43 @@ def make_profile_and_resources():
             x_crop=(4, 37),
         )
         profile = replace(
-            PER_ENERGY_ALIGNMENT,
-            name="test",
-            sensors=("camera",),
-            dofs=(
-                RangeDOF(
-                    actuator="motor",
-                    bounds=(-1, 1),
-                    parameter_type="float",
-                    step_size=0.1,
-                ),
-            ),
-            evaluation=parameters,
+            XAS_SI111_ALIGNMENT,
+            camera="camera",
+            dof_bounds={
+                "dcm_roll": (-1, 1),
+                "m2_yaw": (-1, 1),
+                "m2_lateral": (-1, 1),
+            },
             search_half_widths=None,
+            evaluation=parameters,
             optimization=replace(
-                PER_ENERGY_ALIGNMENT.optimization,
+                XAS_SI111_ALIGNMENT.optimization,
                 iterations=2,
                 initialization_budget=1,
+                initialize_with_center=False,
             ),
         )
         resources = EnergyAlignmentResources(
             catalog=(
-                {"reference": run_with_fields(image=gaussian_image(), motor=0.25)}
+                {
+                    "reference": run_with_fields(
+                        image=gaussian_image(),
+                        dcm_roll=0.25,
+                        m2_yaw=0.0,
+                        m2_lateral=0.0,
+                    )
+                }
                 if catalog is None
                 else catalog
             ),
-            actuators={"motor": SynAxis(name="motor")},
-            sensors={"camera": SynSignal(name="camera", func=lambda: 1)},
+            actuators={
+                name: SynAxis(name=name)
+                for name in ("dcm_roll", "m2_yaw", "m2_lateral")
+            },
+            sensors={
+                "camera": SynSignal(name="camera", func=lambda: 1),
+                "i0": SynSignal(name="i0", func=lambda: 1),
+            },
             change_edge_plan=(
                 (lambda *args, **kwargs: null())
                 if change_edge_plan is None
@@ -202,11 +205,14 @@ def test_image_processing_stages_match_evaluation_pipeline():
     assert np.array_equal(processed.image, stages[-1].image)
     assert np.array_equal(processed.x_coordinates, stages[-1].x_coordinates)
     assert np.array_equal(processed.y_coordinates, stages[-1].y_coordinates)
-    assert _compute_processed_image_stats(
-        processed.image,
-        processed.x_coordinates,
-        processed.y_coordinates,
-    ) == stats
+    assert (
+        _compute_processed_image_stats(
+            processed.image,
+            processed.x_coordinates,
+            processed.y_coordinates,
+        )
+        == stats
+    )
     assert processed.image.shape == (68, 84)
     assert np.diff(processed.x_coordinates) == pytest.approx(0.25)
     assert np.diff(processed.y_coordinates) == pytest.approx(0.25)
@@ -401,46 +407,87 @@ def test_multi_energy_alignment_metrics_from_catalog_reads_existing_runs():
     assert catalog["high"]["primary"]["data"]["i0"].read_count == 1
 
 
+def test_xas_si111_profile_is_registered():
+    assert ENERGY_ALIGNMENT_PROFILES == {"xas-si111": XAS_SI111_ALIGNMENT}
+    assert get_energy_alignment_profile("xas-si111") is XAS_SI111_ALIGNMENT
+
+
 @pytest.mark.parametrize(
-    "outcome",
+    ("dof_bounds", "message"),
     [
-        "fwhm_x",
-        "fwhm_y",
-        "centroid_x",
-        "centroid_y",
-        "centroid_distance",
-        "intensity",
-        "centroid_x_distance",
-        "alignment_cost",
+        pytest.param(
+            {"dcm_roll": (-1, 1), "m2_yaw": (-1, 1)},
+            "must define bounds for exactly",
+            id="missing",
+        ),
+        pytest.param(
+            {
+                "dcm_roll": (-1, 1),
+                "m2_yaw": (-1, 1),
+                "m2_lateral": (-1, 1),
+                "extra": (-1, 1),
+            },
+            "must define bounds for exactly",
+            id="extra",
+        ),
+        pytest.param(
+            {
+                "dcm_roll": (1, -1),
+                "m2_yaw": (-1, 1),
+                "m2_lateral": (-1, 1),
+            },
+            "invalid bounds for 'dcm_roll'",
+            id="reversed",
+        ),
     ],
 )
-def test_profile_accepts_image_evaluation_outcomes(outcome):
-    profile = replace(
-        PER_ENERGY_ALIGNMENT,
-        name=f"{outcome}-objective",
-        objectives=(Objective(name=outcome, minimize=True),),
-    )
-
-    assert get_energy_alignment_profile(profile) is profile
+def test_profile_rejects_invalid_dof_bounds(dof_bounds, message):
+    with pytest.raises(ValueError, match=message):
+        replace(XAS_SI111_ALIGNMENT, dof_bounds=dof_bounds)
 
 
-def test_profile_rejects_unsupported_evaluation_outcome():
-    with pytest.raises(ValueError, match="beam_width"):
+@pytest.mark.parametrize(
+    "minimum_intensity_fraction",
+    [-0.1, np.inf, -np.inf, np.nan],
+    ids=["negative", "positive-infinity", "negative-infinity", "nan"],
+)
+def test_profile_rejects_invalid_intensity_fraction(minimum_intensity_fraction):
+    with pytest.raises(
+        ValueError,
+        match="Minimum intensity fraction must be finite and non-negative",
+    ):
         replace(
-            PER_ENERGY_ALIGNMENT,
-            name="unsupported-outcome",
-            objectives=(Objective(name="beam_width", minimize=True),),
+            XAS_SI111_ALIGNMENT,
+            minimum_intensity_fraction=minimum_intensity_fraction,
+        )
+
+
+def test_profile_rejects_change_edge_element_override():
+    with pytest.raises(ValueError, match="change_edge_kwargs cannot contain 'el'"):
+        replace(XAS_SI111_ALIGNMENT, change_edge_kwargs={"el": "Fe"})
+
+
+def test_resources_require_selected_camera(make_profile_and_resources):
+    profile, resources = make_profile_and_resources()
+    profile = replace(profile, camera="missing-camera")
+
+    with pytest.raises(ValueError, match="missing-camera"):
+        make_energy_alignment_agent(
+            "reference",
+            profile=profile,
+            resources=resources,
+            subscribe_to_dash=False,
         )
 
 
 def test_profile_rejects_unknown_search_half_width_dof():
     with pytest.raises(ValueError, match="unknown"):
-        replace(PER_ENERGY_ALIGNMENT, search_half_widths={"not_a_dof": 1.0})
+        replace(XAS_SI111_ALIGNMENT, search_half_widths={"not_a_dof": 1.0})
 
 
 def test_profile_rejects_non_positive_search_half_width():
     with pytest.raises(ValueError, match="must all be positive"):
-        replace(PER_ENERGY_ALIGNMENT, search_half_widths={"dcm_roll": 0.0})
+        replace(XAS_SI111_ALIGNMENT, search_half_widths={"dcm_roll": 0.0})
 
 
 def make_image_evaluator():
@@ -468,11 +515,7 @@ def test_image_evaluation_pairs_acquisition_metadata_with_suggestions():
     acquired_images = np.stack((second_image, first_image))
     acquired_intensities = np.array([2_500_000.0, 1_250_000.0])
     catalog["acquired"] = run_with_fields(
-        metadata={
-            "start": {
-                "blop_suggestions": [{"_id": "second"}, {"_id": "first"}]
-            }
-        },
+        metadata={"start": {"blop_suggestions": [{"_id": "second"}, {"_id": "first"}]}},
         image=acquired_images,
         i0=acquired_intensities,
     )
@@ -563,11 +606,7 @@ def test_image_evaluation_accepts_one_scalar_ion_reading(intensity_data):
 def test_image_evaluation_rejects_mismatched_payload_counts(images, intensities):
     evaluator, catalog = make_image_evaluator()
     catalog["acquired"] = run_with_fields(
-        metadata={
-            "start": {
-                "blop_suggestions": [{"_id": "first"}, {"_id": "second"}]
-            }
-        },
+        metadata={"start": {"blop_suggestions": [{"_id": "first"}, {"_id": "second"}]}},
         image=images,
         i0=intensities,
     )
@@ -609,8 +648,18 @@ def test_energy_alignment_debug_expands_outer_run_and_renders_per_energy_grid(
                 "uid": first_uid,
                 "scan_id": 41,
                 "blop_suggestions": [
-                    {"_id": "first-a", "motor": -0.2},
-                    {"_id": "first-b", "motor": 0.3},
+                    {
+                        "_id": "first-a",
+                        "dcm_roll": -0.2,
+                        "m2_yaw": 0.0,
+                        "m2_lateral": 0.0,
+                    },
+                    {
+                        "_id": "first-b",
+                        "dcm_roll": 0.3,
+                        "m2_yaw": 0.0,
+                        "m2_lateral": 0.0,
+                    },
                 ],
             }
         },
@@ -623,7 +672,14 @@ def test_energy_alignment_debug_expands_outer_run_and_renders_per_energy_grid(
             "start": {
                 "uid": second_uid,
                 "scan_id": 42,
-                "blop_suggestions": [{"_id": "second-a", "motor": 0.1}],
+                "blop_suggestions": [
+                    {
+                        "_id": "second-a",
+                        "dcm_roll": 0.1,
+                        "m2_yaw": 0.0,
+                        "m2_lateral": 0.0,
+                    }
+                ],
             }
         },
         image=gaussian_image(center_y=13),
@@ -656,14 +712,10 @@ def test_energy_alignment_debug_expands_outer_run_and_renders_per_energy_grid(
         figure.canvas.draw()
         row_names = [
             stage.name
-            for stage in _image_processing_stages(
-                first_images[0], profile.evaluation
-            )
+            for stage in _image_processing_stages(first_images[0], profile.evaluation)
         ]
         image_axes = [
-            axis
-            for axis in figure.axes
-            if axis.get_gid() == "energy-alignment-image"
+            axis for axis in figure.axes if axis.get_gid() == "energy-alignment-image"
         ]
         x_axes = [
             axis
@@ -675,24 +727,15 @@ def test_energy_alignment_debug_expands_outer_run_and_renders_per_energy_grid(
             for axis in figure.axes
             if axis.get_gid() == "energy-alignment-y-marginal"
         ]
-        assert (
-            len(image_axes)
-            == len(x_axes)
-            == len(y_axes)
-            == len(row_names) * 3
-        )
+        assert len(image_axes) == len(x_axes) == len(y_axes) == len(row_names) * 3
         assert [
             image_axes[index * 3].get_ylabel().splitlines()[0]
             for index in range(len(row_names))
         ] == row_names
 
         displayed = np.asarray(image_axes[0].images[0].get_array())
-        assert x_axes[0].lines[0].get_ydata() == pytest.approx(
-            displayed.sum(axis=0)
-        )
-        assert y_axes[0].lines[0].get_xdata() == pytest.approx(
-            displayed.sum(axis=1)
-        )
+        assert x_axes[0].lines[0].get_ydata() == pytest.approx(displayed.sum(axis=0))
+        assert y_axes[0].lines[0].get_xdata() == pytest.approx(displayed.sum(axis=1))
         assert x_axes[0].lines[0].get_xdata() == pytest.approx(
             np.arange(first_images.shape[2])
         )
@@ -701,9 +744,7 @@ def test_energy_alignment_debug_expands_outer_run_and_renders_per_energy_grid(
         )
         assert len({axis.images[0].get_clim() for axis in image_axes[:3]}) == 1
 
-        final_text = "\n".join(
-            text.get_text() for text in image_axes[-3].texts
-        )
+        final_text = "\n".join(text.get_text() for text in image_axes[-3].texts)
         stats = compute_image_stats(first_images[0], profile.evaluation)
         assert f"FWHM x = {stats.fwhm_x:.3g} px" in final_text
         assert f"FWHM y = {stats.fwhm_y:.3g} px" in final_text
@@ -721,7 +762,7 @@ def test_energy_alignment_debug_expands_outer_run_and_renders_per_energy_grid(
         assert "UID=aaaaaaaa1" in column_context
         assert "UID=aaaaaaaa2" in column_context
         assert "suggestion _id=first-a" in column_context
-        assert "motor=-0.2" in column_context
+        assert "dcm_roll=-0.2" in column_context
         assert "dcm_energy=7114" in column_context
         assert "i0=300" in column_context
 
@@ -760,7 +801,12 @@ def test_energy_alignment_debug_overlays_multiple_per_energy_runs(
                     "uid": acquisition_uid,
                     "scan_id": 50 + index,
                     "blop_suggestions": [
-                        {"_id": f"energy-{index}", "motor": index / 10}
+                        {
+                            "_id": f"energy-{index}",
+                            "dcm_roll": index / 10,
+                            "m2_yaw": 0.0,
+                            "m2_lateral": 0.0,
+                        }
                     ],
                 }
             },
@@ -794,9 +840,7 @@ def test_energy_alignment_debug_overlays_multiple_per_energy_runs(
     try:
         figure.canvas.draw()
         image_axes = [
-            axis
-            for axis in figure.axes
-            if axis.get_gid() == "energy-alignment-image"
+            axis for axis in figure.axes if axis.get_gid() == "energy-alignment-image"
         ]
         x_axes = [
             axis
@@ -808,9 +852,7 @@ def test_energy_alignment_debug_overlays_multiple_per_energy_runs(
             for axis in figure.axes
             if axis.get_gid() == "energy-alignment-y-marginal"
         ]
-        row_count = len(
-            _image_processing_stages(gaussian_image(), profile.evaluation)
-        )
+        row_count = len(_image_processing_stages(gaussian_image(), profile.evaluation))
         assert len(image_axes) == len(x_axes) == len(y_axes) == row_count * 4
 
         overlay_index = next(
@@ -850,12 +892,10 @@ def test_energy_alignment_debug_overlays_multiple_per_energy_runs(
         assert all(uid in title for uid in acquisition_uids)
         assert "reference-full-uid" in title
         assert all(
-            run["primary"]["data"]["image"].read_count == 1
-            for run in acquisitions
+            run["primary"]["data"]["image"].read_count == 1 for run in acquisitions
         )
         assert all(
-            run["primary"]["data"]["acquisition_uid"].read_count == 1
-            for run in outers
+            run["primary"]["data"]["acquisition_uid"].read_count == 1 for run in outers
         )
     finally:
         plt.close(figure)
@@ -970,25 +1010,101 @@ def test_energy_alignment_debug_rejects_invalid_inputs(
         plt.close("all")
 
 
-def test_agent_factory_returns_fresh_agents(make_profile_and_resources):
+def test_agent_factory_applies_runtime_profile(make_profile_and_resources):
     profile, resources = make_profile_and_resources()
-
     first = make_energy_alignment_agent(
         "reference",
         profile=profile,
         resources=resources,
         subscribe_to_dash=False,
     )
-    second = make_energy_alignment_agent(
-        "reference",
-        profile=profile,
-        resources=resources,
-        subscribe_to_dash=False,
+
+    alternate_camera = SynSignal(name="alternate-camera", func=lambda: 1)
+    resources.sensors["alternate-camera"] = alternate_camera
+    resources.catalog["reference"]["primary"]["data"]["alternate_image"] = Field(
+        gaussian_image()
     )
+    alternate_evaluation = BeamEvaluationConfig(
+        image_field="alternate_image",
+        intensity_field="i0",
+        x_crop=(8, 29),
+        blur_sigma=None,
+        upscale_factor=None,
+    )
+    alternate_cost = AlignmentCostConfig(
+        position_tolerance_px=4.0,
+        focus_weight=0.25,
+        dof_weight=0.2,
+    )
+    alternate_profile = replace(
+        profile,
+        camera="alternate-camera",
+        dof_bounds={
+            "dcm_roll": (-2, 2),
+            "m2_yaw": (-3, 3),
+            "m2_lateral": (-4, 4),
+        },
+        search_half_widths={
+            "dcm_roll": 0.5,
+            "m2_yaw": 1.0,
+            "m2_lateral": 1.5,
+        },
+        evaluation=alternate_evaluation,
+        cost=alternate_cost,
+        minimum_intensity_fraction=0.75,
+        optimization=OptimizationConfig(
+            iterations=7,
+            initialization_budget=3,
+            initialize_with_center=True,
+        ),
+    )
+    generation_strategy_arguments = []
+    client_type = type(first.ax_client)
+    configure_generation_strategy = client_type.configure_generation_strategy
+
+    def capture_generation_strategy(client, **kwargs):
+        generation_strategy_arguments.append(kwargs)
+        return configure_generation_strategy(client, **kwargs)
+
+    with patch.object(
+        client_type,
+        "configure_generation_strategy",
+        capture_generation_strategy,
+    ):
+        second = make_energy_alignment_agent(
+            "reference",
+            profile=alternate_profile,
+            resources=resources,
+            subscribe_to_dash=False,
+        )
 
     assert first is not second
-    assert profile.dofs[0].actuator == "motor"
-    assert profile.dofs[0].step_size == 0.1
+    assert second.sensors == [alternate_camera, resources.sensors["i0"]]
+    parameters = second.ax_client._experiment.search_space.parameters
+    assert {
+        name: (parameter.lower, parameter.upper)
+        for name, parameter in parameters.items()
+    } == {
+        "dcm_roll": (-0.25, 0.75),
+        "m2_yaw": (-1.0, 1.0),
+        "m2_lateral": (-1.5, 1.5),
+    }
+    assert isinstance(second.evaluation_function, ImageEvaluation)
+    assert second.evaluation_function.parameters is alternate_evaluation
+    assert second.evaluation_function.cost is alternate_cost
+    optimization_config = second.ax_client._experiment.optimization_config
+    assert set(optimization_config.objective.metric_names) == {"alignment_cost"}
+    assert optimization_config.objective.minimize
+    assert [item.expression for item in optimization_config.outcome_constraints] == [
+        "intensity >= 0.75 * baseline"
+    ]
+    assert generation_strategy_arguments == [
+        {
+            "initialization_budget": 3,
+            "initialize_with_center": True,
+            "use_existing_trials_for_initialization": False,
+        }
+    ]
     assert first.acquisition_plan is None
     assert second.acquisition_plan is None
 
@@ -1009,7 +1125,9 @@ def test_agent_factory_restores_checkpointed_optimizer(
     original.ingest(
         [
             {
-                "motor": 0.25,
+                "dcm_roll": 0.25,
+                "m2_yaw": 0.0,
+                "m2_lateral": 0.0,
                 "alignment_cost": 0.5,
                 "intensity": 1_000_000.0,
                 "_id": "baseline",
@@ -1044,9 +1162,7 @@ def test_acquire_target_position_records_supplied_readables():
     run_engine.subscribe(lambda name, doc: documents.append((name, doc)))
 
     with patch.object(motor, "set", wraps=motor.set) as set_motor:
-        result = run_engine(
-            acquire_target_position([camera, ion_chamber, motor])
-        )
+        result = run_engine(acquire_target_position([camera, ion_chamber, motor]))
 
     starts = [doc for name, doc in documents if name == "start"]
     assert len(starts) == 1
@@ -1064,8 +1180,6 @@ def test_acquire_target_position_records_supplied_readables():
     assert len([doc for name, doc in documents if name == "stop"]) == 1
 
 
-
-
 def test_metadata_uses_profile_and_live_resources(make_profile_and_resources):
     profile, resources = make_profile_and_resources(read_energy=lambda: 7112.5)
 
@@ -1078,10 +1192,19 @@ def test_metadata_uses_profile_and_live_resources(make_profile_and_resources):
 
     assert metadata["Beamline"]["energy"] == 7112.5
     agent_metadata = metadata["BMM_agent"]
-    assert agent_metadata["profile"] == "test"
+    assert agent_metadata["profile"] == "xas-si111"
     assert agent_metadata["iterations"] == 2
-    assert agent_metadata["dofs"][0]["name"] == "motor"
-    assert agent_metadata["sensors"] == ["camera"]
+    assert [dof["name"] for dof in agent_metadata["dofs"]] == [
+        "dcm_roll",
+        "m2_yaw",
+        "m2_lateral",
+    ]
+    assert [dof["bounds"] for dof in agent_metadata["dofs"]] == [
+        [-1, 1],
+        [-1, 1],
+        [-1, 1],
+    ]
+    assert agent_metadata["sensors"] == ["camera", "i0"]
     assert agent_metadata["objectives"] == ["alignment_cost"]
     assert agent_metadata["outcome_constraints"] == ["intensity >= 0.5 * baseline"]
     assert agent_metadata["cost"] == {
@@ -1102,11 +1225,13 @@ def test_dash_callback_builds_app(make_profile_and_resources):
     )
 
     callback = SurrogateModelDashCallback(agent)
-    callback.event({"data": {"motor": 0.25}})
-    figure = callback.compute_figure("motor", "motor", "alignment_cost")
+    callback.event(
+        {"data": {"dcm_roll": 0.25, "m2_yaw": 0.0, "m2_lateral": 0.0}}
+    )
+    figure = callback.compute_figure("dcm_roll", "dcm_roll", "alignment_cost")
     app = callback.build_app()
 
-    assert callback.dof_names == ["motor"]
+    assert callback.dof_names == ["dcm_roll", "m2_yaw", "m2_lateral"]
     assert callback.objective_names == ["alignment_cost"]
     assert callback.version == 1
     assert "two different DOFs" in figure.layout.annotations[0].text
@@ -1141,22 +1266,47 @@ def test_search_captures_and_reuses_target_reference(
         def optimize(self, iterations):
             agent_events.append(("optimize", iterations))
             yield from self.acquisition_plan(
-                [{"_id": "test", "motor": 0.0}],
-                [resources.actuators["motor"]],
-                [resources.sensors["camera"]],
+                [
+                    {
+                        "_id": "test",
+                        "dcm_roll": 0.0,
+                        "m2_yaw": 0.0,
+                        "m2_lateral": 0.0,
+                    }
+                ],
+                [
+                    resources.actuators["dcm_roll"],
+                    resources.actuators["m2_yaw"],
+                    resources.actuators["m2_lateral"],
+                ],
+                [resources.sensors["camera"], resources.sensors["i0"]],
             )
 
         def get_best_points(self):
-            return [(0, {"motor": 0.0}, {"centroid_distance": (0.0, 0.0)})]
+            return [
+                (
+                    0,
+                    {"dcm_roll": 0.0, "m2_yaw": 0.0, "m2_lateral": 0.0},
+                    {"centroid_distance": (0.0, 0.0)},
+                )
+            ]
 
     reference_image = Field(gaussian_image())
     catalog = {
         "target": {
-            "primary": {"data": {"image": reference_image, "motor": Field(0.25)}}
+            "primary": {
+                "data": {
+                    "image": reference_image,
+                    "dcm_roll": Field(0.25),
+                    "m2_yaw": Field(0.0),
+                    "m2_lateral": Field(0.0),
+                }
+            }
         }
     }
     lifecycle = []
     acquired_readables = []
+    change_edge_calls = []
 
     def acquire_target(readables):
         lifecycle.append("acquire")
@@ -1166,12 +1316,21 @@ def test_search_captures_and_reuses_target_reference(
 
     def change_edge(energy, **kwargs):
         lifecycle.append(f"edge:{energy}")
+        change_edge_calls.append((energy, kwargs))
         yield from null()
 
     profile, resources = make_profile_and_resources(
         catalog=catalog,
         change_edge_plan=change_edge,
     )
+    change_edge_kwargs = {
+        "focus": False,
+        "no_hslits": False,
+        "mirror": True,
+        "xrd": True,
+        "bender": False,
+    }
+    profile = replace(profile, change_edge_kwargs=change_edge_kwargs)
     evaluation_functions = []
     reference_scan_uids = []
     acquisition_plans = []
@@ -1210,8 +1369,18 @@ def test_search_captures_and_reuses_target_reference(
     )
 
     assert lifecycle == ["acquire", "edge:Fe", "edge:Cu"]
+    assert change_edge_calls == [
+        ("Fe", change_edge_kwargs),
+        ("Cu", change_edge_kwargs),
+    ]
     assert acquired_readables == [
-        (resources.sensors["camera"], resources.actuators["motor"])
+        (
+            resources.sensors["camera"],
+            resources.sensors["i0"],
+            resources.actuators["dcm_roll"],
+            resources.actuators["m2_yaw"],
+            resources.actuators["m2_lateral"],
+        )
     ]
     assert reference_scan_uids == ["target", "target"]
     assert [plan.func for plan in acquisition_plans] == [default_acquire] * 2
@@ -1234,13 +1403,13 @@ def test_search_captures_and_reuses_target_reference(
     assert len(evaluation_functions) == 2
     assert evaluation_functions[0] is evaluation_functions[1]
     assert reference_image.read_count == 1
-    assert [event[0] for event in agent_events] == [
-        "baseline",
-        "optimize",
-        "baseline",
-        "optimize",
+    nominal_dof_values = {"dcm_roll": 0.25, "m2_yaw": 0.0, "m2_lateral": 0.0}
+    assert agent_events == [
+        ("baseline", nominal_dof_values),
+        ("optimize", 2),
+        ("baseline", nominal_dof_values),
+        ("optimize", 2),
     ]
-    assert agent_events[0][1] == {"motor": 0.25}
 
 
 def test_search_uses_supplied_target_reference(
@@ -1326,7 +1495,14 @@ def test_search_restores_prompt_after_failure(
         raise RuntimeError("energy change failed")
 
     profile, resources = make_profile_and_resources(
-        catalog={"target": run_with_fields(image=gaussian_image(), motor=0.25)},
+        catalog={
+            "target": run_with_fields(
+                image=gaussian_image(),
+                dcm_roll=0.25,
+                m2_yaw=0.0,
+                m2_lateral=0.0,
+            )
+        },
         change_edge_plan=failing_change_edge,
     )
     prompt_state = resources.prompt_state
@@ -1394,7 +1570,13 @@ def test_search_honors_deferred_pause_after_optimization(
             yield from null()
 
         def get_best_points(self):
-            return [(0, {"motor": 0.0}, {"centroid_distance": (0.0, 0.0)})]
+            return [
+                (
+                    0,
+                    {"dcm_roll": 0.0, "m2_yaw": 0.0, "m2_lateral": 0.0},
+                    {"centroid_distance": (0.0, 0.0)},
+                )
+            ]
 
     profile, resources = make_profile_and_resources()
     monkeypatch.setattr(
@@ -1419,7 +1601,13 @@ def test_search_honors_deferred_pause_after_optimization(
     result = run_engine.resume()
 
     assert result.plan_result == {
-        "Fe": [(0, {"motor": 0.0}, {"centroid_distance": (0.0, 0.0)})]
+        "Fe": [
+            (
+                0,
+                {"dcm_roll": 0.0, "m2_yaw": 0.0, "m2_lateral": 0.0},
+                {"centroid_distance": (0.0, 0.0)},
+            )
+        ]
     }
     assert resources.prompt_state.prompt is True
 
@@ -1459,7 +1647,11 @@ def test_search_resumes_latest_incomplete_energy_from_agent_checkpoint(
             return [
                 (
                     0,
-                    {"motor": float(self.completed_iterations)},
+                    {
+                        "dcm_roll": float(self.completed_iterations),
+                        "m2_yaw": 0.0,
+                        "m2_lateral": 0.0,
+                    },
                     {"centroid_distance": (0.0, 0.0)},
                 )
             ]
@@ -1513,7 +1705,11 @@ def test_search_resumes_latest_incomplete_energy_from_agent_checkpoint(
     with energy_map_filename.open("rb") as stream:
         assert pickle.load(stream) == {
             "Fe": [
-                (0, {"motor": 4.0}, {"centroid_distance": (0.0, 0.0)})
+                (
+                    0,
+                    {"dcm_roll": 4.0, "m2_yaw": 0.0, "m2_lateral": 0.0},
+                    {"centroid_distance": (0.0, 0.0)},
+                )
             ]
         }
     assert resources.prompt_state.prompt is True
@@ -1550,8 +1746,20 @@ def test_search_resumes_latest_incomplete_energy_from_agent_checkpoint(
     ]
     assert edge_changes == ["Fe", "Cu", "Cu"]
     assert result.plan_result == {
-        "Fe": [(0, {"motor": 4.0}, {"centroid_distance": (0.0, 0.0)})],
-        "Cu": [(0, {"motor": 5.0}, {"centroid_distance": (0.0, 0.0)})],
+        "Fe": [
+            (
+                0,
+                {"dcm_roll": 4.0, "m2_yaw": 0.0, "m2_lateral": 0.0},
+                {"centroid_distance": (0.0, 0.0)},
+            )
+        ],
+        "Cu": [
+            (
+                0,
+                {"dcm_roll": 5.0, "m2_yaw": 0.0, "m2_lateral": 0.0},
+                {"centroid_distance": (0.0, 0.0)},
+            )
+        ],
     }
     with energy_map_filename.open("rb") as stream:
         assert pickle.load(stream) == result.plan_result
@@ -1699,17 +1907,28 @@ def test_resolve_search_space_recenters_and_clamps(
     make_profile_and_resources, nominal, half_width, expected_bounds
 ):
     profile, resources = make_profile_and_resources(
-        catalog={"target": run_with_fields(image=gaussian_image(), motor=nominal)},
+        catalog={
+            "target": run_with_fields(
+                image=gaussian_image(),
+                dcm_roll=nominal,
+                m2_yaw=0.0,
+                m2_lateral=0.0,
+            )
+        },
     )
-    profile = replace(profile, search_half_widths={"motor": half_width})
+    profile = replace(profile, search_half_widths={"dcm_roll": half_width})
 
     resolved_dofs, nominal_values, half_ranges = _resolve_search_space(
         resources.catalog, "target", resources, profile
     )
 
-    assert nominal_values == {"motor": pytest.approx(nominal)}
+    assert nominal_values == {
+        "dcm_roll": pytest.approx(nominal),
+        "m2_yaw": pytest.approx(0.0),
+        "m2_lateral": pytest.approx(0.0),
+    }
     assert resolved_dofs[0].bounds == pytest.approx(expected_bounds)
-    assert half_ranges["motor"] == pytest.approx(
+    assert half_ranges["dcm_roll"] == pytest.approx(
         (expected_bounds[1] - expected_bounds[0]) / 2
     )
 
@@ -1718,7 +1937,14 @@ def test_resolve_search_space_keeps_bounds_without_half_widths(
     make_profile_and_resources,
 ):
     profile, resources = make_profile_and_resources(
-        catalog={"target": run_with_fields(image=gaussian_image(), motor=0.4)},
+        catalog={
+            "target": run_with_fields(
+                image=gaussian_image(),
+                dcm_roll=0.4,
+                m2_yaw=0.0,
+                m2_lateral=0.0,
+            )
+        },
     )
 
     resolved_dofs, _, half_ranges = _resolve_search_space(
@@ -1726,85 +1952,4 @@ def test_resolve_search_space_keeps_bounds_without_half_widths(
     )
 
     assert resolved_dofs[0].bounds == (-1, 1)
-    assert half_ranges["motor"] == pytest.approx(1.0)
-
-
-def test_agent_uses_relative_intensity_constraint(make_profile_and_resources):
-    profile, resources = make_profile_and_resources()
-    agent = make_energy_alignment_agent(
-        "reference",
-        profile=profile,
-        resources=resources,
-        subscribe_to_dash=False,
-    )
-
-    optimization_config = agent.ax_client._experiment.optimization_config
-    assert optimization_config.objective.metric_names == ["alignment_cost"]
-    assert optimization_config.objective.minimize is True
-    [constraint] = optimization_config.outcome_constraints
-    assert constraint.metric_names == ["intensity"]
-    assert constraint.relative is True
-    assert constraint.expression == "intensity >= 0.5 * baseline"
-
-
-def test_agent_ingest_baseline_sets_status_quo(make_profile_and_resources):
-    profile, resources = make_profile_and_resources()
-    agent = make_energy_alignment_agent(
-        "reference",
-        profile=profile,
-        resources=resources,
-        subscribe_to_dash=False,
-    )
-
-    agent.ingest(
-        [
-            {
-                "motor": 0.25,
-                "alignment_cost": 0.5,
-                "intensity": 1_000_000.0,
-                "_id": "baseline",
-            }
-        ]
-    )
-
-    summary = agent.ax_client.summarize()
-    assert "baseline" in set(summary["arm_name"])
-
-
-def test_nan_objective_dropped_and_baseline_wins_best_point():
-    # Pins the Ax semantics in §3.3: a NaN objective mean is a missing
-    # measurement (dropped from the objective GP), the finite intensity still
-    # drives the relative constraint, and best-point selection returns the
-    # feasible baseline, never the unusable NaN trial, without raising.
-    optimizer = AxOptimizer(
-        parameters=[
-            RangeParameterConfig(
-                name="motor", bounds=(-1.0, 1.0), parameter_type="float"
-            )
-        ],
-        objective=to_ax_objective_str(PER_ENERGY_ALIGNMENT.objectives),
-        outcome_constraints=[
-            str(constraint)
-            for constraint in PER_ENERGY_ALIGNMENT.outcome_constraints
-        ],
-    )
-    optimizer.ingest(
-        [
-            {
-                "motor": 0.25,
-                "alignment_cost": 0.5,
-                "intensity": 1_000_000.0,
-                "_id": "baseline",
-            }
-        ]
-    )
-    optimizer.ingest(
-        [{"motor": 0.9, "alignment_cost": float("nan"), "intensity": 10.0}]
-    )
-
-    best_points = optimizer.get_best_points()
-
-    assert len(best_points) == 1
-    _, parameters, metrics = best_points[0]
-    assert parameters["motor"] == pytest.approx(0.25)
-    assert metrics["alignment_cost"][0] == pytest.approx(0.5)
+    assert half_ranges["dcm_roll"] == pytest.approx(1.0)

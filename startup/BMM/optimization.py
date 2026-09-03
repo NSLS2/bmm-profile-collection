@@ -26,14 +26,7 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 from urllib.parse import quote
 
 from ax.api.protocols import IMetric
-from blop.ax import (
-    Agent,
-    DOF,
-    Objective,
-    OutcomeConstraint,
-    RangeDOF,
-    ScalarizedObjective,
-)
+from blop.ax import Agent, Objective, OutcomeConstraint, RangeDOF
 from blop.plans import default_acquire
 from blop.protocols import AcquisitionPlan, Actuator, EvaluationFunction, Sensor
 from bluesky.callbacks import CallbackBase
@@ -102,11 +95,6 @@ class OptimizationConfig:
     initialize_with_center: bool
 
 
-@dataclass(frozen=True)
-class EnergyChangeConfig:
-    focus: bool = True
-    no_hslits: bool = True
-    mirror: bool = False
 
 
 @dataclass(frozen=True)
@@ -118,94 +106,58 @@ class AlignmentCostConfig:
     dof_weight: float = 0.1
 
 
-_IMAGE_EVALUATION_OUTCOMES = frozenset(
-    {
-        "fwhm_x",
-        "fwhm_y",
-        "centroid_x",
-        "centroid_y",
-        "centroid_distance",
-        "centroid_x_distance",
-        "intensity",
-        "alignment_cost",
-    }
-)
-
-
-def _objective_names(
-    objectives: tuple[Objective, ...] | ScalarizedObjective,
-) -> tuple[str, ...]:
-    if isinstance(objectives, ScalarizedObjective):
-        # Blop currently has no public accessor for the metric names that form a
-        # scalarized objective.
-        return tuple(objectives._objective_names.values())
-    return tuple(objective.name for objective in objectives)
-
-
-def _constraint_names(
-    constraints: tuple[OutcomeConstraint, ...],
-) -> tuple[str, ...]:
-    # Blop currently exposes only the formatted constraint publicly.
-    return tuple(
-        outcome.name
-        for constraint in constraints
-        for outcome in constraint._outcomes.values()
-    )
+_ALIGNMENT_DOF_NAMES = ("dcm_roll", "m2_yaw", "m2_lateral")
+_ALIGNMENT_OBJECTIVES = (Objective(name="alignment_cost", minimize=True),)
+_ALIGNMENT_ION_CHAMBER_KEY = "i0"
 
 
 @dataclass(frozen=True)
 class EnergyAlignmentProfile:
-    """Reusable description of one energy-alignment optimization problem.
+    """Operator-tunable settings for one energy-alignment profile.
 
-    Profiles validate themselves at construction, so an instance can always
-    be trusted downstream.
+    Profiles are immutable but reconfigurable between fresh plan launches:
+    use ``dataclasses.replace(XAS_SI111_ALIGNMENT, ...)`` and nested
+    ``dataclasses.replace`` calls for ``evaluation``, ``cost``, or
+    ``optimization``, then pass the result as ``profile=``. Selecting a camera
+    already present in ``EnergyAlignmentResources.sensors`` needs no restart;
+    new camera hardware must first be added to that mapping.
     """
 
     name: str
-    sensors: tuple[str, ...]
-    dofs: tuple[DOF, ...]
-    objectives: tuple[Objective, ...] | ScalarizedObjective
-    outcome_constraints: tuple[OutcomeConstraint, ...]
+    camera: str
+    dof_bounds: Mapping[str, tuple[float, float]]
+    search_half_widths: Mapping[str, float] | None
     evaluation: BeamEvaluationConfig
+    cost: AlignmentCostConfig
+    minimum_intensity_fraction: float
     optimization: OptimizationConfig
-    energy_change: EnergyChangeConfig = EnergyChangeConfig()
-    cost: AlignmentCostConfig = AlignmentCostConfig()
-    search_half_widths: Mapping[str, float] | None = None
+    change_edge_kwargs: Mapping[str, Any]
 
     def __post_init__(self) -> None:
-        if not self.sensors:
-            raise ValueError(f"Profile {self.name!r} must define at least one sensor")
-        if not self.dofs:
-            raise ValueError(f"Profile {self.name!r} must define at least one DOF")
-        if not isinstance(self.objectives, ScalarizedObjective) and not self.objectives:
+        if set(self.dof_bounds) != set(_ALIGNMENT_DOF_NAMES):
             raise ValueError(
-                f"Profile {self.name!r} must define at least one objective"
+                f"Profile {self.name!r} must define bounds for exactly "
+                f"{_ALIGNMENT_DOF_NAMES!r}"
             )
-        configured_outcomes = set(_objective_names(self.objectives))
-        configured_outcomes.update(_constraint_names(self.outcome_constraints))
-        unsupported_outcomes = configured_outcomes - _IMAGE_EVALUATION_OUTCOMES
-        if unsupported_outcomes:
-            raise ValueError(
-                f"Profile {self.name!r} uses outcomes not produced by "
-                f"ImageEvaluation: {sorted(unsupported_outcomes)!r}"
-            )
-        if any(dof.actuator is None for dof in self.dofs):
-            raise ValueError(
-                f"Profile {self.name!r} cannot use unbound, name-only DOFs"
-            )
+        for name, bounds in self.dof_bounds.items():
+            lower, upper = bounds
+            if not lower < upper:
+                raise ValueError(
+                    f"Profile {self.name!r} has invalid bounds for {name!r}: "
+                    f"{bounds!r}"
+                )
         if self.optimization.iterations < 1:
             raise ValueError("Optimization iterations must be at least one")
         if (
             not 0
             <= self.optimization.initialization_budget
-            <= (self.optimization.iterations)
+            <= self.optimization.iterations
         ):
             raise ValueError(
                 "Initialization budget must be between zero and the iteration count"
             )
         if self.search_half_widths is not None:
-            dof_names = {dof.parameter_name for dof in self.dofs}
-            unknown = set(self.search_half_widths) - dof_names
+            unknown = set(self.search_half_widths) - set(_ALIGNMENT_DOF_NAMES)
             if unknown:
                 raise ValueError(
                     f"Profile {self.name!r} search_half_widths references unknown "
@@ -215,58 +167,56 @@ class EnergyAlignmentProfile:
                 raise ValueError(
                     f"Profile {self.name!r} search_half_widths must all be positive"
                 )
+        if (
+            not np.isfinite(self.minimum_intensity_fraction)
+            or self.minimum_intensity_fraction < 0
+        ):
+            raise ValueError(
+                "Minimum intensity fraction must be finite and non-negative"
+            )
+        if "el" in self.change_edge_kwargs:
+            raise ValueError("change_edge_kwargs cannot contain 'el'")
 
 
-_ALIGNMENT_DOFS = (
-    RangeDOF(
-        actuator="dcm_roll",
-        bounds=(-0.365 - 10, -0.365 + 10),
-        parameter_type="float",
+XAS_SI111_ALIGNMENT = EnergyAlignmentProfile(
+    name="xas-si111",
+    camera="cam8",
+    dof_bounds=MappingProxyType(
+        {
+            "dcm_roll": (-0.365 - 10, -0.365 + 10),
+            "m2_yaw": (-2, 2),
+            "m2_lateral": (-2, 2),
+        }
     ),
-    RangeDOF(
-        actuator="m2_yaw",
-        bounds=(-2, 2),
-        parameter_type="float",
+    search_half_widths=MappingProxyType(
+        {"dcm_roll": 1.0, "m2_yaw": 0.5, "m2_lateral": 0.5}
     ),
-    RangeDOF(
-        actuator="m2_lateral",
-        bounds=(-2, 2),
-        parameter_type="float",
+    evaluation=BeamEvaluationConfig(
+        image_field="cam-8_image",
+        intensity_field="I0",
+        x_crop=(900, 1040),
+        y_crop=None,
+        blur_sigma=2.0,
+        upscale_factor=4,
     ),
-)
-
-_BEAM_EVALUATION = BeamEvaluationConfig(
-    image_field="cam-8_image",
-    intensity_field="I0",
-    x_crop=(900, 1040),
-    y_crop=None,
-)
-
-PER_ENERGY_ALIGNMENT = EnergyAlignmentProfile(
-    name="per-energy-alignment",
-    sensors=("camera", "i0"),
-    dofs=_ALIGNMENT_DOFS,
-    objectives=(Objective(name="alignment_cost", minimize=True),),
-    outcome_constraints=(
-        OutcomeConstraint(
-            "i >= 0.5 * baseline",
-            i=IMetric(name="intensity"),
-        ),
+    cost=AlignmentCostConfig(
+        position_tolerance_px=5.0,
+        focus_weight=0.5,
+        dof_weight=0.1,
     ),
-    evaluation=_BEAM_EVALUATION,
+    minimum_intensity_fraction=0.5,
     optimization=OptimizationConfig(
         iterations=20,
         initialization_budget=5,
         initialize_with_center=False,
     ),
-    cost=AlignmentCostConfig(),
-    search_half_widths=MappingProxyType(
-        {"dcm_roll": 1.0, "m2_yaw": 0.5, "m2_lateral": 0.5}
+    change_edge_kwargs=MappingProxyType(
+        {"focus": True, "no_hslits": True, "mirror": False}
     ),
 )
 
 ENERGY_ALIGNMENT_PROFILES: Mapping[str, EnergyAlignmentProfile] = MappingProxyType(
-    {PER_ENERGY_ALIGNMENT.name: PER_ENERGY_ALIGNMENT}
+    {XAS_SI111_ALIGNMENT.name: XAS_SI111_ALIGNMENT}
 )
 
 
@@ -578,7 +528,7 @@ def load_bmm_energy_alignment_resources() -> EnergyAlignmentResources:
             "m2_yaw": m2.yaw,
             "m2_lateral": m2.lateral,
         },
-        sensors={"camera": cam8, "i0": ic0},
+        sensors={"cam8": cam8, _ALIGNMENT_ION_CHAMBER_KEY: ic0},
         change_edge_plan=change_edge,
         prompt_state=BMMuser,
         read_energy=read_energy,
@@ -597,13 +547,14 @@ def _validate_resources(
 ) -> None:
     """Fail with the full list of missing devices before any hardware motion."""
     missing_actuators = [
-        dof.actuator
-        for dof in profile.dofs
-        if isinstance(dof.actuator, str)
-        and resources.actuators.get(dof.actuator) is None
+        name
+        for name in _ALIGNMENT_DOF_NAMES
+        if resources.actuators.get(name) is None
     ]
     missing_sensors = [
-        sensor for sensor in profile.sensors if resources.sensors.get(sensor) is None
+        name
+        for name in (profile.camera, _ALIGNMENT_ION_CHAMBER_KEY)
+        if resources.sensors.get(name) is None
     ]
     if missing_actuators:
         raise ValueError(f"Missing alignment actuators: {missing_actuators!r}")
@@ -614,12 +565,14 @@ def _validate_resources(
 def _bind_dofs(
     resources: EnergyAlignmentResources,
     profile: EnergyAlignmentProfile,
-) -> tuple[DOF, ...]:
+) -> tuple[RangeDOF, ...]:
     return tuple(
-        replace(dof, actuator=resources.actuators[dof.actuator])
-        if isinstance(dof.actuator, str)
-        else dof
-        for dof in profile.dofs
+        RangeDOF(
+            actuator=resources.actuators[name],
+            bounds=profile.dof_bounds[name],
+            parameter_type="float",
+        )
+        for name in _ALIGNMENT_DOF_NAMES
     )
 
 
@@ -655,7 +608,7 @@ def _resolve_search_space(
     reference_scan_uid: str,
     resources: EnergyAlignmentResources,
     profile: EnergyAlignmentProfile,
-) -> tuple[tuple[DOF, ...], dict[str, float], dict[str, float]]:
+) -> tuple[tuple[RangeDOF, ...], dict[str, float], dict[str, float]]:
     """Bind DOFs, read the nominal, and re-center the search box when requested.
 
     Returns the bound (possibly re-centered) DOFs, the nominal DOF values, and the
@@ -814,7 +767,7 @@ class ImageEvaluation:
 def compute_stats(
     uid: str,
     *,
-    profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
+    profile: str | EnergyAlignmentProfile = XAS_SI111_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
 ) -> BeamStats:
     """Print camera and ion-chamber statistics for a completed run."""
@@ -905,11 +858,22 @@ def _device_name(device: object) -> str:
     return str(getattr(device, "name", device))
 
 
+def _alignment_outcome_constraints(
+    profile: EnergyAlignmentProfile,
+) -> tuple[OutcomeConstraint, ...]:
+    return (
+        OutcomeConstraint(
+            f"i >= {profile.minimum_intensity_fraction:g} * baseline",
+            i=IMetric(name="intensity"),
+        ),
+    )
+
+
 def _optimization_metadata(
     energy: str,
     reference_scan_uid: str | None = None,
     *,
-    profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
+    profile: str | EnergyAlignmentProfile = XAS_SI111_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
     iterations: int | None = None,
 ) -> dict[str, Any]:
@@ -940,20 +904,19 @@ def _optimization_metadata(
                 {
                     "name": dof.parameter_name,
                     "actuator": _device_name(dof.actuator),
-                    "bounds": list(bounds)
-                    if (bounds := getattr(dof, "bounds", None))
-                    else None,
-                    "parameter_type": getattr(dof, "parameter_type", None),
+                    "bounds": list(dof.bounds),
+                    "parameter_type": dof.parameter_type,
                 }
                 for dof in bound_dofs
             ],
             "sensors": [
                 _device_name(resolved_resources.sensors[name])
-                for name in resolved_profile.sensors
+                for name in (resolved_profile.camera, _ALIGNMENT_ION_CHAMBER_KEY)
             ],
-            "objectives": list(_objective_names(resolved_profile.objectives)),
+            "objectives": [objective.name for objective in _ALIGNMENT_OBJECTIVES],
             "outcome_constraints": [
-                str(constraint) for constraint in resolved_profile.outcome_constraints
+                str(constraint)
+                for constraint in _alignment_outcome_constraints(resolved_profile)
             ],
             "cost": asdict(resolved_profile.cost),
             "search_half_widths": (
@@ -968,7 +931,7 @@ def _optimization_metadata(
 def make_energy_alignment_agent(
     reference_scan_uid: str,
     *,
-    profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
+    profile: str | EnergyAlignmentProfile = XAS_SI111_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
     evaluation_function: EvaluationFunction | None = None,
     acquisition_plan: AcquisitionPlan | None = None,
@@ -996,7 +959,10 @@ def make_energy_alignment_agent(
             dof_half_ranges=dof_half_ranges,
         )
 
-    sensors = [resolved_resources.sensors[name] for name in resolved_profile.sensors]
+    sensors = [
+        resolved_resources.sensors[resolved_profile.camera],
+        resolved_resources.sensors[_ALIGNMENT_ION_CHAMBER_KEY],
+    ]
     if resume:
         agent = Agent.from_checkpoint(
             str(checkpoint_path),
@@ -1014,10 +980,10 @@ def make_energy_alignment_agent(
         agent = Agent(
             sensors=sensors,
             dofs=bound_dofs,
-            objectives=resolved_profile.objectives,
+            objectives=_ALIGNMENT_OBJECTIVES,
             evaluation_function=evaluation_function,
             acquisition_plan=acquisition_plan,
-            outcome_constraints=resolved_profile.outcome_constraints,
+            outcome_constraints=_alignment_outcome_constraints(resolved_profile),
             checkpoint_path=(
                 str(checkpoint_path) if checkpoint_path is not None else None
             ),
@@ -1103,10 +1069,18 @@ def search_for_optimal_positions(
     checkpoint_interval: int = 1,
     iterations: int | None = None,
     resume: bool = False,
-    profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
+    profile: str | EnergyAlignmentProfile = XAS_SI111_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
 ) -> MsgGenerator[dict[str, Any]]:
     """Optimize each energy against a supplied or newly acquired target run.
+
+    To tune a fresh run without reloading the profile collection, use
+    ``dataclasses.replace(XAS_SI111_ALIGNMENT, ...)`` and nested
+    ``dataclasses.replace`` calls for ``evaluation``, ``cost``, or
+    ``optimization``, then pass the result as ``profile=``. Selecting a camera
+    already present in ``EnergyAlignmentResources.sensors`` needs no restart;
+    adding camera hardware requires adding its device to that mapping. A resumed
+    checkpoint must reuse the profile that created it.
 
     With ``checkpoint_directory`` set, each energy's Ax agent is checkpointed
     after its baseline and after every ``checkpoint_interval`` optimization
@@ -1164,7 +1138,8 @@ def search_for_optimal_positions(
         yield from checkpoint()
         if target_uid is None:
             target_readables: list[Readable] = [
-                resolved_resources.sensors[name] for name in resolved_profile.sensors
+                resolved_resources.sensors[resolved_profile.camera],
+                resolved_resources.sensors[_ALIGNMENT_ION_CHAMBER_KEY],
             ]
             target_readables.extend(
                 cast(Readable, dof.actuator)
@@ -1191,12 +1166,9 @@ def search_for_optimal_positions(
 
         for energy in pending_energies:
             yield from checkpoint()
-            energy_change = resolved_profile.energy_change
             yield from resolved_resources.change_edge_plan(
                 energy,
-                focus=energy_change.focus,
-                no_hslits=energy_change.no_hslits,
-                mirror=energy_change.mirror,
+                **resolved_profile.change_edge_kwargs,
             )
             yield from checkpoint()
 
@@ -1309,7 +1281,7 @@ def show_energy_alignment_debug(
     uids: str | Sequence[str],
     *,
     energy_field: str = "dcm_energy",
-    profile: str | EnergyAlignmentProfile = PER_ENERGY_ALIGNMENT.name,
+    profile: str | EnergyAlignmentProfile = XAS_SI111_ALIGNMENT.name,
     resources: EnergyAlignmentResources | None = None,
 ) -> Figure:
     """Show image-processing diagnostics for completed alignment acquisitions.
