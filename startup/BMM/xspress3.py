@@ -325,20 +325,9 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
 
     def describe(self):        
         res = super().describe()
-        # res[self.xrf.name]["shape"] = (8, 4096)
         for channel in self.iterate_channels():
+            res[channel.name+'_xrf']["shape"] = (1, 4096)
             res[channel.name+'_xrf']['dtype_str'] = '<f8'
-        # try:
-        #     res['4-element SDD_channel01_xrf']['dtype_str'] = '<f8'
-        #     res['4-element SDD_channel02_xrf']['dtype_str'] = '<f8'
-        #     res['4-element SDD_channel03_xrf']['dtype_str'] = '<f8'
-        #     res['4-element SDD_channel04_xrf']['dtype_str'] = '<f8'
-        # except:
-        #     pass
-        # try:
-        #     res['1-element SDD_channel08_xrf']['dtype_str'] = '<f8'
-        # except:
-        #     pass            
         return res
 
     def set_rois(self):

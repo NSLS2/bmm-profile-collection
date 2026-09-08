@@ -493,7 +493,7 @@ if with_pilatus is True:
 
 eiger = None
 
-eiger_use_async = False
+eiger_use_async = True
 
 from BMM.user_ns.dwelltime import with_eiger
 if with_eiger is True:
@@ -502,7 +502,7 @@ if with_eiger is True:
 
     if eiger_use_async is True:
         run_report('\t'+'Eiger (async)')
-        from BMM.eiger_async import BMMEiger, EigerDetector
+        from bmm_tools.devices.eiger_async import BMMEiger, EigerDetector
         from nslsii.ophyd_async.providers import NSLS2PathProvider
         from ophyd_async.core import init_devices
 
@@ -517,7 +517,7 @@ if with_eiger is True:
         ## following example of  https://github.com/NSLS2/cdi-profile-collection/blob/main/startup/30-area-detectors.py#L152
         pp = NSLS2PathProvider(RE.md)
         with init_devices():
-            eiger = EigerDetector(
+            eiger = BMMEiger(
                 prefix=pvbase, name="eiger1m-1", path_provider=pp
             )
         ## make sure stream mode is enabled for file saving

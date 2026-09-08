@@ -847,6 +847,7 @@ class XAFSScan():
                         filename = filename.replace('.png', '_01.png')
                     fname = os.path.join(experiment_folder(catalog, uid), filename)
                 self.fig.savefig(fname)
+                
                 self.logger.info(f'saved XAFS sequence figure {fname}')
                 img_to_slack(fname, title=self.sample, measurement='xafs')
 
@@ -1522,7 +1523,7 @@ class XRR():
         self.figure.canvas.draw()
         self.figure.canvas.flush_events()
         
-    def alignment(self, catalog=None, uid=None, motor=None, detector=None, delta=False):
+    def alignment(self, catalog=None, uid=None, motor=None, detector=None, delta=False, fname=None):
         if catalog is None:
             print('xrr.alignment: No catalog provided')
             return
@@ -1590,7 +1591,7 @@ class XRR():
         plt.plot([com, com], [ymin, ymax], label='CoM')
         plt.plot([peakpos], [peak], label='peak', marker='x')
         ax.legend(loc='best', shadow=True)
-        
+
         fwhm = float(right - left)
         fwhm_center = left + fwhm/2
 
@@ -1607,6 +1608,15 @@ center of mass = {com:.4f}
 peak value = {peak:.1f} at {peakpos:.4f}'''
         ax.set_title(report)
         print(report)
+        
+        if fname is not None and fname.strip() != '':
+            if get_backend().lower() == 'agg':
+                if 'fname' in kwargs and 'uid' in kwargs:
+                    fname = os.path.join(experiment_folder(catalog, kwargs["uid"]), 'snapshots', fname)
+                    self.figure.savefig(fname)
+                    self.logger.info(f'saved linescan figure {fname}')
+                    img_to_slack(fname, title='Peak analysis', measurement='line')
+            
 
         
         

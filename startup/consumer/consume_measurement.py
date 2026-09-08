@@ -96,7 +96,7 @@ def plot_from_kafka_messages(beamline_acronym):
         if name == 'bmm':
             if any(x in message for x in ('xafs_sequence', 'glancing_angle', 'align_wheel', 'wafer', 'mono_calibration',
                                           'xrfat', 'linescan', 'xafsscan', 'timescan', 'xrf', 'areascan', 'close',
-                                          'logger', 'refresh_slack', 'show_metadata',
+                                          'logger', 'refresh_slack', 'describe_slack', 'test_slack', 'show_metadata',
                                           'peakfit', 'stepfit', 'rectanglefit', 'reset_rois',
                                           'backend', 'xrr', 'xrr_alignment', 'xrr_calibration_plot', 'mythen_plot')) :
                 if be_verbose is True:
@@ -152,6 +152,9 @@ def plot_from_kafka_messages(beamline_acronym):
                 bmm_plot.xrfat(catalog=bmm_catalog, **message)
 
             elif 'linescan' in message:
+                _end_station = 'xas'
+                if '_end_station' in message:
+                    _end_station = message['_end_station']
                 if message['linescan'] == 'start':
                     ls.start(**message)
                     doing = 'linescan'
@@ -209,7 +212,9 @@ def plot_from_kafka_messages(beamline_acronym):
             elif 'xrr_alignment' in message:
                 delta=False
                 if 'delta' in message: delta = message['delta']
-                xrr.alignment(catalog=bmm_catalog, uid=message['uid'], motor=message['motor'], detector=message['detector'], delta=delta)
+                fname=None
+                if 'fname' in message: fname = message['fname']
+                xrr.alignment(catalog=bmm_catalog, uid=message['uid'], motor=message['motor'], detector=message['detector'], delta=delta, fname=fname)
 
             elif 'xrr_calibration_plot' in message:
                 xrr.calibration_plot(catalog=bmm_catalog, uid=message['uid'], motor=message['motor'],
@@ -251,12 +256,17 @@ def plot_from_kafka_messages(beamline_acronym):
                     spinner = message['spinner']
                 else:
                     spinner = None
-                stepfit(catalog = bmm_catalog,
-                        uid     = message['uid'],
-                        motor   = message['motor_name'],
-                        signal  = message['signal'],
-                        spinner = spinner,
-                        ga      = ga)
+                if 'saveplot' in message:
+                    saveplot = message['saveplot']
+                else:
+                    saveplot = False
+                stepfit(catalog  = bmm_catalog,
+                        uid      = message['uid'],
+                        motor    = message['motor_name'],
+                        signal   = message['signal'],
+                        spinner  = spinner,
+                        saveplot = saveplot,
+                        ga       = ga)
 
 
                     
@@ -288,13 +298,25 @@ def plot_from_kafka_messages(beamline_acronym):
                 #    logger.info(message['text'])
 
             elif 'refresh_slack' in message:
-                refresh_slack()
+                _end_station = 'xas'
+                if '_end_station' in message:
+                    _end_station = message['_end_station']
+                time_it = False
+                if 'time_it' in message:
+                    time_it = message['time_it']
+                refresh_slack(end_station=_end_station, time_it=time_it)
                     
             elif 'describe_slack' in message:
-                describe_slack()
+                _end_station = 'xas'
+                if '_end_station' in message:
+                    _end_station = message['_end_station']
+                describe_slack(end_station=_end_station)
 
             elif 'test_slack' in message:
-                test_slack()
+                _end_station = 'xas'
+                if '_end_station' in message:
+                    _end_station = message['_end_station']
+                test_slack(end_station=_end_station)
 
             elif 'backend' in message:
                 print(matplotlib.get_backend())

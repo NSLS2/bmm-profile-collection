@@ -65,7 +65,7 @@ def set_desc_strings():
     toss = EpicsSignal('XF:06BMA-BI{XAFS-Ax:Tbl_YU}Mtr.DESC', name='toss')
     toss.put('xafs_yu')
     toss = EpicsSignal('XF:06BMA-BI{XAFS-Ax:Tbl_YDO}Mtr.DESC', name='toss')
-    toss.put('(unused)')
+    toss.put('   (available)')
     toss = EpicsSignal('XF:06BMA-BI{XAFS-Ax:Tbl_YDI}Mtr.DESC', name='toss')
     toss.put('xafs_yd')
 

@@ -7,6 +7,7 @@ from bluesky.plan_stubs import null, sleep, mv, mvr
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
 from bmm_tools.optics.dcm_parameters import approximate_pitch
+from bmm_tools.optics.mode_data import read_mode_data, MODEDATA  # photon delivery system lookup table
 
 from BMM.exceptions    import ChangeModeException
 from BMM.linescans     import rocking_curve, slit_height, mirror_pitch, wiggle_bct
@@ -24,44 +25,44 @@ from BMM.user_ns.dcm        import dcm
 from BMM.user_ns.suspenders import suspenders
 
 
-MODEDATA = None
-def read_mode_data():
-     '''Read the lookup table Modes.xlsx and return position and encoder
-     readings as a dict.
-     '''
-     wb = load_workbook(os.path.join(user_ns["BMM_CONFIGURATION_LOCATION"], 'Modes.xlsx'), read_only=True);
-     ws = wb['Modes A-F']
-     bl = dict()
-     header = 1
-     for row in ws.rows:
-         axis = dict()
-         if str(row[0].value) == 'Instrument':
-             header = 0
-             continue
-         if header == 1: continue
-         alias           = row[2].value
-         if 'fe_slits' in alias: continue
-         axis['PV']      = row[1].value
-         axis['desc']    = row[3].value
-         axis['A']       = row[4].value
-         axis['A_REP']   = row[5].value
-         axis['B']       = row[6].value
-         axis['B_REP']   = row[7].value
-         axis['C']       = row[8].value
-         axis['C_REP']   = row[9].value
-         axis['D']       = row[10].value
-         axis['D_REP']   = row[11].value
-         axis['E']       = row[12].value
-         axis['E_REP']   = row[13].value
-         axis['F']       = row[14].value
-         axis['F_REP']   = row[15].value
-         axis['XRD']     = row[19].value
-         axis['XRD_REP'] = row[20].value
-         bl[alias] = axis
-     del bl['xafs_ydo']         # clean up unneeded entry
-     return bl
+# MODEDATA = None
+# def read_mode_data():
+#      '''Read the lookup table Modes.xlsx and return position and encoder
+#      readings as a dict.
+#      '''
+#      wb = load_workbook(os.path.join(user_ns["BMM_CONFIGURATION_LOCATION"], 'Modes.xlsx'), read_only=True);
+#      ws = wb['Modes A-F']
+#      bl = dict()
+#      header = 1
+#      for row in ws.rows:
+#          axis = dict()
+#          if str(row[0].value) == 'Instrument':
+#              header = 0
+#              continue
+#          if header == 1: continue
+#          alias           = row[2].value
+#          if 'fe_slits' in alias: continue
+#          axis['PV']      = row[1].value
+#          axis['desc']    = row[3].value
+#          axis['A']       = row[4].value
+#          axis['A_REP']   = row[5].value
+#          axis['B']       = row[6].value
+#          axis['B_REP']   = row[7].value
+#          axis['C']       = row[8].value
+#          axis['C_REP']   = row[9].value
+#          axis['D']       = row[10].value
+#          axis['D_REP']   = row[11].value
+#          axis['E']       = row[12].value
+#          axis['E_REP']   = row[13].value
+#          axis['F']       = row[14].value
+#          axis['F_REP']   = row[15].value
+#          axis['XRD']     = row[19].value
+#          axis['XRD_REP'] = row[20].value
+#          bl[alias] = axis
+#      del bl['xafs_ydo']         # clean up unneeded entry
+#      return bl
 
-MODEDATA = read_mode_data();
+# MODEDATA = read_mode_data();
 
 #     return json.load(open(os.path.join(user_ns["BMM_CONFIGURATION_LOCATION"], 'Modes.json')))
 #if os.path.isfile(os.path.join(user_ns["BMM_CONFIGURATION_LOCATION"], 'Modes.json')):
@@ -86,7 +87,7 @@ def motors_in_position(mode=None):
 def pds_motors_ready():
     m3, m2, m2_bender, dm3_bct = user_ns['m3'], user_ns['m2'], user_ns['m2_bender'], user_ns['dm3_bct']
     mcs8_motors = [m3.xu, m3.xd, m3.yu, m3.ydo, m3.ydi, m2.xu, m2.xd, m2.yu, m2.ydo, m2.ydi, m2_bender,
-                   dcm.pitch, dcm.roll, dcm.perp, dcm.roll, dcm.bragg, dm3_bct]
+                   dcm.pitch, dcm.roll, dcm.perp, dcm.para, dcm.bragg, dm3_bct]
 
     count = 0
     for m in mcs8_motors:
@@ -135,17 +136,14 @@ def table_height(mode=None, by=None, pitch=None):
      '''
      xafs_table = user_ns['xafs_table']
      if by is not None:
-          yield from mvr(xafs_table.yu,  float(by),
-                         xafs_table.ydo, float(by),
-                         xafs_table.ydi, float(by))
+          yield from mvr(xafs_table.yu, float(by),
+                         xafs_table.yd, float(by))
      elif pitch is not None:
           yield from mvr(xafs_table.yu,  -1 * float(pitch),
-                         xafs_table.ydo, float(pitch),
-                         xafs_table.ydi, float(pitch))
+                         xafs_table.yd, float(pitch))
      elif mode in ('A', 'B', 'C', 'D', 'E', 'F', 'XRD'):
-          yield from mv(xafs_table.yu,   float(MODEDATA['xafs_yu'][mode]),
-                        #xafs_table.ydo,  float(MODEDATA['xafs_ydo'][mode]),
-                        xafs_table.yd,  float(MODEDATA['xafs_yd'][mode]))
+          yield from mv(xafs_table.yu, float(MODEDATA['xafs_yu'][mode]),
+                        xafs_table.yd, float(MODEDATA['xafs_yd'][mode]))
      else:
           print('Doing nothing.  Do table_height?? for explanation')
           yield from null()

@@ -8,6 +8,10 @@ from bluesky_tiled_plugins.writing.consolidators import MultipartRelatedConsolid
 
 from BMM.user_ns.base import RE
 
+from BMM.functions import run_report
+run_report(__file__, text='Write to SQL-backed Tiled')
+
+
 # Define a mapping from spec to mimetype
 # TODO: Only keep necessary specs/mimetypes
 MIMETYPE_LOOKUP = {
@@ -116,7 +120,7 @@ def patch_resource(doc):
         kwargs.update({"join_method": "stack"})     # To ensure that the leading dimension in stacked JPEGs is the number of files
         kwargs["template"] = kwargs.get("template", "")
     elif doc.get("spec") in ["AD_HDF5", "AD_HDF5_SWMR_STREAM", "AD_HDF5_SWMR_SLICE", "AD_HDF5_SWMR", "PIL100k_HDF5"]:
-        kwargs.update({"dataset": 'entry/instrument/detector/data', "join_method": "stack"})
+        kwargs.update({"dataset": 'entry/instrument/detector/data', "join_method": "concat"})
 
     return doc
 

@@ -56,7 +56,7 @@ primary_description     = "specify which detector is the primary detector: 1- 4-
 pilatus                 = false
 pilatus_description     = "set true to enable Pilatus 100K as an available detector"
 
-eiger                   = true
+eiger                   = false
 eiger_description       = "set true to enable Eiger2 4M as an available detector"
 
 dante                   = false
@@ -206,6 +206,9 @@ workspace_description                   = "local workspace folder"
 
 qskeys                                  = "/nsls2/data/bmm/shared/config/agent_runtime"
 qskeys_description                      = "location of API keys for http and queue servers"
+
+nsls2_api_key                           = "/nsls2/data/bmm/shared/config/nsls2-api/key"
+nsls2_api_key_description               = "NSLS2 API key location"
 
 proposal_folders_available              = true
 proposal_folders_available_description  = "set to false to start profile even if proposal folders are not available, cameras and some detectors will not be available"
