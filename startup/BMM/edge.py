@@ -194,7 +194,7 @@ def quick_change(el, focus=False, edge='K', target=300., reference=False):
                            bender=True, insist=False, no_ref=not reference, no_hslits=True)
     
 def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True, tune=True, target=300.,
-                xrd=False, bender=True, insist=False, no_ref=False, no_hslits=False, preserve_dcm_roll=False):
+                xrd=False, bender=True, insist=False, no_ref=False, no_hslits=False):
     '''Change edge energy by:
     1. Moving the DCM above the edge energy
     2. Moving the photon delivery system to the correct mode
@@ -231,9 +231,6 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
     no_hslits : boolean, optional
         when True, skip the adjustment of horizontal slit size [False]
         (this was implemented for the quick_change() function)
-    preserve_dcm_roll : boolean, optional
-        when True, leave dcm.roll at its current position [False]
-
 
     Examples
     --------
@@ -263,8 +260,7 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
 
     '''
 
-    def main_plan(el, focus, edge, energy, slits, mirror, tune, target, xrd, bender, insist, no_ref, no_hslits,
-                  preserve_dcm_roll):
+    def main_plan(el, focus, edge, energy, slits, mirror, tune, target, xrd, bender, insist, no_ref, no_hslits):
         el = el.capitalize()
         ######################################################################
         # this is a tool for verifying a macro.  this replaces an xafsmod scan  #
@@ -680,7 +676,6 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
     #dcm_roll, dcm_bragg = user_ns["dcm_roll"], user_ns["dcm_bragg"]
     dm3_bct, slits3 = user_ns['dm3_bct'], user_ns['slits3']
     yield from finalize_wrapper(
-        main_plan(el, focus, edge, energy, slits, mirror, tune, target, xrd, bender, insist, no_ref, no_hslits,
-                  preserve_dcm_roll),
+        main_plan(el, focus, edge, energy, slits, mirror, tune, target, xrd, bender, insist, no_ref, no_hslits),
         cleanup_plan())
     user_ns['RE'].msg_hook = BMM_msg_hook

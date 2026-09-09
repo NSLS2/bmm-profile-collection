@@ -181,8 +181,7 @@ def verify_limits(targets):
      
           
 
-def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, insist=False, no_ref=False,
-                preserve_dcm_roll=False):
+def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, insist=False, no_ref=False):
      '''Move the photon delivery system to a new mode. 
      A: focused at XAS end station, energy > 8000
      B: focused at XAS end station, energy < 6000
@@ -191,9 +190,6 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
      E: unfocused, 6000 < energy < 8000
      F: unfocused, energy < 8000
      XRD: focused at XRD end station, energy > 8000
-
-     Set ``preserve_dcm_roll`` to leave the DCM roll at its current position
-     instead of moving it to the configured nominal position for the crystal.
      '''
      BMMuser, RE, dcm, dm3_bct, slits3 = user_ns['BMMuser'], user_ns['RE'], user_ns['dcm'], user_ns['dm3_bct'], user_ns['slits3']
      xafs_table, m3, m2, m2_bender = user_ns['xafs_table'], user_ns['m3'], user_ns['m2'], user_ns['m2_bender']
