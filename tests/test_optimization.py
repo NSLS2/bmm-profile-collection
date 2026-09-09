@@ -24,6 +24,7 @@ from BMM.optimization import (
     SurrogateModelDashCallback,
     UnusableBeamError,
     _optimization_metadata,
+    _poll_tiled_read,
     _full_width_half_maximum,
     _compute_processed_image_stats,
     _image_processing_stages,
@@ -60,7 +61,7 @@ class Run(dict):
 
 def run_with_fields(*, metadata=None, **fields):
     run = Run(
-        {"primary": {"data": {name: Field(value) for name, value in fields.items()}}}
+        {"primary": {name: Field(value) for name, value in fields.items()}}
     )
     run.metadata = {} if metadata is None else metadata
     return run
@@ -94,12 +95,6 @@ def make_profile_and_resources():
         profile = replace(
             XAS_SI111_ALIGNMENT,
             camera="camera",
-            dof_bounds={
-                "dcm_roll": (-1, 1),
-                "m2_yaw": (-1, 1),
-                "m2_lateral": (-1, 1),
-            },
-            search_half_widths=None,
             evaluation=parameters,
             optimization=replace(
                 XAS_SI111_ALIGNMENT.optimization,
@@ -400,50 +395,16 @@ def test_multi_energy_alignment_metrics_from_catalog_reads_existing_runs():
 
     assert metrics["centroid_x_span_px"] == pytest.approx(2.0)
     assert metrics["intensity_mean"] == 6.0
-    assert catalog["reference"]["primary"]["data"]["image"].read_count == 1
-    assert catalog["low"]["primary"]["data"]["image"].read_count == 1
-    assert catalog["low"]["primary"]["data"]["i0"].read_count == 1
-    assert catalog["high"]["primary"]["data"]["image"].read_count == 1
-    assert catalog["high"]["primary"]["data"]["i0"].read_count == 1
+    assert catalog["reference"]["primary"]["image"].read_count == 1
+    assert catalog["low"]["primary"]["image"].read_count == 1
+    assert catalog["low"]["primary"]["i0"].read_count == 1
+    assert catalog["high"]["primary"]["image"].read_count == 1
+    assert catalog["high"]["primary"]["i0"].read_count == 1
 
 
 def test_xas_si111_profile_is_registered():
     assert ENERGY_ALIGNMENT_PROFILES == {"xas-si111": XAS_SI111_ALIGNMENT}
     assert get_energy_alignment_profile("xas-si111") is XAS_SI111_ALIGNMENT
-
-
-@pytest.mark.parametrize(
-    ("dof_bounds", "message"),
-    [
-        pytest.param(
-            {"dcm_roll": (-1, 1), "m2_yaw": (-1, 1)},
-            "must define bounds for exactly",
-            id="missing",
-        ),
-        pytest.param(
-            {
-                "dcm_roll": (-1, 1),
-                "m2_yaw": (-1, 1),
-                "m2_lateral": (-1, 1),
-                "extra": (-1, 1),
-            },
-            "must define bounds for exactly",
-            id="extra",
-        ),
-        pytest.param(
-            {
-                "dcm_roll": (1, -1),
-                "m2_yaw": (-1, 1),
-                "m2_lateral": (-1, 1),
-            },
-            "invalid bounds for 'dcm_roll'",
-            id="reversed",
-        ),
-    ],
-)
-def test_profile_rejects_invalid_dof_bounds(dof_bounds, message):
-    with pytest.raises(ValueError, match=message):
-        replace(XAS_SI111_ALIGNMENT, dof_bounds=dof_bounds)
 
 
 @pytest.mark.parametrize(
@@ -481,13 +442,24 @@ def test_resources_require_selected_camera(make_profile_and_resources):
 
 
 def test_profile_rejects_unknown_search_half_width_dof():
-    with pytest.raises(ValueError, match="unknown"):
+    with pytest.raises(ValueError, match="must define search_half_widths for exactly"):
         replace(XAS_SI111_ALIGNMENT, search_half_widths={"not_a_dof": 1.0})
+
+
+def test_profile_rejects_incomplete_search_half_widths():
+    with pytest.raises(ValueError, match="must define search_half_widths for exactly"):
+        replace(
+            XAS_SI111_ALIGNMENT,
+            search_half_widths={"dcm_roll": 0.5, "m2_yaw": 0.25},
+        )
 
 
 def test_profile_rejects_non_positive_search_half_width():
     with pytest.raises(ValueError, match="must all be positive"):
-        replace(XAS_SI111_ALIGNMENT, search_half_widths={"dcm_roll": 0.0})
+        replace(
+            XAS_SI111_ALIGNMENT,
+            search_half_widths={"dcm_roll": 0.0, "m2_yaw": 0.25, "m2_lateral": 0.25},
+        )
 
 
 def make_image_evaluator():
@@ -555,9 +527,9 @@ def test_image_evaluation_pairs_acquisition_metadata_with_suggestions():
         acquired_images.sum(axis=(1, 2)),
         acquired_intensities,
     )
-    assert catalog["reference"]["primary"]["data"]["image"].read_count == 1
-    assert catalog["acquired"]["primary"]["data"]["image"].read_count == 1
-    assert catalog["acquired"]["primary"]["data"]["i0"].read_count == 1
+    assert catalog["reference"]["primary"]["image"].read_count == 1
+    assert catalog["acquired"]["primary"]["image"].read_count == 1
+    assert catalog["acquired"]["primary"]["i0"].read_count == 1
 
 
 def test_image_evaluation_skips_catalog_when_there_are_no_suggestions():
@@ -629,8 +601,8 @@ def test_compute_stats_reports_catalog_ion_reading(
     for metric in ("fwhm_x", "fwhm_y", "centroid_x", "centroid_y"):
         assert f"{metric}=" in output
     assert "intensity=1250000.0" in output
-    assert run["primary"]["data"]["image"].read_count == 1
-    assert run["primary"]["data"]["i0"].read_count == 1
+    assert run["primary"]["image"].read_count == 1
+    assert run["primary"]["i0"].read_count == 1
 
 
 def test_energy_alignment_debug_expands_outer_run_and_renders_per_energy_grid(
@@ -771,9 +743,9 @@ def test_energy_alignment_debug_expands_outer_run_and_renders_per_energy_grid(
         assert first_uid in title and second_uid in title
         assert "reference-full-uid" in title
         assert "µm" not in title
-        assert outer["primary"]["data"]["acquisition_uid"].read_count == 1
-        assert first["primary"]["data"]["image"].read_count == 1
-        assert second["primary"]["data"]["image"].read_count == 1
+        assert outer["primary"]["acquisition_uid"].read_count == 1
+        assert first["primary"]["image"].read_count == 1
+        assert second["primary"]["image"].read_count == 1
     finally:
         plt.close(figure)
 
@@ -892,10 +864,10 @@ def test_energy_alignment_debug_overlays_multiple_per_energy_runs(
         assert all(uid in title for uid in acquisition_uids)
         assert "reference-full-uid" in title
         assert all(
-            run["primary"]["data"]["image"].read_count == 1 for run in acquisitions
+            run["primary"]["image"].read_count == 1 for run in acquisitions
         )
         assert all(
-            run["primary"]["data"]["acquisition_uid"].read_count == 1 for run in outers
+            run["primary"]["acquisition_uid"].read_count == 1 for run in outers
         )
     finally:
         plt.close(figure)
@@ -1021,7 +993,7 @@ def test_agent_factory_applies_runtime_profile(make_profile_and_resources):
 
     alternate_camera = SynSignal(name="alternate-camera", func=lambda: 1)
     resources.sensors["alternate-camera"] = alternate_camera
-    resources.catalog["reference"]["primary"]["data"]["alternate_image"] = Field(
+    resources.catalog["reference"]["primary"]["alternate_image"] = Field(
         gaussian_image()
     )
     alternate_evaluation = BeamEvaluationConfig(
@@ -1039,11 +1011,6 @@ def test_agent_factory_applies_runtime_profile(make_profile_and_resources):
     alternate_profile = replace(
         profile,
         camera="alternate-camera",
-        dof_bounds={
-            "dcm_roll": (-2, 2),
-            "m2_yaw": (-3, 3),
-            "m2_lateral": (-4, 4),
-        },
         search_half_widths={
             "dcm_roll": 0.5,
             "m2_yaw": 1.0,
@@ -1200,10 +1167,11 @@ def test_metadata_uses_profile_and_live_resources(make_profile_and_resources):
         "m2_lateral",
     ]
     assert [dof["bounds"] for dof in agent_metadata["dofs"]] == [
-        [-1, 1],
-        [-1, 1],
-        [-1, 1],
+        [-0.25, 0.75],
+        [-0.25, 0.25],
+        [-0.25, 0.25],
     ]
+    assert [dof["nominal"] for dof in agent_metadata["dofs"]] == [0.25, 0.0, 0.0]
     assert agent_metadata["sensors"] == ["camera", "i0"]
     assert agent_metadata["objectives"] == ["alignment_cost"]
     assert agent_metadata["outcome_constraints"] == ["intensity >= 0.5 * baseline"]
@@ -1212,7 +1180,16 @@ def test_metadata_uses_profile_and_live_resources(make_profile_and_resources):
         "focus_weight": 0.5,
         "dof_weight": 0.1,
     }
-    assert agent_metadata["search_half_widths"] is None
+    assert agent_metadata["search_half_widths"] == {
+        "dcm_roll": 0.5,
+        "m2_yaw": 0.25,
+        "m2_lateral": 0.25,
+    }
+    assert agent_metadata["safety_limits"] == {
+        "dcm_roll": [-5.0, 5.0],
+        "m2_yaw": [-1.0, 2.0],
+        "m2_lateral": [-2.0, 2.0],
+    }
 
 
 def test_dash_callback_builds_app(make_profile_and_resources):
@@ -1295,12 +1272,10 @@ def test_search_captures_and_reuses_target_reference(
     catalog = {
         "target": {
             "primary": {
-                "data": {
-                    "image": reference_image,
-                    "dcm_roll": Field(0.25),
-                    "m2_yaw": Field(0.0),
-                    "m2_lateral": Field(0.0),
-                }
+                "image": reference_image,
+                "dcm_roll": Field(0.25),
+                "m2_yaw": Field(0.0),
+                "m2_lateral": Field(0.0),
             }
         }
     }
@@ -1431,7 +1406,7 @@ def test_search_uses_supplied_target_reference(
         yield from null()
 
     profile, resources = make_profile_and_resources()
-    reference_image = resources.catalog["reference"]["primary"]["data"]["image"]
+    reference_image = resources.catalog["reference"]["primary"]["image"]
     evaluation_functions = []
     reference_scan_uids = []
     acquisition_plans = []
@@ -1895,16 +1870,16 @@ def test_image_evaluation_reports_unusable_frame_as_partial_observation():
 
 
 @pytest.mark.parametrize(
-    ("nominal", "half_width", "expected_bounds"),
+    ("nominal", "expected_bounds"),
     [
-        (0.4, 0.5, (-0.1, 0.9)),
-        (0.9, 0.5, (0.4, 1.0)),
-        (-0.9, 0.5, (-1.0, -0.4)),
+        (0.4, (-0.1, 0.9)),
+        (4.8, (4.3, 5.0)),
+        (-4.8, (-5.0, -4.3)),
     ],
     ids=["interior", "clamped-upper", "clamped-lower"],
 )
 def test_resolve_search_space_recenters_and_clamps(
-    make_profile_and_resources, nominal, half_width, expected_bounds
+    make_profile_and_resources, nominal, expected_bounds
 ):
     profile, resources = make_profile_and_resources(
         catalog={
@@ -1916,7 +1891,10 @@ def test_resolve_search_space_recenters_and_clamps(
             )
         },
     )
-    profile = replace(profile, search_half_widths={"dcm_roll": half_width})
+    profile = replace(
+        profile,
+        search_half_widths={"dcm_roll": 0.5, "m2_yaw": 0.25, "m2_lateral": 0.25},
+    )
 
     resolved_dofs, nominal_values, half_ranges = _resolve_search_space(
         resources.catalog, "target", resources, profile
@@ -1933,23 +1911,47 @@ def test_resolve_search_space_recenters_and_clamps(
     )
 
 
-def test_resolve_search_space_keeps_bounds_without_half_widths(
-    make_profile_and_resources,
-):
-    profile, resources = make_profile_and_resources(
-        catalog={
-            "target": run_with_fields(
-                image=gaussian_image(),
-                dcm_roll=0.4,
-                m2_yaw=0.0,
-                m2_lateral=0.0,
-            )
-        },
-    )
+def test_poll_tiled_read_retries_until_data_arrives(monkeypatch):
+    sleeps = 0
 
-    resolved_dofs, _, half_ranges = _resolve_search_space(
-        resources.catalog, "target", resources, profile
-    )
+    def fake_sleep(_seconds):
+        nonlocal sleeps
+        sleeps += 1
 
-    assert resolved_dofs[0].bounds == (-1, 1)
-    assert half_ranges["dcm_roll"] == pytest.approx(1.0)
+    monkeypatch.setattr(optimization_module.time, "sleep", fake_sleep)
+    calls = 0
+
+    def flaky_load():
+        nonlocal calls
+        calls += 1
+        if calls <= 3:
+            raise KeyError("data not written yet")
+        return np.array([7.0])
+
+    result = _poll_tiled_read(flaky_load, description="x")
+
+    assert result.tolist() == [7.0]
+    assert calls == 4
+    assert sleeps == 3
+
+
+def test_poll_tiled_read_raises_after_exhausting_attempts(monkeypatch):
+    sleeps = 0
+
+    def fake_sleep(_seconds):
+        nonlocal sleeps
+        sleeps += 1
+
+    monkeypatch.setattr(optimization_module.time, "sleep", fake_sleep)
+    calls = 0
+
+    def always_fails():
+        nonlocal calls
+        calls += 1
+        raise KeyError("never written")
+
+    with pytest.raises(RuntimeError, match="failed to load after 10 attempts"):
+        _poll_tiled_read(always_fails, description="x")
+
+    assert calls == 10
+    assert sleeps == 9

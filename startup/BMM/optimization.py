@@ -75,6 +75,40 @@ def _primary_data(run: Any) -> Any:
     return run["primary"]
 
 
+_TILED_POLL_ATTEMPTS = 10
+_TILED_POLL_DELAY_S = 1.0
+
+
+def _poll_tiled_read(
+    load: Callable[[], Any],
+    *,
+    description: str,
+    attempts: int = _TILED_POLL_ATTEMPTS,
+    delay_s: float = _TILED_POLL_DELAY_S,
+) -> Any:
+    """Retry a Tiled read until the data lands, then return it.
+
+    A completed run's documents can reach Tiled before its array data is
+    written, so the first reads raise. Retry on any error, sleeping between
+    attempts, and surface the underlying error if it never succeeds.
+    """
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return load()
+        except Exception as error:
+            last_error = error
+            print(
+                f"Tiled data for {description} not ready "
+                f"(attempt {attempt}/{attempts}); retrying..."
+            )
+            if attempt < attempts:
+                time.sleep(delay_s)
+    raise RuntimeError(
+        f"Tiled data for {description} failed to load after {attempts} attempts"
+    ) from last_error
+
+
 # ---------------------------------------------------------------------------
 # Configuration model and BMM alignment profiles (stays in BMM)
 # ---------------------------------------------------------------------------
@@ -109,6 +143,13 @@ class AlignmentCostConfig:
 _ALIGNMENT_DOF_NAMES = ("dcm_roll", "m2_yaw", "m2_lateral")
 _ALIGNMENT_OBJECTIVES = (Objective(name="alignment_cost", minimize=True),)
 _ALIGNMENT_ION_CHAMBER_KEY = "i0"
+_ALIGNMENT_DOF_SAFETY_LIMITS: Mapping[str, tuple[float, float]] = MappingProxyType(
+    {
+        "dcm_roll": (-5.0, 5.0),
+        "m2_yaw": (-1.0, 2.0),
+        "m2_lateral": (-2.0, 2.0),
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -125,8 +166,7 @@ class EnergyAlignmentProfile:
 
     name: str
     camera: str
-    dof_bounds: Mapping[str, tuple[float, float]]
-    search_half_widths: Mapping[str, float] | None
+    search_half_widths: Mapping[str, float]
     evaluation: BeamEvaluationConfig
     cost: AlignmentCostConfig
     minimum_intensity_fraction: float
@@ -134,17 +174,6 @@ class EnergyAlignmentProfile:
     change_edge_kwargs: Mapping[str, Any]
 
     def __post_init__(self) -> None:
-        if set(self.dof_bounds) != set(_ALIGNMENT_DOF_NAMES):
-            raise ValueError(
-                f"Profile {self.name!r} must define bounds for exactly "
-                f"{_ALIGNMENT_DOF_NAMES!r}"
-            )
-        for name, bounds in self.dof_bounds.items():
-            lower, upper = bounds
-            if not lower < upper:
-                raise ValueError(
-                    f"Profile {self.name!r} has invalid bounds for {name!r}: {bounds!r}"
-                )
         if self.optimization.iterations < 1:
             raise ValueError("Optimization iterations must be at least one")
         if (
@@ -155,17 +184,15 @@ class EnergyAlignmentProfile:
             raise ValueError(
                 "Initialization budget must be between zero and the iteration count"
             )
-        if self.search_half_widths is not None:
-            unknown = set(self.search_half_widths) - set(_ALIGNMENT_DOF_NAMES)
-            if unknown:
-                raise ValueError(
-                    f"Profile {self.name!r} search_half_widths references unknown "
-                    f"DOFs: {sorted(unknown)!r}"
-                )
-            if any(half <= 0 for half in self.search_half_widths.values()):
-                raise ValueError(
-                    f"Profile {self.name!r} search_half_widths must all be positive"
-                )
+        if set(self.search_half_widths) != set(_ALIGNMENT_DOF_NAMES):
+            raise ValueError(
+                f"Profile {self.name!r} must define search_half_widths for exactly "
+                f"{_ALIGNMENT_DOF_NAMES!r}"
+            )
+        if any(half <= 0 for half in self.search_half_widths.values()):
+            raise ValueError(
+                f"Profile {self.name!r} search_half_widths must all be positive"
+            )
         if (
             not np.isfinite(self.minimum_intensity_fraction)
             or self.minimum_intensity_fraction < 0
@@ -180,13 +207,6 @@ class EnergyAlignmentProfile:
 XAS_SI111_ALIGNMENT = EnergyAlignmentProfile(
     name="xas-si111",
     camera="cam9",
-    dof_bounds=MappingProxyType(
-        {
-            "dcm_roll": (-5, 5),
-            "m2_yaw": (-1, 1),
-            "m2_lateral": (-1, 1),
-        }
-    ),
     search_half_widths=MappingProxyType(
         {"dcm_roll": 0.5, "m2_yaw": 0.25, "m2_lateral": 0.25}
     ),
@@ -567,7 +587,7 @@ def _bind_dofs(
     return tuple(
         RangeDOF(
             actuator=resources.actuators[name],
-            bounds=profile.dof_bounds[name],
+            bounds=_ALIGNMENT_DOF_SAFETY_LIMITS[name],
             parameter_type="float",
         )
         for name in _ALIGNMENT_DOF_NAMES
@@ -583,26 +603,18 @@ def _read_nominal_dofs(
     data = _primary_data(catalog[reference_scan_uid])
     nominal: dict[str, float] = {}
     for name in names:
-        samples = None
-        for i in range(10):
-            try:
-                samples = np.atleast_1d(
-                    np.asarray(data[name].read(), dtype=np.float64).squeeze()
-                )
-            except Exception:
-                print(f"Trying to fetch key={name}, attempt={i}...")
-                time.sleep(1)
-        if samples is None:
-            raise RuntimeError(f"Failed to load data for key={name}")
-
+        samples = _poll_tiled_read(
+            lambda name=name: np.atleast_1d(
+                np.asarray(data[name].read(), dtype=np.float64).squeeze()
+            ),
+            description=f"DOF {name!r} in run {reference_scan_uid!r}",
+        )
         nominal[name] = float(samples[-1])
     return nominal
 
 
-def _recenter_dof(dof: RangeDOF, nominal: float, half_width: float | None) -> RangeDOF:
+def _recenter_dof(dof: RangeDOF, nominal: float, half_width: float) -> RangeDOF:
     """Re-center a DOF box on *nominal*, clamped to its original (safety) bounds."""
-    if half_width is None:
-        return dof
     lower, upper = dof.bounds
     return replace(
         dof,
@@ -630,7 +642,7 @@ def _resolve_search_space(
         _recenter_dof(
             dof,
             nominal_dof_values[dof.parameter_name],
-            half_widths.get(dof.parameter_name) if half_widths is not None else None,
+            half_widths[dof.parameter_name],
         )
         for dof in bound_dofs
     )
@@ -674,45 +686,29 @@ class ImageEvaluation:
         reference_image = _primary_data(tiled_client[reference_scan_uid])[
             parameters.image_field
         ].read()
-        # reference_stats = compute_image_stats(reference_image, parameters)
-        # self.reference_centroid_x = reference_stats.centroid_x
-        # self.reference_centroid_y = reference_stats.centroid_y
-        # self.reference_fwhm_x = reference_stats.fwhm_x
-        self.reference_centroid_x = 100
-        self.reference_centroid_y = 100
-        self.reference_fwhm_x = 10
+        reference_stats = compute_image_stats(reference_image, parameters)
+        self.reference_centroid_x = reference_stats.centroid_x
+        self.reference_centroid_y = reference_stats.centroid_y
+        self.reference_fwhm_x = reference_stats.fwhm_x
 
     def __call__(self, uid: str, suggestions: list[dict]) -> list[dict]:
         if not suggestions:
             return []
 
-        run = None
-        data = None
-        acquired_images = None
-        intensities = None
-        for i in range(10):
-            try:
-                run = self.tiled_client[uid]
-                data = _primary_data(run)
-                acquired_images = np.asarray(data[self.parameters.image_field].read())
-                intensities = np.atleast_1d(
-                    np.asarray(
-                        data[self.parameters.intensity_field].read(), dtype=np.float64
-                    ).squeeze()
-                )
-            except Exception:
-                print(f"Key error on data fetch in evaluation function. Attempt {i}...")
-                time.sleep(1)
-
-        if (
-            run is None
-            or data is None
-            or acquired_images is None
-            or intensities is None
-        ):
-            raise RuntimeError(
-                "Can't proceed, data failed to load in evaluation function."
+        def _load() -> tuple[Any, np.ndarray, np.ndarray]:
+            run = self.tiled_client[uid]
+            data = _primary_data(run)
+            acquired_images = np.asarray(data[self.parameters.image_field].read())
+            intensities = np.atleast_1d(
+                np.asarray(
+                    data[self.parameters.intensity_field].read(), dtype=np.float64
+                ).squeeze()
             )
+            return run, acquired_images, intensities
+
+        run, acquired_images, intensities = _poll_tiled_read(
+            _load, description=f"evaluation run {uid!r}"
+        )
 
         if len(suggestions) == 1:
             images: Any = (acquired_images,)
@@ -745,27 +741,16 @@ class ImageEvaluation:
                 stats = None
             if stats is None:
                 outcomes.append(
-                    # {
-                    #     "_id": suggestion["_id"],
-                    #     "fwhm_x": float("nan"),
-                    #     "fwhm_y": float("nan"),
-                    #     "centroid_x": float("nan"),
-                    #     "centroid_y": float("nan"),
-                    #     "centroid_distance": float("nan"),
-                    #     "centroid_x_distance": float("nan"),
-                    #     "intensity": intensity,
-                    #     "alignment_cost": float("nan"),
-                    # }
                     {
                         "_id": suggestion["_id"],
-                        "fwhm_x": 10,
-                        "fwhm_y": 5,
-                        "centroid_x": 101,
-                        "centroid_y": 99,
-                        "centroid_distance": 0.001,
-                        "centroid_x_distance": 0.0001,
-                        "intensity": 1e9,
-                        "alignment_cost": 1.0,
+                        "fwhm_x": float("nan"),
+                        "fwhm_y": float("nan"),
+                        "centroid_x": float("nan"),
+                        "centroid_y": float("nan"),
+                        "centroid_distance": float("nan"),
+                        "centroid_x_distance": float("nan"),
+                        "intensity": intensity,
+                        "alignment_cost": float("nan"),
                     }
                 )
                 continue
@@ -920,7 +905,16 @@ def _optimization_metadata(
     resolved_profile = get_energy_alignment_profile(profile)
     resolved_resources = _resolve_resources(resources)
     _validate_resources(resolved_resources, resolved_profile)
-    bound_dofs = _bind_dofs(resolved_resources, resolved_profile)
+    if reference_scan_uid is not None:
+        bound_dofs, nominal_dof_values, _ = _resolve_search_space(
+            resolved_resources.catalog,
+            reference_scan_uid,
+            resolved_resources,
+            resolved_profile,
+        )
+    else:
+        bound_dofs = _bind_dofs(resolved_resources, resolved_profile)
+        nominal_dof_values = {}
     beamline_energy = (
         float(resolved_resources.read_energy())
         if resolved_resources.read_energy is not None
@@ -944,6 +938,7 @@ def _optimization_metadata(
                 {
                     "name": dof.parameter_name,
                     "actuator": _device_name(dof.actuator),
+                    "nominal": nominal_dof_values.get(dof.parameter_name),
                     "bounds": list(dof.bounds),
                     "parameter_type": dof.parameter_type,
                 }
@@ -959,11 +954,11 @@ def _optimization_metadata(
                 for constraint in _alignment_outcome_constraints(resolved_profile)
             ],
             "cost": asdict(resolved_profile.cost),
-            "search_half_widths": (
-                dict(resolved_profile.search_half_widths)
-                if resolved_profile.search_half_widths is not None
-                else None
-            ),
+            "search_half_widths": dict(resolved_profile.search_half_widths),
+            "safety_limits": {
+                name: list(limits)
+                for name, limits in _ALIGNMENT_DOF_SAFETY_LIMITS.items()
+            },
         },
     }
 

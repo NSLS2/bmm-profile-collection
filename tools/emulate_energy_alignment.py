@@ -148,7 +148,7 @@ class EnergyAlignmentEmulator:
         )
         if not isinstance(self.tiled_writing_client, CatalogOfBlueskyRuns):
             raise RuntimeError("Tiled did not create a Bluesky run catalog client")
-        self.catalog = self.tiled_writing_client.v2
+        self.catalog = self.tiled_writing_client.v3
         self.tiled_writer = TiledWriter(self.tiled_writing_client, batch_size=1)
         self.run_engine = RunEngine({}, call_returns_result=True)
         self.run_engine.subscribe(self.tiled_writer)
@@ -158,7 +158,6 @@ class EnergyAlignmentEmulator:
         self.profile = replace(
             XAS_SI111_ALIGNMENT,
             camera="camera",
-            dof_bounds={name: (-1.0, 1.0) for name in _DOF_NAMES},
             search_half_widths={name: 0.9 for name in _DOF_NAMES},
             evaluation=BeamEvaluationConfig(
                 image_field="image",
