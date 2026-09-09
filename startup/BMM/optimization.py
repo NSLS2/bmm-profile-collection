@@ -70,7 +70,7 @@ def _to_list(value: Any) -> list:
 
 def _primary_data(run: Any) -> Any:
     """The 'primary' stream data of a completed run."""
-    return run["primary"]["data"]
+    return run["primary"]
 
 
 # ---------------------------------------------------------------------------
