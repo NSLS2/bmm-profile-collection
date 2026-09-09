@@ -499,20 +499,16 @@ from BMM.user_ns.dwelltime import with_eiger
 if with_eiger is True:
 
     pvbase = "XF:06BM-ES{Det-Eiger:1}"
-
+    eiger_plugins = ('Pva1', 'HDF1', 'ROI1', 'ROI2', 'ROI3', 'ROI4', 'Stats1' , 'Stats2' , 'Stats3' , 'Stats4', 'ROIStat1',)
+    
     if eiger_use_async is True:
         run_report('\t'+'Eiger (async)')
         from bmm_tools.devices.eiger_async import BMMEiger, EigerDetector
         from nslsii.ophyd_async.providers import NSLS2PathProvider
         from ophyd_async.core import init_devices
 
-        for x in ('Pva1', 'HDF1', 'ROI1', 'ROI2', 'ROI3', 'ROI4', 'Stats1' , 'Stats2' , 'Stats3' , 'Stats4', 'ROIStat1',): # , 'image1'
+        for x in eiger_plugins:
             EpicsSignal(f'{pvbase}{x}:EnableCallbacks', name='').put(1)
-            # turn on all useful common plugins
-            #    EpicsSignal('XF:06BM-ES{Det-Eiger:1}image1:EnableCallbacks', name='').put(1)
-            # and so on...
-        #for x in ('StreamEnable', 'DataSource'):
-        #    EpicsSignal(f'{pvbase}cam1::{x}', name='').put(1)
 
         ## following example of  https://github.com/NSLS2/cdi-profile-collection/blob/main/startup/30-area-detectors.py#L152
         pp = NSLS2PathProvider(RE.md)
@@ -528,10 +524,8 @@ if with_eiger is True:
         run_report('\t'+'Eiger (sync)')
         from bmm_tools.devices.eiger import BMMEigerSingleTrigger
         ## make sure various plugins are turned on
-        for x in ('Pva1', 'HDF1', 'ROI1', 'ROI2', 'ROI3', 'ROI4', 'Stats1' , 'Stats2' , 'Stats3' , 'Stats4', 'ROIStat1',):  #'image1', 
+        for x in eiger_plugins:
             EpicsSignal(f'{pvbase}{x}:EnableCallbacks', name='').put(1)
-        ## Future: async: make sure stream mode is enabled for file saving
-
 
         eiger = BMMEigerSingleTrigger(pvbase, name="eiger1m-1", read_attrs=["hdf5"])
         eiger.stats1.kind = "hinted"
