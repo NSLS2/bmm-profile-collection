@@ -686,14 +686,33 @@ class ImageEvaluation:
         if not suggestions:
             return []
 
-        run = self.tiled_client[uid]
-        data = _primary_data(run)
-        acquired_images = np.asarray(data[self.parameters.image_field].read())
-        intensities = np.atleast_1d(
-            np.asarray(
-                data[self.parameters.intensity_field].read(), dtype=np.float64
-            ).squeeze()
-        )
+        run = None
+        data = None
+        acquired_images = None
+        intensities = None
+        for i in range(10):
+            try:
+                run = self.tiled_client[uid]
+                data = _primary_data(run)
+                acquired_images = np.asarray(data[self.parameters.image_field].read())
+                intensities = np.atleast_1d(
+                    np.asarray(
+                        data[self.parameters.intensity_field].read(), dtype=np.float64
+                    ).squeeze()
+                )
+            except KeyError:
+                print(f"Key error on data fetch in evaluation function. Attempt {i}...")
+                time.sleep(1)
+
+        if (
+            run is None
+            or data is None
+            or acquired_images is None
+            or intensities is None
+        ):
+            raise RuntimeError(
+                "Can't proceed, data failed to load in evaluation function."
+            )
 
         if len(suggestions) == 1:
             images: Any = (acquired_images,)
