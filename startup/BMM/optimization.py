@@ -95,8 +95,6 @@ class OptimizationConfig:
     initialize_with_center: bool
 
 
-
-
 @dataclass(frozen=True)
 class AlignmentCostConfig:
     """Weights for the scalar per-energy alignment objective (`compute_alignment_cost`)."""
@@ -143,8 +141,7 @@ class EnergyAlignmentProfile:
             lower, upper = bounds
             if not lower < upper:
                 raise ValueError(
-                    f"Profile {self.name!r} has invalid bounds for {name!r}: "
-                    f"{bounds!r}"
+                    f"Profile {self.name!r} has invalid bounds for {name!r}: {bounds!r}"
                 )
         if self.optimization.iterations < 1:
             raise ValueError("Optimization iterations must be at least one")
@@ -509,7 +506,7 @@ def load_bmm_energy_alignment_resources() -> EnergyAlignmentResources:
     from BMM.user_ns.base import bmm_catalog
     from BMM.user_ns.bmm import BMMuser
     from BMM.user_ns.dcm import dcm
-    from BMM.user_ns.detectors import cam8, ic0
+    from BMM.user_ns.detectors import cam8, cam9, ic0
     from BMM.user_ns.instruments import m2
 
     if bmm_catalog is None:
@@ -528,7 +525,7 @@ def load_bmm_energy_alignment_resources() -> EnergyAlignmentResources:
             "m2_yaw": m2.yaw,
             "m2_lateral": m2.lateral,
         },
-        sensors={"cam8": cam8, _ALIGNMENT_ION_CHAMBER_KEY: ic0},
+        sensors={"cam8": cam8, "cam9": cam9, _ALIGNMENT_ION_CHAMBER_KEY: ic0},
         change_edge_plan=change_edge,
         prompt_state=BMMuser,
         read_energy=read_energy,
@@ -547,9 +544,7 @@ def _validate_resources(
 ) -> None:
     """Fail with the full list of missing devices before any hardware motion."""
     missing_actuators = [
-        name
-        for name in _ALIGNMENT_DOF_NAMES
-        if resources.actuators.get(name) is None
+        name for name in _ALIGNMENT_DOF_NAMES if resources.actuators.get(name) is None
     ]
     missing_sensors = [
         name
