@@ -182,9 +182,9 @@ XAS_SI111_ALIGNMENT = EnergyAlignmentProfile(
     camera="cam9",
     dof_bounds=MappingProxyType(
         {
-            "dcm_roll": (-0.365 - 1, -0.365 + 1),
-            "m2_yaw": (-0.5, 0.5),
-            "m2_lateral": (-0.5, 0.5),
+            "dcm_roll": (-5, 5),
+            "m2_yaw": (-1, 1),
+            "m2_lateral": (-1, 1),
         }
     ),
     search_half_widths=MappingProxyType(
