@@ -14,6 +14,7 @@ internal dataflow are trusted as-is.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 from functools import partial
@@ -580,9 +581,18 @@ def _read_nominal_dofs(
     data = _primary_data(catalog[reference_scan_uid])
     nominal: dict[str, float] = {}
     for name in names:
-        samples = np.atleast_1d(
-            np.asarray(data[name].read(), dtype=np.float64).squeeze()
-        )
+        samples = None
+        for i in range(10):
+            try:
+                samples = np.atleast_1d(
+                    np.asarray(data[name].read(), dtype=np.float64).squeeze()
+                )
+            except KeyError:
+                print(f"Trying to fetch key={name}, attempt={i}...")
+                time.sleep(1)
+        if samples is None:
+            raise RuntimeError(f"Failed to load data for key={name}")
+
         nominal[name] = float(samples[-1])
     return nominal
 
