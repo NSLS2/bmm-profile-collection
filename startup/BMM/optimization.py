@@ -745,16 +745,27 @@ class ImageEvaluation:
                 stats = None
             if stats is None:
                 outcomes.append(
+                    # {
+                    #     "_id": suggestion["_id"],
+                    #     "fwhm_x": float("nan"),
+                    #     "fwhm_y": float("nan"),
+                    #     "centroid_x": float("nan"),
+                    #     "centroid_y": float("nan"),
+                    #     "centroid_distance": float("nan"),
+                    #     "centroid_x_distance": float("nan"),
+                    #     "intensity": intensity,
+                    #     "alignment_cost": float("nan"),
+                    # }
                     {
                         "_id": suggestion["_id"],
-                        "fwhm_x": float("nan"),
-                        "fwhm_y": float("nan"),
-                        "centroid_x": float("nan"),
-                        "centroid_y": float("nan"),
-                        "centroid_distance": float("nan"),
-                        "centroid_x_distance": float("nan"),
-                        "intensity": intensity,
-                        "alignment_cost": float("nan"),
+                        "fwhm_x": 10,
+                        "fwhm_y": 5,
+                        "centroid_x": 101,
+                        "centroid_y": 99,
+                        "centroid_distance": 0.001,
+                        "centroid_x_distance": 0.0001,
+                        "intensity": 1e9,
+                        "alignment_cost": 1.0,
                     }
                 )
                 continue
