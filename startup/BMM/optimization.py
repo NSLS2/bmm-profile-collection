@@ -672,10 +672,13 @@ class ImageEvaluation:
         reference_image = _primary_data(tiled_client[reference_scan_uid])[
             parameters.image_field
         ].read()
-        reference_stats = compute_image_stats(reference_image, parameters)
-        self.reference_centroid_x = reference_stats.centroid_x
-        self.reference_centroid_y = reference_stats.centroid_y
-        self.reference_fwhm_x = reference_stats.fwhm_x
+        # reference_stats = compute_image_stats(reference_image, parameters)
+        # self.reference_centroid_x = reference_stats.centroid_x
+        # self.reference_centroid_y = reference_stats.centroid_y
+        # self.reference_fwhm_x = reference_stats.fwhm_x
+        self.reference_centroid_x = 100
+        self.reference_centroid_y = 100
+        self.reference_fwhm_x = 10
 
     def __call__(self, uid: str, suggestions: list[dict]) -> list[dict]:
         if not suggestions:
