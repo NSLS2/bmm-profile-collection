@@ -4,31 +4,25 @@ from bmm_tools.tools.messages import error_msg, whisper
 
 from BMM.functions import run_report, examine_fmbo_motor_group, examine_xafs_motor_group
 from BMM.workspace import rkvs
-from BMM.user_ns.base import profile_configuration
+from BMM.user_ns.base import profile_configuration, sd
 
 run_report(__file__, text='instrument definitions')
 
 TAB = '\t\t\t'
 
-WITH_LAKESHORE    = profile_configuration.getboolean('experiments', 'lakeshore') # False
-WITH_LINKAM       = profile_configuration.getboolean('experiments', 'linkam') # True
-WITH_ENCLOSURE    = profile_configuration.getboolean('experiments', 'enclosure') # False
-WITH_SALTFURNACE  = profile_configuration.getboolean('experiments', 'saltfurnace') # False
-WITH_RADIOLOGICAL = profile_configuration.getboolean('experiments', 'radiological') # False
-if WITH_ENCLOSURE is True:
-    from BMM.user_ns.motors import xafs_refy, xafs_refx
-    run_report('\tAir Science enclosure')
-    xafs_samx = xafs_refx
-    xafs_samy = xafs_refy
-    print(f'{TAB}defined xafs_samx/xafs_samy as xafs_refx/xafs_refy')
-    
-if WITH_SALTFURNACE is True:
-    from BMM.user_ns.motors import xafs_refy, xafs_refx, xafs_det
-    run_report('\tMolten salt furnace')
-    xafs_detx = xafs_refx
-    xafs_dety = xafs_refy
-    xafs_detz = xafs_det
-    print(f'{TAB}defined xafs_detx/xafs_dety/xafs_detz as xafs_refx/xafs_refy/xafs_det')
+WITH_LAKESHORE    = profile_configuration['experiments']['lakeshore'] # False
+WITH_LINKAM       = profile_configuration['experiments']['linkam'] # True
+WITH_ENCLOSURE    = profile_configuration['experiments']['enclosure'] # False
+WITH_SALTFURNACE  = profile_configuration['experiments']['saltfurnace'] # False
+WITH_RADIOLOGICAL = profile_configuration['experiments']['radiological'] # False
+
+# if WITH_SALTFURNACE is True:
+#     from BMM.user_ns.motors import xafs_refy, xafs_refx, xafs_det
+#     run_report('\tMolten salt furnace')
+#     xafs_detx = xafs_refx
+#     xafs_dety = xafs_refy
+#     xafs_detz = xafs_det
+#     print(f'{TAB}defined xafs_detx/xafs_dety/xafs_detz as xafs_refx/xafs_refy/xafs_det')
 
     
     
@@ -77,7 +71,7 @@ from BMM.user_ns.bmm import BMMuser
 from BMM.user_ns.motors import mcs8_motors, xafs_motors
 
 ## collimating mirror
-WITH_M1    = profile_configuration.getboolean('miscellaneous', 'with_m1') # False
+WITH_M1    = profile_configuration['miscellaneous']['with_m1'] # False
 
 if WITH_M1:
     print(f'{TAB}FMBO motor group: m1')
@@ -189,23 +183,23 @@ def kill_mirror_jacks():
 
 ## XAFS table
 print(f'{TAB}XAFS table motor group')
-xt = xafs_table = XAFSTable('XF:06BMA-BI{XAFS-Ax:Tbl_', name='xafs_table', mirror_length=1160,  mirror_width=558)
+xt = xafs_table = XAFSTable('XF:06BMA-BI{XAFS-Ax:Tbl_', name='xafs_table', table_length=1160,  table_width=558)
 wait_for_connection(xafs_table)
 
 if xafs_table.connected is True:
     xafs_yu  = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_YU}Mtr',  name='xafs_yu')
-    xafs_ydo = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_YDO}Mtr', name='xafs_ydo')
-    xafs_ydi = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_YDI}Mtr', name='xafs_ydi')
+    #xafs_ydo = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_YDO}Mtr', name='xafs_ydo')
+    xafs_yd = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_YDI}Mtr', name='xafs_yd')
     #xafs_xu  = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_XU}Mtr',  name='xafs_xu')
     #xafs_xd  = EndStationEpicsMotor('XF:06BMA-BI{XAFS-Ax:Tbl_XD}Mtr',  name='xafs_xd')
 else:
     xafs_yu     = SynAxis(name='xafs_yu')
-    xafs_ydo    = SynAxis(name='xafs_ydo')
-    xafs_ydi    = SynAxis(name='xafs_ydi')
-    xafs_xu     = SynAxis(name='xafs_xu')
-    xafs_xd     = SynAxis(name='xafs_xd')
+    #xafs_ydo    = SynAxis(name='xafs_ydo')
+    xafs_yd     = SynAxis(name='xafs_yd')
+    #xafs_xu     = SynAxis(name='xafs_xu')
+    #xafs_xd     = SynAxis(name='xafs_xd')
     
-xafs_motors.extend([xafs_yu, xafs_ydo, xafs_ydi]) #, xafs_xu, xafs_xd])
+xafs_motors.extend([xafs_yu, xafs_yd]) #, xafs_ydi, xafs_xu, xafs_xd])
 
 print(f'{TAB}Examine XAFS motor groups')
 examine_xafs_motor_group(xafs_motors)
@@ -310,13 +304,14 @@ examine_fmbo_motor_group(dm2list)
                                  
 run_report('\tsample wheels')
 from BMM.wheel import WheelMotor, WheelMacroBuilder, reference, show_reference_wheel
-from BMM.user_ns.motors import xafs_x, xafs_refx
+from BMM.user_ns.motors import xafs_x, xafs_y, xafs_refx, xafs_refy
 
 xafs_wheel = xafs_rotb  = WheelMotor('XF:06BMA-BI{XAFS-Ax:RotB}Mtr',  name='xafs_wheel')
 xafs_wheel.slotone = 0 # -30        # the angular position of slot #1,  this changed Jan 2026
 #xafs_wheel.user_offset.put(-0.7821145500000031)
 slot = xafs_wheel.set_slot
 xafs_wheel.x_motor = xafs_x
+xafs_wheel.y_motor = xafs_y
 if rkvs.get('BMM:wheel:outer') is None:
     xafs_wheel.outer_position = 0
 else:
@@ -327,6 +322,7 @@ xafs_wheel.inner_position   = xafs_wheel.outer_position + 26.0
 xafs_ref = WheelMotor('XF:06BMA-BI{XAFS-Ax:Ref}Mtr',  name='xafs_ref')
 xafs_ref.slotone = 0        # the angular position of slot #1
 xafs_ref.x_motor = xafs_refx
+xafs_ref.y_motor = xafs_refy
 
 
 #                          ring, slot, elem, material, on wheel (ring: 0=outer, 1=inner)
@@ -408,7 +404,7 @@ xafs_ref.mapping = {'empty0': [0,  1, 'empty0', 'empty', True],
 
 if WITH_RADIOLOGICAL:
     try:
-        uranium = profile_configuration.get('experiments', 'u_ref').split()
+        uranium = profile_configuration['experiments']['u_ref'].split()
         uranium[0] = int(uranium[0])
         uranium[1] = int(uranium[1])
         uranium[4] = bool(uranium[3])
@@ -419,7 +415,7 @@ if WITH_RADIOLOGICAL:
         error_msg('Unable to read U reference configuration from INI file')
         pass
     try:
-        technicium = profile_configuration.get('experiments', 'tc_ref').split()
+        technicium = profile_configuration['experiments']['tc_ref'].split()
         technicium[0] = int(technicium[0])
         technicium[1] = int(technicium[1])
         technicium[4] = bool(technicium[3])
@@ -430,7 +426,7 @@ if WITH_RADIOLOGICAL:
         error_msg('Unable to read Tc reference configuration from INI file')
         pass
     try:
-        thorium = profile_configuration.get('experiments', 'th_ref').split()
+        thorium = profile_configuration['experiments']['th_ref'].split()
         thorium[0] = int(thorium[0])
         thorium[1] = int(thorium[1])
         thorium[4] = bool(thorium[3])
@@ -463,7 +459,7 @@ def set_reference_wheel(position=None):
 if rkvs.get('BMM:ref:outer') is None:
     xafs_ref.outer_position = 0.0
     error_msg('\t\t\t\tReference wheel is not aligned!')
-elif profile_configuration.getboolean('experiments', 'use_reference') is True:    
+elif profile_configuration['experiments']['use_reference'] is True:    
     set_reference_wheel(float(rkvs.get('BMM:ref:outer')))
 #    xafs_ref.outer_position   = float(rkvs.get('BMM:ref:outer'))
 #xafs_ref.inner_position = xafs_ref.outer_position + 26.5 # xafs_ref.outer_position + ~26.5
@@ -653,13 +649,13 @@ if WITH_LAKESHORE:
     ## 1 second updates on scan and ctrl
     lakeshore.temp_scan_rate.put(6)
     lakeshore.ctrl_scan_rate.put(6)
-    lakeshore.ramp_rate.put(0.5)
+    lakeshore.ramp_rate.put(5)
 
     lsmb = LakeShoreMacroBuilder()
     lsmb.description = 'the LakeShore 331 temperature controller'
     lsmb.instrument='LakeShore'
     lsmb.folder = BMMuser.workspace
-
+    
 
 
 
@@ -691,15 +687,15 @@ gmb.folder = BMMuser.workspace
 ###################################################################################################################################
 
 refldet = None
-if profile_configuration.getboolean('detectors', 'pilatus') is True:
+if profile_configuration['detectors']['pilatus'] is True:
     refldet = 'pilatus'
-if profile_configuration.getboolean('detectors', 'eiger') is True:
+if profile_configuration['detectors']['eiger'] is True:
     refldet = 'eiger'
 
 refl = None
 if refldet is not None:
     run_report('\tresonant reflectivity automation')
-    from BMM.reflectivity import ResonantReflectivityMacroBuilder
+    from BMM.reflectivity import ResonantReflectivityMacroBuilder, it_in, it_out
     refl = ResonantReflectivityMacroBuilder(detector=refldet)
     refl.description = 'a resonant reflectivity experiment'
     refl.instrument = 'resonant reflectivity'

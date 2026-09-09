@@ -13,6 +13,9 @@ from bluesky.plan_stubs import mv, mvr
 # basic Bluesky/Ophyd/Databroker functionality, deal with QS vs. bsui
 from .base import *
 
+# Setup Tiled writing clients
+from .tiled import *
+
 # kafka worker (this is imported early -- MANY things rely on talking via kafka)
 from .kafka import kafka
 

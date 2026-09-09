@@ -3,4 +3,4 @@ run_report(__file__, text='BMM kafka worker')
 
 from bmm_tools.tools.kafka import BMMKafka
 kafka = BMMKafka()
-
+kafka.end_station = 'xas'

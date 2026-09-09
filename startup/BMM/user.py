@@ -714,7 +714,7 @@ class BMM_User(Borg):
         self.find_or_copy_file(0, 'Linkam stage spreadsheet',          'linkam.xlsx')
         self.find_or_copy_file(0, 'Lakeshore spreadsheet',             'lakeshore.xlsx')
         self.find_or_copy_file(0, 'motor grid spreadsheet',            'grid.xlsx')
-        self.find_or_copy_file(0, 'resonant reflectivity spreadsheet', 'reflectivity.xlsx')
+        self.find_or_copy_file(0, 'resonant refl. spreadsheet',        'reflectivity.xlsx')
         step += 1            
         
         ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
@@ -792,19 +792,21 @@ class BMM_User(Borg):
 
         ## NSLS-II start experiment infrastructure
         ## this prefix needs to be the same (but without the dash) as the call to RedisJSONDict in user_ns/base.py
+        bmm_tools.tools.md.common_re = user_ns['RE']
+        bmm_tools.tools.md.common_md = user_ns['RE'].md
+        facility_dict = user_ns['RE'].md
         if not is_re_worker_active():  # want to not do this when starting QS environment
             cprint(f'\n[o u chartreuse3]The following authentication is used to write [i]your[/i] data to a folder that [i]you[/i] can access.[/o u chartreuse3]\n')
             cprint(f'[indian_red1]Calling sync_experiment for proposal {gup}. Enter [r]your[/r] BNL username & password at the prompts.[/indian_red1]\n')
             cprint('[indian_red1][u]Anyone[/u] on the current proposal can sign in at this prompt.[/indian_red1]\n')
             warnings.filterwarnings(action='ignore', category=UserWarning, message=r'Experiment pass-\d+ was already started')
-            sync_experiment(gup, 'bmm', verbose=False, redis_db=1)
-            # user_ns['RE'].md = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
-            #                                      profile_configuration.get('services', 'redis_port'),
-            #                                      profile_configuration.get('services', 'redis_ssl'),
-            #                                      redis_db=1)
-            bmm_tools.tools.md.common_re = user_ns['RE']
-            bmm_tools.tools.md.common_md = user_ns['RE'].md
-            facility_dict = user_ns["RE"].md
+            new_md = sync_experiment(gup,
+                                     'bmm',
+                                     verbose=False,
+                                     redis_db=profile_configuration['services']['xas_redis'],
+                                     redis_ssl=profile_configuration['services']['redis_ssl'])
+            bmm_tools.tools.md.common_md = new_md
+            facility_dict = new_md
 
         #if md['data_session'] in ('pass-301027', 'pass-317886'):  # PU proposal numbers of history
         #    self.experimenters = 'Bruce Ravel'
@@ -828,10 +830,10 @@ class BMM_User(Borg):
 
         if name in BMM_STAFF:
             user_folder = os.path.join(os.getenv('HOME'), 'Data', 'Staff', name)
-            user_workspace = os.path.join(profile_configuration.get('services', 'workspace'), 'Staff', name, date)
+            user_workspace = os.path.join(profile_configuration['services']['workspace'], 'Staff', name, date)
         else:
             user_folder = os.path.join(os.getenv('HOME'), 'Data', 'Visitors', name)
-            user_workspace = os.path.join(profile_configuration.get('services', 'workspace'), 'Visitors', name, date)
+            user_workspace = os.path.join(profile_configuration['services']['workspace'], 'Visitors', name, date)
         #if not os.path.isdir(user_folder):
         #    os.makedirs(user_folder)
         if not os.path.isdir(user_workspace):
@@ -840,7 +842,7 @@ class BMM_User(Borg):
             os.makedirs(os.path.join(user_workspace, 'templates'))
         self.workspace = user_workspace
 
-        if profile_configuration.getboolean('services', 'proposal_folders_available'):
+        if profile_configuration['services']['proposal_folders_available']:
             self.new_experiment(lustre_root, saf=saf, gup=gup, name=name)
         else:
             cprint('[red1]\t\tProposal folders unavailable[/red1]')
@@ -856,9 +858,9 @@ class BMM_User(Borg):
             # set correctly later in the startup process
             pass
 
-        if profile_configuration.getboolean('services', 'proposal_folders_available'):
+        if profile_configuration['services']['proposal_folders_available']:
             if kafka.file_exists(folder=proposal_base(), filename='.introduction_made', number=False) is False:
-                self.welcome_experimenters()
+                #self.welcome_experimenters()
                 kafka.message({'touch': os.path.join(proposal_base(), '.introduction_made')})
         else:
             cprint('[red1]\t\tSkipping kafka welcome[/red1]')
@@ -897,8 +899,13 @@ class BMM_User(Borg):
 :atom_symbol: Beamline messages will be posted on #pass-{self.gup}-bmm.
 
 BMM data access: https://nsls2.github.io/bmm-beamline-manual/data.html
-Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{self.gup}`'''
-        #self.bmmbot.chat_and_pin(text)
+Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{self.gup}`
+
+Remote desktop sharing: https://nsls2.github.io/bmm-beamline-manual/manage.html#dealing-with-guacamole
+'''
+        self.bmmbot.chat_and_pin(text)
+        self.bmmbot.client.conversations_invite(channel=self.bmmbot.non_chat_channel, users='U03HA6MM7HT')
+        ## user: nsls2_machine_monitor    userid: U03HA6MM7HT
         
         
     def start_experiment_from_serialization(self):
@@ -924,14 +931,17 @@ Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{s
         self.trigger = True
         if self.name is not None:
             self.begin_experiment(name=self.name, date=self.date, gup=self.gup, saf=self.saf, startup=True)
+            #self.begin_experiment(name='Bruce Ravel', date='2026-09-04', gup=321384, saf=319347, startup=True)
 
+
+            
     def show_experiment(self):
         '''Show basic experiment configuration'''
         experimenters = textwrap.wrap(self.experimenters, subsequent_indent='                ')
         print('PI            = %s' % self.name)
         print('Experimenters = %s' % '\n'.join(experimenters))
         print('Date          = %s' % self.date)
-        if profile_configuration.getboolean('services', 'proposal_folders_available'):
+        if profile_configuration['services']['proposal_folders_available']:
             print('Data folder   = %s' % proposal_base())
         else:
             cprint('Data folder   = %s' % '[grey58]proposal folders are unavailable[/grey58]')
@@ -949,6 +959,10 @@ Your data folder: `/nsls2/data/bmm/proposals/{user_ns["RE"].md["cycle"]}/pass-{s
         Unset the logger at the end of an experiment.
         '''
 
+        #self.bmmbot.client.conversations_kick(channel=self.bmmbot.non_chat_channel, users='U03HA6MM7HT')
+        ## user: nsls2_machine_monitor    userid: U03HA6MM7HT
+
+        
         if not force:
             if not self.user_is_defined:
                 error_msg('There is not a current experiment!')

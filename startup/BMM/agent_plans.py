@@ -5,13 +5,13 @@ import bluesky.preprocessors as bpp
 import redis
 from bluesky import plan_stubs as bps
 from BMM.edge import change_edge
-from BMM.user_ns.base import profile_configuration
+from BMM.user_ns.base import profile_configuration, startup_dir
 from BMM.user_ns.instruments import slits3
 from BMM.user_ns.motors import xafs_det
 
 __all__ = ["agent_driven_nap", "agent_move_and_measure"]
 
-bmm_redis = profile_configuration.get('services', 'bmm_redis')
+bmm_redis = profile_configuration['services']['bmm_redis']
 
 @bpp.run_decorator()
 def agent_driven_nap(delay: float, *, delay_kwarg: float = 0, md=None):
@@ -293,7 +293,7 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
         time = int(time)
         
         if str(scantype) == 'xanes':
-            with open('/opt/bluesky/things/overnight.txt', 'a', encoding='utf-8') as f:
+            with open(overnight_file, 'a', encoding='utf-8') as f:
                 f.write(f"{now()}  {composition}  {distance} {time}\n")
 
         ga.spin = False
@@ -316,15 +316,17 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
         # if scantype.lower() == 'xanes':
         #     elements = [config['primary_element']]
         # el
-        if element is not None:
-            elements = [element]
-        else:
-            znums = list(Z_number(x) for x in config['detector_distances'].keys())
-            elements = list(element_symbol(x) for x in sorted(znums))
-            ## if mono is currently at the highest energy edge, reverse the element list
-            if BMMuser.element == elements[-1]:
-                elements.reverse()
 
+        # if element is not None:
+        #     elements = [element]
+        # else:
+        #     znums = list(Z_number(x) for x in config['detector_distances'].keys())
+        #     elements = list(element_symbol(x) for x in sorted(znums))
+        #     ## if mono is currently at the highest energy edge, reverse the element list
+        #     if BMMuser.element == elements[-1]:
+        #         elements.reverse()
+
+        elements = ('Ni',)
 
         for i, el in enumerate(elements):
 
@@ -394,11 +396,17 @@ def CMS_driven_measurement(composition=None, distance=None, time=None, scantype=
     xafs_detx = user_ns['xafs_detx']
     slits3 = user_ns['slits3']
     BMMuser.prompt = False
-    with open('/opt/bluesky/things/cms.json') as f:
-        config = json.load(f)
-    # pprint.pprint(config)
-    # print('\n')
 
+    overnight_file = '/home/xf06bm/overnight.txt'
+    
+    cfile = os.path.join(startup_dir, "cms.json")
+    with open(cfile) as f:
+        config = json.load(f)
+    pprint.pprint(config)
+    print('\n')
+    yield from null()
+    return
+    
     if scantype is not None:
         scantype = str(scantype)
         if 'xanes' in scantype:
@@ -428,15 +436,16 @@ def populate_overnight_CMS_driven_experiments():
     This is intended to be run from the bluesky command line at BMM.
 
     '''
-    with open('/opt/bluesky/things/overnight.txt', 'r') as f:
+    overnight_file = '/opt/bluesky/things/overnight.txt'
+    with open(overnight_file, 'r') as f:
         instructions = f.readlines()
 
     #beamline_tla  = "bmm"
-    #qs = REManagerAPI(http_server_uri=profile_configuration.get('services', 'qs'))
+    #qs = REManagerAPI(http_server_uri=profile_configuration['services']['qs'])
 
     ## only from BMM subnet, no auth necessary
     qs = ZMQ_RE_API(zmq_control_addr="tcp://xf06bm-srv1.nsls2.bnl.local:60615", zmq_info_addr="tcp://xf06bm-srv1.nsls2.bnl.local:60625")
-    #apikey_file = profile_configuration.get('services', 'qskeys')
+    #apikey_file = profile_configuration['services']['qskeys']
     #with open(os.path.join(apikey_file, 'qserver_http_api_keys', 'BMM_API_KEY_20241101'), "r") as f:
     #    apikey = f.read()
     #qs.set_authorization_key(api_key=apikey)

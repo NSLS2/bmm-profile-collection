@@ -8,7 +8,7 @@ from rich.panel import Panel
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
-from BMM.user_ns.base import profile_configuration, BMM
+from BMM.user_ns.base import profile_configuration, BMM, sd
 
 import redis
 from redis_json_dict import RedisJSONDict
@@ -313,7 +313,6 @@ def bounds(base=0.5, coef=0.25, end='14k', edge=0.3):
 
 
 
-
 # ## see calibrate_pitch in BMM/mono_calibration.py
 # def approximate_pitch(energy):
 #     '''Updated 8 September 2025
@@ -349,7 +348,7 @@ def bounds(base=0.5, coef=0.25, end='14k', edge=0.3):
 
 
 # def facility_md():
-#     nsls2_redis = profile_configuration.get('services', 'nsls2_redis')
+#     nsls2_redis = profile_configuration['services']['nsls2_redis']
 #     redis_client = redis.Redis(host=nsls2_redis)
 #     the_dict = RedisJSONDict(redis_client=redis_client, prefix='xas-')
 #     return the_dict

@@ -1,4 +1,5 @@
 import os, datetime, emojis, re, configparser, numpy, time, orjson
+import tomllib
 from lmfit.models import StepModel, RectangleModel
 from matplotlib import get_backend
 import matplotlib
@@ -26,17 +27,20 @@ pattern1 = r'\b(' + '|'.join(sorted(ELEMENTS, key=lambda x: -len(x))) + r')1\b'
 element_regex1 = re.compile(pattern1)
 
 startup_dir = os.path.dirname(os.path.dirname(__file__))
-cfile = os.path.join(startup_dir, "BMM_configuration.ini")
-profile_configuration = configparser.ConfigParser(interpolation=None)
-profile_configuration.read_file(open(cfile))
+# cfile = os.path.join(startup_dir, "BMM_configuration.ini")
+# profile_configuration = configparser.ConfigParser(interpolation=None)
+# profile_configuration.read_file(open(cfile))
+cfile = os.path.join(startup_dir, "BMM_configuration.toml")
+with open(cfile, "rb") as f:
+    profile_configuration = tomllib.load(f)
 
 
-BMM = profile_configuration.get('services', 'bmm')
-PROPOSALS = profile_configuration.get('services', 'proposals')
+BMM = profile_configuration['services']['bmm']
+PROPOSALS = profile_configuration['services']['proposals']
 
 import redis
 from redis_json_dict import RedisJSONDict
-nsls2_redis = profile_configuration.get('services', 'nsls2_redis')
+nsls2_redis = profile_configuration['services']['nsls2_redis']
 redis_client = redis.Redis(host=nsls2_redis)
 
 
@@ -46,13 +50,13 @@ class NoRedis():
     def get(self, thing):
         return None
 
-#bmm_redis = profile_configuration.get('services', 'bmm_redis')
+#bmm_redis = profile_configuration['services']['bmm_redis']
 #rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
 try:
-    rkvs = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
-                             profile_configuration.get('services', 'redis_port'),
-                             profile_configuration.get('services', 'redis_ssl'),
-                             redis_db=profile_configuration.get('services', 'bmm_redis'))
+    rkvs = open_redis_client(profile_configuration['services']['nsls2_redis'],
+                             profile_configuration['services']['redis_port'],
+                             profile_configuration['services']['redis_ssl'],
+                             redis_db=profile_configuration['services']['bmm_redis'])
 except:
     rkvs = NoRedis()
 
@@ -62,37 +66,42 @@ except:
 
 DATA_SECURITY = True
 
-def experiment_folder(catalog, uid, endstation='XAS'):
-    endstation = endstation.upper()
 
+def facility_dict(endstation='XAS'):
     with open("/etc/bluesky/redis.secret") as f:
         secret = f.read().strip()
     if (endstation == 'XAS'):
-        rc = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'),
-                         port=profile_configuration.get('services', 'redis_port'),
-                         ssl=profile_configuration.get('services', 'redis_port'),
+        rc = redis.Redis(host=profile_configuration['services']['nsls2_redis'],
+                         port=profile_configuration['services']['redis_port'],
+                         ssl=profile_configuration['services']['redis_port'],
                          password=secret,
                          db=1)
         facility_dict = RedisJSONDict(rc, prefix='')
     else:
-        rc = redis.Redis(host=profile_configuration.get('services', 'nsls2_redis'),
-                         port=profile_configuration.get('services', 'redis_port'),
-                         ssl=profile_configuration.get('services', 'redis_port'),
+        rc = redis.Redis(host=profile_configuration['services']['nsls2_redis'],
+                         port=profile_configuration['services']['redis_port'],
+                         ssl=profile_configuration['services']['redis_port'],
                          password=secret,
                          db=2)
         facility_dict = RedisJSONDict(rc, prefix='')
+    return facility_dict
+
+def experiment_folder(catalog, uid, endstation='XAS'):
+    endstation = endstation.upper()
+    fd = facility_dict(endstation)
+
 
     if 'data_session' in catalog[uid].metadata['start']:
         proposal = catalog[uid].metadata['start']['data_session'] #[5:]
     else:
-        proposal = orjson.loads(facility_dict['xas-data_session'])
+        proposal = fd['data_session']
     if 'XDI' in catalog[uid].metadata['start'] and 'Facility' in catalog[uid].metadata['start']['XDI']:
         cycle = catalog[uid].metadata['start']['XDI']['Facility']['cycle']
     else:
-        if 'xas_cycle' in facility_dict:
-            cycle = orjson.loads(facility_dict['xas-cycle'])
+        if 'xas_cycle' in fd:
+            cycle = fd['xas-cycle']
         else:
-            cycle = orjson.loads(facility_dict['cycle'])
+            cycle = fd['cycle']
 
     if DATA_SECURITY:
         folder    = os.path.join(PROPOSALS, cycle, f'{proposal}')
@@ -123,8 +132,8 @@ def file_resource(catalog, uid):
 
 
 def echo_slack(text='', img=None, icon='message', rid=None, measurement='xafs'):
-    facility_dict = RedisJSONDict(redis_client=redis_client, prefix='xas-')
-    base   = os.path.join(PROPOSALS, facility_dict['cycle'], facility_dict['data_session'])
+    fd = facility_dict(endstation='XAS')
+    base = os.path.join(PROPOSALS, fd['cycle'], fd['data_session'])
     rawlogfile = os.path.join(base, 'dossier', '.rawlog')
     rawlog = open(rawlogfile, 'a')
     rawlog.write(message_div(text, img=img, icon=icon, rid=rid, measurement=measurement))
@@ -240,7 +249,7 @@ def peak(signal):
 def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spinner=None, ga=None):
 
     if uid == 'last':
-        uid = catalog[-1].metadata['start']['uid']
+        uid = catalog[-1].start['uid']
         print(f'last UID was {uid}')
 
     top = 0
@@ -306,7 +315,7 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
         position = peak(sig)
         top      = positions[position]
 
-    rkvs.set('BMM:peakposition', top)
+    rkvs.set('BMM:peakposition', float(top))
     print(f'*** peak found at {motor} position {top}')
 
     #if self.fig is not None:
@@ -373,7 +382,7 @@ def rectanglefit(catalog=None, uid=None, motor=None, signal='It', drop=None, aw=
     out    = mod.fit(ss, pars, x=numpy.array(positions))
     print(out.fit_report(min_correl=0))
 
-    target = out.params["midpoint"].value
+    target = float(out.params["midpoint"].value)
     amplitude = abs(out.params['amplitude'].value)
     rkvs.set('BMM:peakposition', target)
     print(f'*** midpoint of rectangle scan found at {motor} position {target:.3f}')
@@ -468,7 +477,7 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, ga=No
     out    = mod.fit(ss, pars, x=numpy.array(positions))
     print(out.fit_report(min_correl=0.2))
 
-    target = out.params['center'].value
+    target = float(out.params['center'].value)
     rkvs.set('BMM:peakposition', target)
     print(f'*** centroid of step function found at {motor} position {target:.3f}')
     print(rkvs.get('BMM:peakposition').decode('utf8'))

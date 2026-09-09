@@ -173,13 +173,13 @@ class Pandrosus():
             record = self.db[self.uid]
             header = record.metadata
             start = header['start']
-            table  = record.primary.read() # ['data']
+            table  = record.primary['data']  # .read()
             
         self.group.energy = numpy.array(table['dcm_energy'])
         self.group.i0 = numpy.array(table['I0'])
         #if mode in ('flourescence', 'xs', 'xs1', 'fluo', 'flou', 'both'): mode = 'fluorescence'
         if mode == 'reference':
-            self.group.mu = numpy.array(numpy.log(table['It']/table['Ir']))
+            self.group.mu = numpy.log(numpy.array(table['It'])/numpy.array(table['Ir']))
             self.group.i0 = numpy.array(table['It'])
             self.group.signal = numpy.array(table['Ir'])
 
@@ -188,12 +188,12 @@ class Pandrosus():
         # on data in past history.  See new '_dtc' element of start document.  9 Sep 2020     #
         #######################################################################################
         elif mode in ('yield', 'fluo+yield'):
-            self.group.mu = numpy.array(table['Iy']/table['I0'])
+            self.group.mu = numpy.array(table['Iy'])/numpy.array(table['I0'])
             self.group.i0 = numpy.array(table['I0'])
             self.group.signal = numpy.array(table['Iy'])
 
         elif mode in ('pips'):
-            self.group.mu = numpy.array(table['Pips']/table['I0'])
+            self.group.mu = numpy.array(table['Pips'])/numpy.array(table['I0'])
             self.group.i0 = numpy.array(table['I0'])
             self.group.signal = numpy.array(table['Pips'])
 
@@ -209,11 +209,11 @@ class Pandrosus():
 
         elif mode in ('icit', 'ici0'):
             if mode == 'icit':
-                self.group.mu = numpy.array(numpy.log(table['I0']/table['I0a']))
+                self.group.mu = numpy.log(numpy.array(table['I0'])/numpy.array(table['I0a']))
                 self.group.i0 = numpy.array(table['I0'])
                 self.group.signal = numpy.array(table['I0a'])
             elif mode == 'icit':
-                self.group.mu = numpy.array(numpy.log(table['I0a']/table['It']))
+                self.group.mu = numpy.log(numpy.array(table['I0a'])/numpy.array(table['It']))
                 self.group.i0 = numpy.array(table['I0a'])
                 self.group.signal = numpy.array(table['It'])
 
@@ -230,12 +230,12 @@ class Pandrosus():
         #     self.group.signal = numpy.array(table[columns[0]]+table[columns[1]]+table[columns[2]]+table[columns[3]])
 
         elif mode == 'ref':
-            self.group.mu = numpy.array(numpy.log(table['It']/table['Ir']))
+            self.group.mu = numpy.log(numpy.array(table['It'])/numpy.array(table['Ir']))
             self.group.i0 = numpy.array(table['It'])
             self.group.signal = numpy.array(table['Ir'])
 
         else:
-            self.group.mu = numpy.array(numpy.log(table['I0']/table['It']))
+            self.group.mu = numpy.log(numpy.array(table['I0'])/numpy.array(table['It']))
             self.group.i0 = numpy.array(table['I0'])
             self.group.signal = numpy.array(table['It'])
 
@@ -252,10 +252,10 @@ class Pandrosus():
         else:                               # tiled catalog
             header = self.db[uid].metadata
             start = header['start']
-            table  = self.db[uid].primary.read()
+            table  = self.db[uid].primary['data']  # .read()
             
         self.group.energy = numpy.array(table['dcm_energy'])
-        self.group.reference = numpy.array(numpy.log(table['It']/table['Ir']))
+        self.group.reference = numpy.log(numpy.array(table['It'])/numpy.array(table['Ir']))
 
             
     def fetch(self, uid, name=None, mode='transmission', working_folder=None):
@@ -264,10 +264,10 @@ class Pandrosus():
         if name is not None:
             self.name = name
         else:
-            self.name = self.db[uid].metadata['start']['XDI']['_filename']
+            self.name = self.db[uid].start['XDI']['_filename']
         self.group = Group(__name__=self.name)
-        self.title = self.db[uid].metadata['start']['XDI']['Sample']['name']
-        self.mode  = self.db[uid].metadata['start']['XDI']['_user']['mode']
+        self.title = self.db[uid].start['XDI']['Sample']['name']
+        self.mode  = self.db[uid].start['XDI']['_user']['mode']
 
         self.make_xmu(uid, mode=mode)
         self.make_ref(uid)
@@ -450,11 +450,11 @@ class Pandrosus():
         Setting deriv to True forces all other arguments to false.
         '''
         fig = None
-        if self.reuse is True:
-            plt.cla()
-        else:
-            fig = plt.figure()
-            fig.set_facecolor((0.9, 0.9, 0.9))
+        #if self.reuse is True:
+        #    plt.cla()
+        #else:
+        fig = plt.figure()
+        fig.set_facecolor((0.9, 0.9, 0.9))
         plt.xlabel(self.xe)
         plt.title(self.name + ' in energy')
         plt.grid(which='major', axis='both')
@@ -499,10 +499,10 @@ class Pandrosus():
                 y = numpy.interp(g.e0+g.pre_edge_details.norm2, g.energy, g.mu)
                 plt.scatter(g.e0+g.pre_edge_details.norm2, y, marker='|', color='orchid')
         plt.legend(loc='best', shadow=True)
-        if self.reuse is False:
-            plt.close()
-        if fig is not None:
-            return fig
+        #if self.reuse is False:
+        #    plt.close()
+        #if fig is not None:
+        return fig
 
     def plot_signals(self):
         '''Make a plot of mu(E) for a single data set with I0 and the signal

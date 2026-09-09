@@ -7,6 +7,7 @@ from bluesky.plan_stubs import null, sleep, mv, mvr
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
 from bmm_tools.optics.dcm_parameters import approximate_pitch
+from bmm_tools.optics.mode_data import read_mode_data, MODEDATA  # photon delivery system lookup table
 
 from BMM.exceptions    import ChangeModeException
 from BMM.linescans     import rocking_curve, slit_height, mirror_pitch, wiggle_bct
@@ -24,43 +25,44 @@ from BMM.user_ns.dcm        import dcm
 from BMM.user_ns.suspenders import suspenders
 
 
-MODEDATA = None
-def read_mode_data():
-     '''Read the lookup table Modes.xlsx and return position and encoder
-     readings as a dict.
-     '''
-     wb = load_workbook(os.path.join(user_ns["BMM_CONFIGURATION_LOCATION"], 'Modes.xlsx'), read_only=True);
-     ws = wb['Modes A-F']
-     bl = dict()
-     header = 1
-     for row in ws.rows:
-         axis = dict()
-         if str(row[0].value) == 'Instrument':
-             header = 0
-             continue
-         if header == 1: continue
-         alias           = row[2].value
-         if 'fe_slits' in alias: continue
-         axis['PV']      = row[1].value
-         axis['desc']    = row[3].value
-         axis['A']       = row[4].value
-         axis['A_REP']   = row[5].value
-         axis['B']       = row[6].value
-         axis['B_REP']   = row[7].value
-         axis['C']       = row[8].value
-         axis['C_REP']   = row[9].value
-         axis['D']       = row[10].value
-         axis['D_REP']   = row[11].value
-         axis['E']       = row[12].value
-         axis['E_REP']   = row[13].value
-         axis['F']       = row[14].value
-         axis['F_REP']   = row[15].value
-         axis['XRD']     = row[19].value
-         axis['XRD_REP'] = row[20].value
-         bl[alias] = axis
-     return bl
+# MODEDATA = None
+# def read_mode_data():
+#      '''Read the lookup table Modes.xlsx and return position and encoder
+#      readings as a dict.
+#      '''
+#      wb = load_workbook(os.path.join(user_ns["BMM_CONFIGURATION_LOCATION"], 'Modes.xlsx'), read_only=True);
+#      ws = wb['Modes A-F']
+#      bl = dict()
+#      header = 1
+#      for row in ws.rows:
+#          axis = dict()
+#          if str(row[0].value) == 'Instrument':
+#              header = 0
+#              continue
+#          if header == 1: continue
+#          alias           = row[2].value
+#          if 'fe_slits' in alias: continue
+#          axis['PV']      = row[1].value
+#          axis['desc']    = row[3].value
+#          axis['A']       = row[4].value
+#          axis['A_REP']   = row[5].value
+#          axis['B']       = row[6].value
+#          axis['B_REP']   = row[7].value
+#          axis['C']       = row[8].value
+#          axis['C_REP']   = row[9].value
+#          axis['D']       = row[10].value
+#          axis['D_REP']   = row[11].value
+#          axis['E']       = row[12].value
+#          axis['E_REP']   = row[13].value
+#          axis['F']       = row[14].value
+#          axis['F_REP']   = row[15].value
+#          axis['XRD']     = row[19].value
+#          axis['XRD_REP'] = row[20].value
+#          bl[alias] = axis
+#      del bl['xafs_ydo']         # clean up unneeded entry
+#      return bl
 
-MODEDATA = read_mode_data();
+# MODEDATA = read_mode_data();
 
 #     return json.load(open(os.path.join(user_ns["BMM_CONFIGURATION_LOCATION"], 'Modes.json')))
 #if os.path.isfile(os.path.join(user_ns["BMM_CONFIGURATION_LOCATION"], 'Modes.json')):
@@ -68,7 +70,7 @@ MODEDATA = read_mode_data();
 
 def motors_in_position(mode=None):
     all_of_them = ['dm3_bct',
-                   'xafs_yu', 'xafs_ydo', 'xafs_ydi',
+                   'xafs_yu', 'xafs_yd', # xafs_ydo
                    'm2_yu', 'm2_ydo', 'm2_ydi', #'m2_xu', 'm2_xd',
                    'm3_yu', 'm3_ydo', 'm3_ydi', 'm3_xu', 'm3_xd',]
     ok = True
@@ -85,7 +87,7 @@ def motors_in_position(mode=None):
 def pds_motors_ready():
     m3, m2, m2_bender, dm3_bct = user_ns['m3'], user_ns['m2'], user_ns['m2_bender'], user_ns['dm3_bct']
     mcs8_motors = [m3.xu, m3.xd, m3.yu, m3.ydo, m3.ydi, m2.xu, m2.xd, m2.yu, m2.ydo, m2.ydi, m2_bender,
-                   dcm.pitch, dcm.roll, dcm.perp, dcm.roll, dcm.bragg, dm3_bct]
+                   dcm.pitch, dcm.roll, dcm.perp, dcm.para, dcm.bragg, dm3_bct]
 
     count = 0
     for m in mcs8_motors:
@@ -134,17 +136,14 @@ def table_height(mode=None, by=None, pitch=None):
      '''
      xafs_table = user_ns['xafs_table']
      if by is not None:
-          yield from mvr(xafs_table.yu,  float(by),
-                         xafs_table.ydo, float(by),
-                         xafs_table.ydi, float(by))
+          yield from mvr(xafs_table.yu, float(by),
+                         xafs_table.yd, float(by))
      elif pitch is not None:
           yield from mvr(xafs_table.yu,  -1 * float(pitch),
-                         xafs_table.ydo, float(pitch),
-                         xafs_table.ydi, float(pitch))
+                         xafs_table.yd, float(pitch))
      elif mode in ('A', 'B', 'C', 'D', 'E', 'F', 'XRD'):
-          yield from mv(xafs_table.yu,   float(MODEDATA['xafs_yu'][mode]),
-                        xafs_table.ydo,  float(MODEDATA['xafs_ydo'][mode]),
-                        xafs_table.ydi,  float(MODEDATA['xafs_ydi'][mode]))
+          yield from mv(xafs_table.yu, float(MODEDATA['xafs_yu'][mode]),
+                        xafs_table.yd, float(MODEDATA['xafs_yd'][mode]))
      else:
           print('Doing nothing.  Do table_height?? for explanation')
           yield from null()
@@ -158,8 +157,7 @@ def verify_limits(targets):
  
        base = [dm3_bct,         float(MODEDATA['dm3_bct'][mode]),
                xafs_table.yu,   float(MODEDATA['xafs_yu'][mode]),
-               xafs_table.ydo,  float(MODEDATA['xafs_ydo'][mode]),
-               xafs_table.ydi,  float(MODEDATA['xafs_ydi'][mode]),
+               xafs_table.yd,   float(MODEDATA['xafs_yd'][mode]),
                ...
               ]
 
@@ -283,8 +281,8 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
      base = [dm3_bct,         float(MODEDATA['dm3_bct'][mode]),
 
              xafs_table.yu,   float(MODEDATA['xafs_yu'][mode]),
-             xafs_table.ydo,  float(MODEDATA['xafs_ydo'][mode]),
-             xafs_table.ydi,  float(MODEDATA['xafs_ydi'][mode]),]
+             #xafs_table.ydo,  float(MODEDATA['xafs_ydo'][mode]),
+             xafs_table.yd,  float(MODEDATA['xafs_yd'][mode]),]
 
      mirror3 = [m3.yu,           float(MODEDATA['m3_yu'][mode]),
                 m3.ydo,          float(MODEDATA['m3_ydo'][mode]),
@@ -292,7 +290,7 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
                 m3.xu,           float(MODEDATA['m3_xu'][mode]),
                 m3.xd,           float(MODEDATA['m3_xd'][mode]), ]
 
-     if profile_configuration.getboolean('experiments', 'use_reference') is False:
+     if profile_configuration['experiments']['use_reference'] is False:
           no_ref = False
           reference = None
      if reference is not None:
@@ -354,13 +352,12 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
 
      report(f'Moving from mode {current_mode} to mode {mode}', slack=True)
 
-    if not preserve_dcm_roll:
-          if mode == 'XRD':
-               print('For XRD mode, move to post 2/2026 position for dcm.roll.')
-               yield from mv(dcm.roll, 4.532) # profile_configuration.getfloat('dcm', f'roll_{dcm._crystal}')) #
-          else:
-               print('For all XAS modes, move to post 2/2026 position for dcm.roll.')
-               yield from mv(dcm.roll, profile_configuration.getfloat('dcm', f'roll_{dcm._crystal}'))
+     if mode == 'XRD':
+          print('For XRD mode, move to post 2/2026 position for dcm.roll.')
+          yield from mv(dcm.roll, 4.532) # profile_configuration['dcm'][f'roll_{dcm._crystal}']) # 
+     else:
+          print('For all XAS modes, move to post 2/2026 position for dcm.roll.')
+          yield from  mv(dcm.roll, profile_configuration['dcm'][f'roll_{dcm._crystal}'])
           
      if mode in ('D', 'E', 'F') and user_ns['slits3'].vsize.position < 0.4:
           print('Slit height appears to be set for focused beam.  Opening slits.')
@@ -435,6 +432,8 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
      else:
           if bender is True:
                yield from mv(m2_bender.kill_cmd, 1)
+               m2_bender.llm.put(-10)  # why is this needed? why do the limits get reset frequently?
+               m2_bender.hlm.put(213000)
                if mode == 'XRD':
                     if abs(m2_bender.user_readback.get() - BMMuser.bender_xrd) > BMMuser.bender_margin: # give some wiggle room for having
                          base.extend([m2_bender, BMMuser.bender_xrd])                                   # recently adjusted the bend
@@ -500,9 +499,9 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
 def mode():
     print('Motor positions:')
     for m in ('dm3_bct',
-              'xafs_yu', 'xafs_ydo', 'xafs_ydi',
-              'm2_yu', 'm2_ydo',
-              'm2_ydi', 'm2_bender', 'm3_yu', 'm3_ydo', 'm3_ydi', 'm3_xu', 'm3_xd',
+              'xafs_yu', 'xafs_yd', # 'xafs_ydo',
+              'm2_yu', 'm2_ydo', 'm2_ydi', 'm2_bender',
+              'm3_yu', 'm3_ydo', 'm3_ydi', 'm3_xu', 'm3_xd',
               'dm3_slits_t', 'dm3_slits_b', 'dm3_slits_i', 'dm3_slits_o'):
         mot = user_ns[m]
         print('\t%-12s:\t%.3f' % (mot.name, mot.user_readback.get()))
@@ -637,13 +636,13 @@ def change_xtals(xtal=None):
      yield from sleep(1.0) 
      if xtal == 'Si(111)':
           yield from mv(dcm.pitch, 1.3,
-                        dcm.roll,  profile_configuration.getfloat('dcm', 'roll_111'),
+                        dcm.roll,  profile_configuration['dcm']['roll_111'],
                         dcm.x,     0.5    )
           #dcm._crystal = '111'
           dcm.set_crystal('111')  # set d-spacing and bragg offset
      elif xtal == 'Si(311)':
           yield from mv(dcm.pitch, 3.9195,
-                        dcm.roll,  profile_configuration.getfloat('dcm', 'roll_311'),
+                        dcm.roll,  profile_configuration['dcm']['roll_311'],
                         dcm.x,     65.3    )
           #dcm._crystal = '311'
           dcm.set_crystal('311')  # set d-spacing and bragg offset

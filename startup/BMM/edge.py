@@ -34,7 +34,7 @@ user_ns = vars(user_ns_module)
 
 from BMM.user_ns.bmm         import BMMuser
 from BMM.user_ns.dcm         import dcm
-from BMM.user_ns.detectors   import xs, xs1, xs4, xs7
+from BMM.user_ns.detectors   import xs, xs1, xs4, xs7, pilatus
 from BMM.user_ns.dwelltime   import with_xspress3
 from BMM.user_ns.instruments import * #kill_mirror_jacks, m3_ydi, m3_ydo, m3_yu, m3_xd, m3_xu, ks, m2_ydi, m2_ydo, m2_yu
 from BMM.user_ns.motors      import *
@@ -48,10 +48,10 @@ def show_edges():
 
 def all_connected(with_m2=False):
     motors = [dm3_bct,
-              xafs_yu, xafs_ydo, xafs_ydi,
+              xafs_yu, xafs_yd, # xafs_ydo, 
               m3_yu, m3_ydo, m3_ydi, m3_xu, m3_xd,]
     if with_m2 is True:
-        motors.extend([m2_yu, m2_ydo, m2_ydi])
+        motors.extend([m2_yu,  m2_ydi]) # m2_ydo,
     ok = True
     for m in motors:
         if m.connected is False:
@@ -89,7 +89,7 @@ def wiggle_mirrors():
             
 def arrived_in_mode(mode=None):
     motors = [dm3_bct,
-              xafs_yu, xafs_ydo, xafs_ydi,
+              xafs_yu, xafs_yd, # xafs_ydo,
               m2_yu, m2_ydo, m2_ydi, #m2_xu, m2_xd,
               m3_yu, m3_ydo, m3_ydi, m3_xu, m3_xd,]
     ok = True
@@ -135,7 +135,7 @@ def m2_lateral_position(energy=None):
 
 def xafs_table_ok():
     bad_position = 150
-    if xafs_yu.position > bad_position or xafs_ydi.position > bad_position or xafs_ydo.position > bad_position:
+    if xafs_yu.position > bad_position or xafs_yd.position > bad_position:
         return False
     return True
 
@@ -190,7 +190,7 @@ def quick_change(el, focus=False, edge='K', target=300., reference=False):
     probably OK for adjacent elements.
 
     '''
-    yield from change_edge(el, focus=focus, edge=edge, slits=False,  mirror=False, tune=False, target=target, xrd=False,
+    yield from change_edge(el, focus=focus, edge=edge, slits=False,  mirror=False, tune=True, target=target, xrd=False,
                            bender=True, insist=False, no_ref=not reference, no_hslits=True)
     
 def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True, tune=True, target=300.,
@@ -328,7 +328,7 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
 
             
         if xafs_table_ok is False:
-            error_msg('XAFS table positions looks strange.  Check user_offset values for xafs_yu, xafs_ydi, and xafs_ydo.')
+            error_msg('XAFS table positions looks strange.  Check user_offset values for xafs_yu, xafs_yd.')
             bold_msg('Quitting change_edge() macro....\n')
             yield from null()
             freakout = 1
@@ -349,13 +349,13 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
             
 Something has gone wrong while trying to change edge.  Scan sequence has been stopped.
 
-Maybe the beam has dumped, Maybe there is a motor controller problem.  Check screen at beamline for more information.            
+Maybe the beam has dumped, maybe there is a motor controller problem.  Check screen at beamline for more information.            
 
 :bangbang: :bangbang: :bangbang: :bangbang: :bangbang: ''')
 
-            cprint('\n\n[red3]The next command will force a return to the ipython command line,[/red3]')
+            cprint('\n\n[red3]The next command will force a return to the ipython command line.[/red3]\n')
             cprint('[yellow3]The intent is to fail somewhat gracefully during a failed[/yellow3]')
-            cprint('[yellow3]change_edge() happening during an automation scan sequence.[/yellow3]')
+            cprint('[yellow3]change_edge() happening during an automation scan sequence.[/yellow3]\n')
             cprint('[grey58]Hopefully there are screen messages that give a clue for what happened....\n\n[/grey58]')
             ## the next line is intended to trigger an immediate error and return to the IPython command line
             wa.put(1)
@@ -385,6 +385,7 @@ Maybe the beam has dumped, Maybe there is a motor controller problem.  Check scr
             return
 
         suspenders.set_suspenders()
+        collimated_to_focused, focused_to_collimated = False, False
 
         if energy > 8000:
             mode = 'A' if focus else 'D'
@@ -410,6 +411,10 @@ Maybe the beam has dumped, Maybe there is a motor controller problem.  Check scr
             warning_msg('Ophyd connection failure' % el)
             yield from null()
             return
+        if mode in ('A', 'B', 'C') and current_mode in ('D', 'E', 'F'):
+            collimated_to_focused = True
+        if mode in ('D', 'E', 'F') and current_mode in ('A', 'B', 'C'):
+            focused_to_collimated = True
 
         ## trouble with MC06
         #slits = False
@@ -489,15 +494,17 @@ Maybe the beam has dumped, Maybe there is a motor controller problem.  Check scr
         if no_hslits is True:
             pass
         elif mode == 'XRD':
+            yield from mv(m2_bender.kill_cmd, 1)            
             yield from mv(slits3.hsize, 1.5)  # changed to 1.5 for 500 mA operations
         elif mode in ('D', 'E', 'F'):
             yield from mv(slits3.hsize, 3)
         elif mode in ('A', 'B', 'C'):
+            yield from mv(m2_bender.kill_cmd, 1)            
             yield from mv(slits3.hsize, 0.4)
 
         ## these two instruments involve hijacking the refx and refy motors for other purposes,
         ## so the reference stages should NOT be moved
-        if WITH_ENCLOSURE is True or WITH_SALTFURNACE is True:
+        if WITH_ENCLOSURE is True or WITH_SALTFURNACE is True or profile_configuration["experiments"]["use_reference"] is False:
             no_ref = True
 
         cprint('[yellow2]bragg_small_move[/yellow2]')
@@ -507,11 +514,13 @@ Maybe the beam has dumped, Maybe there is a motor controller problem.  Check scr
             dcm.bragg_small_move(direction=-1, verbose=True)
         yield from wiggle_bct()
         yield from mv(dcm.bragg.acceleration, BMMuser.acc_slow)
-        yield from change_mode(mode=mode, prompt=False, edge=energy+target, reference=el, bender=bender,
-                               insist=insist, no_ref=no_ref, preserve_dcm_roll=preserve_dcm_roll)
+        print(f'mmode={mode}, edge={energy+target}, reference={el}, bender={bender}, insist={insist}, no_ref={no_ref}')
+        yield from change_mode(mode=mode, prompt=False, edge=energy+target, reference=el, bender=bender, insist=insist, no_ref=no_ref)
         yield from mv(dcm.bragg.acceleration, BMMuser.acc_fast)
 
         ## RIGHT HERE: set Pilatus threshold to energy - 2000 eV
+        if profile_configuration['detectors']['pilatus'] is True:
+            pilatus.threshold_energy.put(energy+target-2000)
         
         ## verify that dcm.para has arrived in place.  if not, presume
         ## that it has stalled.  back off and try again to move
@@ -606,6 +615,7 @@ Maybe the beam has dumped, Maybe there is a motor controller problem.  Check scr
         # run a slit horizontal center scan if focused #
         ################################################
         if mode in ('A', 'B', 'C'):
+            yield from mv(m2.yaw, 0.129)
             if no_hslits is False:
                 yield from hcenter(move=True)
                 kafka.message({'close': 'last'})
@@ -640,10 +650,14 @@ Maybe the beam has dumped, Maybe there is a motor controller problem.  Check scr
 
         if mode == 'XRD':
             yield from mv(slits3.hsize, 7)
+            yield from mv(slits3.vsize, 1)
+            yield from mv(m2.yaw, -0.067)  #  value from 18 June, 2026
+            yield from mv(m2.bender.kill_cmd, 1)            
             report('Finished configuring for XRD', level='bold', slack=True)
         else:
-            #if mode in ('D', 'E', 'F'):
-            if no_hslits is False:
+            # return slits to prior size unless changing bewteen focused and collimated, in which
+            # case  the slits should stay the size they were while changing edge
+            if no_hslits is False and collimated_to_focused is False and focused_to_collimated is False:
                 yield from mv(slits3.hsize, hsize_save)
             report(f'Finished configuring for {el.capitalize()} {edge.capitalize()} edge, now in photon delivery mode {get_mode()}', level='bold', slack=True)
         # if slits is False:
@@ -652,7 +666,7 @@ Maybe the beam has dumped, Maybe there is a motor controller problem.  Check scr
     def cleanup_plan():
         suspenders.clear_suspenders()
         #yield from dcm.kill_plan()
-        yield from mv(m2_bender.kill_cmd, 1)
+        yield from mv(m2.bender.kill_cmd, 1)
         BMMuser.state_to_redis(filename=os.path.join(BMMuser.workspace, '.BMMuser'), prefix='')
         yield from resting_state_plan()
         end = time.time()

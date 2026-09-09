@@ -8,9 +8,8 @@ version = "2026.2.0"
 [system-requirements]
 
 [feature.profile.dependencies]
-bluesky-base = "==1.15.0"
-tiled-client = "==0.2.9"
-tiled-server = ">=0.1.0b11"
+bluesky-base = "==1.15.1"
+tiled-client = ">=0.2.18"
 python = ">=3.12,<3.13"
 xraylib = "*"
 lmfit = "*"
@@ -20,18 +19,19 @@ terminaltexteffects = "*"
 slack_sdk = "*"
 bluesky-widgets = "*"
 mendeleev = "*"
-ophyd = "<=1.9.0"
+ophyd = ">=1.11.2"
 pyepics = "<=3.5.6"
 tqdm = "<=4.66.4"
+#tqdm = "==4.67.1"
 appdirs = "*"
-bluesky-queueserver-api = ">=0.0.12"
+bluesky-queueserver-api = ">=0.0.13"
 hdf5-external-filter-plugins = ">=0.1.0,<0.2"
 blosc-hdf5-plugin = ">=1.0.1,<2"
 databroker = "==2.0.0"
 epicscorelibs = ">=7.0.7.99.1.1,<8"
 emojis = ">=0.7.0,<0.8"
-bluesky-tiled-plugins = "==2.0.2"
-ophyd-async = ">=0.13.7,<0.14"
+bluesky-tiled-plugins = ">=2.0.10"
+ophyd-async = ">=0.21.2"
 matplotlib-base = ">=3.10"
 nslsii = "==0.11.9"
 gpytorch = "*"
@@ -43,23 +43,31 @@ emojis = "*"
 pvxslibs = ">=1.3.2, <2"
 botorch = ">=0.18,<0.19"
 bmm_tools = { git = "https://github.com/NSLS2/bmm_tools", branch = "main" }
-blop = { git = "https://github.com/bluesky/blop", branch = "main", extras = ["ax", "cpu"] }
+blop = { git = "https://github.com/bluesky/blop", branch = "main", extras = [
+  "ax",
+  "cpu",
+] }
+#XASDenoise = { git = "https://github.com/tomasaidukas/XASDenoise", branch = "main" }
 
 [feature.terminal.dependencies]
 nslsii = "==0.11.9"
 ipython = ">=9.5.0"
 numpy = ">2"
-## needed by file-manager for writing powerpoint reports of the sort that the IBM folk like
-python-pptx = "==1.0.2"
+python-pptx = "*"
 
 [feature.terminal.tasks]
 start = "unset SESSION_MANAGER PYTHONPATH && MPLBACKEND=qtagg ipython --profile-dir=."
 pvs = "ipython --profile-dir=. -c 'get_pv_types(); exit()'"
 # DB Numbers: 0 is reserved, 1 is for XAS, 2 is for XRD, 3-15 are availble for expansion 
-sync-experiment = { cmd = "sync-experiment -s -b bmm -p {{proposal}} -d {{database}} -v", args = ["proposal", "database"] }
+sync-experiment = { cmd = "sync-experiment -s -b bmm -p {{proposal}} -d {{database}} -v", args = [
+  "proposal",
+  "database",
+] }
 # launch BMM's kafka-based workflow clients
 plotmanager = "/home/xf06bm/.ipython/profile_collection/startup/consumer/bin/run-plotmanager"
-filemanager = "startup/consumer/bin/run-filemanager"
+filemanager = "/home/xf06bm/.ipython/profile_collection/startup/consumer/bin/run-filemanager"
+# tool for prepping Eiger for use
+
 
 [feature.test.dependencies]
 pytest = ">=8,<9"
@@ -67,7 +75,7 @@ pytest = ">=8,<9"
 [feature.test.tasks]
 test = "pytest"
 
-[feature.qs.dependencies ]
+[feature.qs.dependencies]
 "bluesky-httpserver" = "*"
 
 [feature.qs.tasks]
@@ -79,9 +87,9 @@ qs-backend = "start-re-manager --profile-dir=."
 qs-server = "uvicorn --host localhost --port 60610 bluesky_httpserver.server:app"
 
 [environments]
-terminal = {features=["profile", "terminal"], solve-group="profile"}
-qs = {features=["profile", "qs"], solve-group="profile"}
-test = {features=["profile", "test"], solve-group="profile"}
+terminal = { features = ["profile", "terminal"], solve-group = "profile" }
+qs = { features = ["profile", "qs"], solve-group = "profile" }
+test = { features = ["profile", "test"], solve-group = "profile" }
 
 [dependencies]
 inflection = ">=0.5.1,<0.6"

@@ -42,7 +42,7 @@ from BMM.user_ns.base       import profile_configuration
 from BMM.user_ns.base       import bmm_catalog, WORKSPACE
 from BMM.user_ns.dcm        import dcm
 from BMM.user_ns.dwelltime  import _locked_dwell_time, use_7element, use_4element, use_1element
-from BMM.user_ns.detectors  import quadem1, xs, xs1, xs4, xs7, ic0, ic1, ic2, pilatus, dante, ION_CHAMBERS
+from BMM.user_ns.detectors  import quadem1, xs, xs1, xs4, xs7, ic0, ic1, ic2, pilatus, dante, ION_CHAMBERS, ic0
 from BMM.user_ns.suspenders import suspenders
 
 try:
@@ -496,6 +496,20 @@ def xafs(inifile=None, **kwargs):
                 return
         #_locked_dwell_time.quadem_dwell_time.settle_time = 0
 
+        if ic0.current1.mean_value.get() > 696.0:
+            error_msg('\nThe I0 chamber is saturated, reading greater than 696 nA.')
+            whisper('\nThe solution is to reduce the horizontal size of slits3, perhaps 0.4 mm or less')
+            whisper('\ttry: RE(mv(slits3.hsize, 0.4))')
+            bold_msg('\nNot clear to start scan sequence....\n')
+            yield from null()
+            return
+        elif ic0.current1.mean_value.get() > 680.0:
+            error_msg('\nThe I0 chamber is close to saturated, reading greater than 680 nA.')
+            whisper('\nThe solution is to reduce the horizontal size of slits3, perhaps 0.4 mm or less')
+            whisper('\ttry: RE(mv(slits3.hsize, 0.4))')
+            bold_msg('\nNot clear to start scan sequence....\n')
+            yield from null()
+            return
 
         ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
         ## decide whether to ask kafka worker to copy INI file to proposal folder
@@ -781,7 +795,6 @@ def xafs(inifile=None, **kwargs):
             bold_msg('computing energy and dwell time grids')
             (energy_grid, time_grid, approx_time, delta) = conventional_grid(p['bounds'], p['steps'], p['times'], e0=p['e0'], element=p['element'], edge=p['edge'], ththth=p['ththth'])
 
-
             ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
             ## make sure XSpress3 IOC knows how many data points to measure
             if plotting_mode(p['mode']) in ('fluorescence', 'yield', 'pilatus'):
@@ -842,7 +855,8 @@ def xafs(inifile=None, **kwargs):
             ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
             ## loop over scan count
             kafka.close_plots()
-            plt.close('all')
+            #plt.close('all')
+
             rid = str(uuid.uuid4())[:8]
             kafka.message({'dossier': 'start', 'stub': p['filename']})
             kafka.message({'dossier': 'set',
@@ -850,11 +864,13 @@ def xafs(inifile=None, **kwargs):
                            'rid'    : rid})
             report(f'"{p["filename"]}", {p["element"]} {p["edge"]} edge, {inflect("scans", p["nscans"])}',
                    level='bold', slack=True, rid=rid)
+
             cnt = 0
             if any('quadem' in x.name for x in ION_CHAMBERS):
                 with_yield = True
             else:
                 with_yield = False
+                
             kafka.message({'xafs_sequence' : 'start',
                            'element'       : p["element"],
                            'edge'          : p["edge"],
@@ -862,7 +878,7 @@ def xafs(inifile=None, **kwargs):
                            'workspace'     : BMMuser.workspace,
                            'repetitions'   : p["nscans"],
                            'mode'          : p['mode'],
-                           'with_yield'    : with_yield })
+                           'with_yield'    : with_yield})
             refmat = 'none'
             if p["element"] in user_ns['xafs_ref'].mapping:
                 refmat = user_ns['xafs_ref'].mapping[p["element"]][3]
@@ -872,15 +888,15 @@ def xafs(inifile=None, **kwargs):
 
             bold_msg('Measuring and recording dark current')            
             yield from dark_current()
-            if profile_configuration.getboolean('electrometers', 'ic0'):
+            if profile_configuration['electrometers']['ic0']:
                 md['Detector']['I0_dark'] = ic0.get_current_offsets()[0]      # first ion chamber
             else:
                 md['Detector']['I0_dark'] = quadem1.get_current_offsets()[0]  # first channel of black box QuadEM
-            if profile_configuration.getboolean('electrometers', 'ic1'):
+            if profile_configuration['electrometers']['ic1']:
                 md['Detector']['It_dark'] = ic1.get_current_offsets()[0]      # second ion chamber
             else:
                 md['Detector']['It_dark'] = quadem1.get_current_offsets()[1]  # second channel of black box QuadEM
-            if profile_configuration.getboolean('electrometers', 'ic2'):
+            if profile_configuration['electrometers']['ic2']:
                 md['Detector']['Ir_dark'] = ic2.get_current_offsets()[0]      # third ion chamber 
             else:
                 md['Detector']['Ir_dark'] = quadem1.get_current_offsets()[2]  # third channel of black box QuadEM
@@ -900,7 +916,8 @@ def xafs(inifile=None, **kwargs):
                            'repetitions': p["nscans"],
                            'sample': sample,
                            'reference_material': refmat,
-                           'fluo_detector': fluo_detector})
+                           'fluo_detector': fluo_detector,
+                           'with_diode' : profile_configuration['electrometers']['diode']})
             
             for i in range(p['start'], p['start']+p['nscans'], 1):
                 cnt += 1
@@ -1019,40 +1036,29 @@ def xafs(inifile=None, **kwargs):
                 
                 ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
                 ## call the stock scan_nd plan with the correct detectors
+                RE.msg_hook = None
                 uid = None
-                more_kafka = {'filename': p["filename"],
-                              'folder': BMMuser.folder,
-                              'element': p["element"],
-                              'edge': p["edge"],
-                              'repetitions': p["nscans"],
-                              'count': cnt, }
                 kafka.message({'xafsscan': 'next',
                                'count': cnt })
                 if any(md in p['mode'] for md in ('trans', 'ref', 'pips', 'test')):
                     uid = yield from scan_nd([*ION_CHAMBERS], energy_trajectory + dwelltime_trajectory,
-                                             md={**xdi, **supplied_metadata, 'plan_name' : f'scan_nd xafs {p["mode"]}',
-                                                 'BMM_kafka': { 'hint': f'xafs {p["mode"]}', **more_kafka }})
+                                             md={**xdi, **supplied_metadata, 'plan_name' : f'scan_nd xafs {p["mode"]}',})
 
                 elif plotting_mode(p['mode']) == 'fluorescence':
                     uid = yield from scan_nd([*ION_CHAMBERS, xs], energy_trajectory + dwelltime_trajectory,
-                                             md={**xdi, **supplied_metadata, 'plan_name' : 'scan_nd xafs fluorescence',
-                                                 'BMM_kafka': { 'hint':  'xafs xs', **more_kafka }})
+                                             md={**xdi, **supplied_metadata, 'plan_name' : 'scan_nd xafs fluorescence',})
                 elif plotting_mode(p['mode']) == 'dante':
                     uid = yield from scan_nd([*ION_CHAMBERS, dante], energy_trajectory + dwelltime_trajectory,
-                                             md={**xdi, **supplied_metadata, 'plan_name' : 'scan_nd xafs fluorescence dante',
-                                                 'BMM_kafka': { 'hint':  'xafs xs', **more_kafka }})
+                                             md={**xdi, **supplied_metadata, 'plan_name' : 'scan_nd xafs fluorescence dante',})
                 #elif plotting_mode(p['mode']) == 'xs1':
                 #    uid = yield from scan_nd([*ION_CHAMBERS, xs1], energy_trajectory + dwelltime_trajectory,
-                #                             md={**xdi, **supplied_metadata, 'plan_name' : 'scan_nd xafs fluorescence',
-                #                                 'BMM_kafka': { 'hint':  'xafs xs1', **more_kafka }})
+                #                             md={**xdi, **supplied_metadata, 'plan_name' : 'scan_nd xafs fluorescence',})
                 elif plotting_mode(p['mode']) == 'yield':
                     uid = yield from scan_nd([*ION_CHAMBERS, xs], energy_trajectory + dwelltime_trajectory,
-                                             md={**xdi, **supplied_metadata, 'plan_name' : 'scan_nd xafs yield + fluorescence',
-                                                 'BMM_kafka': { 'hint':  'xafs yield', **more_kafka }})
+                                             md={**xdi, **supplied_metadata, 'plan_name' : 'scan_nd xafs yield + fluorescence',})
                 elif plotting_mode(p['mode']) == 'pilatus':
                     uid = yield from scan_nd([*ION_CHAMBERS, xs, pilatus], energy_trajectory + dwelltime_trajectory,
-                                             md={**xdi, **supplied_metadata, 'plan_name' : 'scan_nd xafs fluorescence + pilatus',
-                                                 'BMM_kafka': { 'hint':  'xafs fluo+pilatus', **more_kafka }})
+                                             md={**xdi, **supplied_metadata, 'plan_name' : 'scan_nd xafs fluorescence + pilatus',})
                 else:
                     error_msg('No valid plotting mode provided!')
 
@@ -1119,16 +1125,6 @@ def xafs(inifile=None, **kwargs):
                 how = '*stopped*  :warning:'
         else:
             how = 'finished or stopped on QS'
-        if BMMuser.final_log_entry is True:
-            report(f'== XAFS scan sequence {how}', level='bold', slack=True)
-            if not is_re_worker_active():
-                BMM_log_info(f'most recent uid = {bmm_catalog[-1].metadata["start"]["uid"]}, scan_id = {bmm_catalog[-1].metadata["start"]["scan_id"]}')
-            else:
-                pass
-
-            kafka.message({'dossier' : 'set', 'uidlist' : uidlist, })
-            time.sleep(3.0)
-        kafka.message({'dossier' : 'write', })
 
         if len(uidlist) > 0:
             basename = rkvs.get('BMM:dossier:basename').decode('utf-8')
@@ -1140,6 +1136,17 @@ def xafs(inifile=None, **kwargs):
                 kafka.message({'xafsscan': 'stop', 'filename': f'snapshots/{basename}_liveplot.png', 'uid': uidlist[0]})
                 kafka.message({'xafs_sequence':'stop', 'filename': f'snapshots/{basename}.png'})
                 
+        if BMMuser.final_log_entry is True:
+            report(f'== XAFS scan sequence {how}', level='bold', slack=True)
+            if not is_re_worker_active():
+                BMM_log_info(f'most recent uid = {bmm_catalog[-1].metadata["start"]["uid"]}, scan_id = {bmm_catalog[-1].metadata["start"]["scan_id"]}')
+            else:
+                pass
+
+            kafka.message({'dossier' : 'set', 'uidlist' : uidlist, })
+            time.sleep(3.0)
+        kafka.message({'dossier' : 'write', })
+
         dcm.mode = 'fixed'
         yield from resting_state_plan()
         yield from sleep(1.0)
@@ -1193,6 +1200,7 @@ def xafs(inifile=None, **kwargs):
         return(yield from null())
     if inifile[-4:] != '.ini':
         inifile = inifile+'.ini'
+    RE.msg_hook = None
     yield from finalize_wrapper(main_plan(inifile, **kwargs), cleanup_plan(inifile))
     RE.msg_hook = BMM_msg_hook
 

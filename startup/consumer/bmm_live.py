@@ -8,6 +8,7 @@ import numpy, pandas
 from scipy.ndimage import center_of_mass
 from scipy import optimize
 
+from ophyd import EpicsSignal, EpicsSignalRO, EpicsSignalWithRBV
 
 
 import xraylib
@@ -24,7 +25,7 @@ from bmm_tools.tools.periodictable import Z_number, edge_number
 import pprint
 
 # import redis
-# bmm_redis = profile_configuration.get('services', 'bmm_redis')
+# bmm_redis = profile_configuration['services']['bmm_redis']
 # rkvs = redis.Redis(host=bmm_redis, port=6379, db=0)
 
 
@@ -214,6 +215,12 @@ class LineScan():
             self.denominator = 'I0'
             self.axes.set_ylabel(f'{self.numerator}/{self.denominator}')
 
+        ## pin diode: plot Diode/I0
+        elif self.numerator == 'Diode':
+            self.description = 'pin diode'
+            self.denominator = 'I0'
+            self.axes.set_ylabel(f'{self.numerator}/{self.denominator}')
+
         ## Bicron
         elif self.numerator == 'Bicron':
             self.description = 'Bicron'
@@ -250,6 +257,7 @@ class LineScan():
             self.axes.legend(loc='best', shadow=True)
             
         elif self.numerator == 'Mca_full':
+            self.line.set_label('mca_full')
             self.numerator = 'mca_full'
             self.description = 'MCA full'
             self.denominator = None
@@ -347,7 +355,7 @@ class LineScan():
         x,y = ev.xdata, ev.ydata
         print('plucked', x, ev.canvas.figure.axes[0].get_xlabel(), ev.canvas.figure.number)
         if x is not None:
-            rkvs.set('BMM:mouse_event:value', x)
+            rkvs.set('BMM:mouse_event:value', float(x))
             rkvs.set('BMM:mouse_event:motor', ev.canvas.figure.axes[0].get_xlabel())
 
 
@@ -462,7 +470,10 @@ class LineScan():
             signal  = kwargs['data']['dir'] / kwargs['data']['dwti_dwell_time']
         elif self.numerator == 'Refl':
             signal  = kwargs['data']['dir'] / kwargs['data']['dwti_dwell_time']
-        elif self.numerator in ('Struck', 'Bicron', 'Apd'):
+        elif self.numerator == 'Diode':
+            signal = kwargs['data'][self.numerator]
+            
+        elif self.numerator in ('Struck', 'Bicron', 'Apd', 'Monitor'):
             if self.numerator in kwargs['data']:
                 signal = kwargs['data'][self.numerator]
             else:
@@ -618,18 +629,19 @@ class XAFSScan():
     def start(self, **kwargs):
         '''Begin a sequence of XAFS live plots.
         '''
-        self.ongoing     = True
-        self.energy      = []
-        self.i0sig       = []
-        self.trans       = []
-        self.fluor       = []
-        self.refer       = []
-        self.iysig       = []
-        self.mode        = kwargs['mode']
-        self.filename    = kwargs['filename']
-        self.repetitions = kwargs['repetitions']
-        self.count       = 1
-        self.sample      = kwargs['sample']
+        self.ongoing       = True
+        self.energy        = []
+        self.i0sig         = []
+        self.trans         = []
+        self.fluor         = []
+        self.refer         = []
+        self.iysig         = []
+        self.mode          = kwargs['mode']
+        self.filename      = kwargs['filename']
+        self.repetitions   = kwargs['repetitions']
+        self.count         = 1
+        self.sample        = kwargs['sample']
+        self.with_diode    = kwargs['with_diode']
         self.fluo_detector = kwargs['fluo_detector']
         self.reference_material = kwargs['reference_material']
 
@@ -835,6 +847,7 @@ class XAFSScan():
                         filename = filename.replace('.png', '_01.png')
                     fname = os.path.join(experiment_folder(catalog, uid), filename)
                 self.fig.savefig(fname)
+                
                 self.logger.info(f'saved XAFS sequence figure {fname}')
                 img_to_slack(fname, title=self.sample, measurement='xafs')
 
@@ -863,7 +876,10 @@ class XAFSScan():
 
         if self.mode in ('pilatus', 'eiger'):  # re-purpose refer and iysig
             self.refer.append(kwargs['data']['diffuse']/kwargs['data']['I0'])
-            self.iysig.append(kwargs['data']['specular']/kwargs['data']['I0'])
+            if self.with_diode is True:
+                self.iysig.append(kwargs['data']['Diode']/kwargs['data']['I0'])
+            else:
+                self.iysig.append(kwargs['data']['specular']/kwargs['data']['I0'])
             self.line_iy.set_data(self.energy, self.iysig)
 
         if self.mode == 'yield':
@@ -918,6 +934,16 @@ class XAFSScan():
         self.fig.canvas.flush_events()
 
 
+xspress3_channels=(
+    EpicsSignal("XF:06BM-ES{Xsp:1}:MCA1:ArrayData", name=''),
+    EpicsSignal("XF:06BM-ES{Xsp:1}:MCA2:ArrayData", name=''),
+    EpicsSignal("XF:06BM-ES{Xsp:1}:MCA3:ArrayData", name=''),
+    EpicsSignal("XF:06BM-ES{Xsp:1}:MCA4:ArrayData", name=''),
+    EpicsSignal("XF:06BM-ES{Xsp:1}:MCA5:ArrayData", name=''),
+    EpicsSignal("XF:06BM-ES{Xsp:1}:MCA6:ArrayData", name=''),
+    EpicsSignal("XF:06BM-ES{Xsp:1}:MCA7:ArrayData", name=''),
+    EpicsSignal("XF:06BM-ES{Xsp:1}:MCA8:ArrayData", name='')
+)
 
 class XRF():
     '''Manage the plotting of an XRF spectrum
@@ -951,7 +977,7 @@ class XRF():
         self.reset_rois()
 
     def reset_rois(self):
-        startup_dir = profile_configuration.get('services', 'startup')
+        startup_dir = profile_configuration['services']['startup']
         with open(os.path.join(startup_dir, 'rois.json'), 'r') as fl:
             js = fl.read()
         self.allrois = json.loads(js)
@@ -1049,7 +1075,7 @@ class XRF():
                         label = f'{el} Kβ3 ROI'
                         eline = xraylib.LineEnergy(z, xraylib.L1M3_LINE)*1000
 
-                    roicolor = '#aaaaaadd'
+                    roicolor = '#aaaaaa77'
                     self.axes.axvline(x=eline, color=roicolor, linewidth=1, label=label)
 
                     ## highlight the ROI
@@ -1075,7 +1101,54 @@ class XRF():
                     img_to_slack(fname, title=self.title, measurement='xrf')
 
 
+    def quickplot(self, add=True, only=None, energy=7112, el='Fe', ed='K', roi_min=626, roi_size=32):
+        sdd_primary = profile_configuration['sdd']['primary']
+        plt.clf()
+        plt.xlabel('Energy  (eV)')
+        plt.ylabel('counts')
+        plt.grid(which='major', axis='both')
+        plt.xlim(2500, round(energy, -2)+500)
+        plt.title(f'XRF Spectrum {el} {ed}, incident energy={energy:.1f}')
+        
+        s = list()
+        for ichann in range(1,sdd_primary+1):
+            s.append(xspress3_channels[ichann].get())
+        e = numpy.arange(0, len(s[0])) * 10
+        if only is not None and only in range(1, sdd_primary+1):
+            plt.plot(e, xspress3_channels[only].get(), label=f'channel {only}')
+        elif add is True:
+            plt.plot(e, sum(s), label=f'sum of {sdd_primary} channels')
+        else:
+            for i, sig in enumerate(s):
+                plt.plot(e, sig, label=f'channel {i+1}')
+        z = Z_number(el)
+        roicolor = '#cccc2277'
+        if ed.lower() == 'k':
+            label = f'{el} Kα ROI'
+            ke = (2*xraylib.LineEnergy(z, xraylib.KL3_LINE) + xraylib.LineEnergy(z, xraylib.KL2_LINE))*1000/3
+            plt.axvline(x = ke/1.0016,  color = roicolor, linewidth=1, label=label)
 
+        elif ed.lower() == 'l3':
+            label = f'{el} Lα ROI'
+            plt.axvline(x = xraylib.LineEnergy(z, xraylib.L3M5_LINE)*1000, color = roicolor, linewidth=1, label=label)
+        elif ed.lower() == 'l2':
+            label = f'{el} Kβ1 ROI'
+            plt.axvline(x = xraylib.LineEnergy(z, xraylib.L2M4_LINE)*1000, color = roicolor, linewidth=1, label=label)
+        elif ed.lower() == 'l1':
+            label = f'{el} Kβ3 ROI'
+            plt.axvline(x = xraylib.LineEnergy(z, xraylib.L1M3_LINE)*1000, color = roicolor, linewidth=1, label=label)
+
+        ## highlight the ROI
+        lower = roi_min
+        upper = lower + roi_size
+        axis = plt.gca()
+        axis.set_facecolor((0.95, 0.95, 0.95))
+        ymin, ymax = axis.get_ylim()
+        axis.add_patch(Rectangle((lower,ymin), upper-lower, ymax, facecolor=roicolor))
+
+        plt.legend()
+        
+        
 
     def to_xdi(self, catalog=None, uid=None, filename=None):
         '''Write an XDI-style file with bin energy in the first column and the
@@ -1260,9 +1333,9 @@ class AreaScan():
         x,y = ev.xdata, ev.ydata
         print(x, ev.canvas.figure.axes[0].get_xlabel(), ev.canvas.figure.number)
         print(y, ev.canvas.figure.axes[0].get_ylabel(), ev.canvas.figure.number)
-        rkvs.set('BMM:mouse_event:value', x)
+        rkvs.set('BMM:mouse_event:value', float(x))
         rkvs.set('BMM:mouse_event:motor', ev.canvas.figure.axes[0].get_xlabel())
-        rkvs.set('BMM:mouse_event:value2', y)
+        rkvs.set('BMM:mouse_event:value2', float(y))
         rkvs.set('BMM:mouse_event:motor2', ev.canvas.figure.axes[0].get_ylabel())
 
     def stop(self, catalog, **kwargs):
@@ -1395,7 +1468,7 @@ class XRR():
         x,y = ev.xdata, ev.ydata
         print('plucked', x, ev.canvas.figure.axes[0].get_xlabel(), ev.canvas.figure.number)
         if x is not None:
-            rkvs.set('BMM:mouse_event:value', x)
+            rkvs.set('BMM:mouse_event:value', float(x))
             rkvs.set('BMM:mouse_event:motor', ev.canvas.figure.axes[0].get_xlabel())
 
 
@@ -1450,7 +1523,7 @@ class XRR():
         self.figure.canvas.draw()
         self.figure.canvas.flush_events()
         
-    def alignment(self, catalog=None, uid=None, motor=None, detector=None, delta=False):
+    def alignment(self, catalog=None, uid=None, motor=None, detector=None, delta=False, fname=None):
         if catalog is None:
             print('xrr.alignment: No catalog provided')
             return
@@ -1518,11 +1591,15 @@ class XRR():
         plt.plot([com, com], [ymin, ymax], label='CoM')
         plt.plot([peakpos], [peak], label='peak', marker='x')
         ax.legend(loc='best', shadow=True)
-        
+
         fwhm = float(right - left)
         fwhm_center = left + fwhm/2
 
-        results = {'com': com, 'fwhm': fwhm, 'fwhm_center': fwhm_center, 'peak': peak, 'peakpos': peakpos}
+        results = {'com': float(com),
+                   'fwhm': fwhm,
+                   'fwhm_center': float(fwhm_center),
+                   'peak': float(peak),
+                   'peakpos': float(peakpos)}
         print(results)
         rkvs.set('BMM:xrd:peak_stats', str(results))
         
@@ -1531,6 +1608,15 @@ center of mass = {com:.4f}
 peak value = {peak:.1f} at {peakpos:.4f}'''
         ax.set_title(report)
         print(report)
+        
+        if fname is not None and fname.strip() != '':
+            if get_backend().lower() == 'agg':
+                if 'fname' in kwargs and 'uid' in kwargs:
+                    fname = os.path.join(experiment_folder(catalog, kwargs["uid"]), 'snapshots', fname)
+                    self.figure.savefig(fname)
+                    self.logger.info(f'saved linescan figure {fname}')
+                    img_to_slack(fname, title='Peak analysis', measurement='line')
+            
 
         
         
@@ -1583,4 +1669,37 @@ peak value = {peak:.1f} at {peakpos:.4f}'''
                 fig.savefig(fname)
                 self.logger.info(f'saved Mythen calibration figure {fname}')
                 img_to_slack(fname, title='Mythen calibration', measurement='mythen calibration')
-        
+
+
+
+mythen_arraydata = EpicsSignal("XF:06BM-ES{Det-Mythen:2}image1:ArrayData", name='')
+mythen_lower = (EpicsSignal("XF:06BM-ES{Det-Mythen:2}ROI1:MinX_RBV", name=''),
+                EpicsSignal("XF:06BM-ES{Det-Mythen:2}ROI2:MinX_RBV", name=''),
+                EpicsSignal("XF:06BM-ES{Det-Mythen:2}ROI3:MinX_RBV", name=''),
+                EpicsSignal("XF:06BM-ES{Det-Mythen:2}ROI4:MinX_RBV", name=''))
+mythen_size = (EpicsSignal("XF:06BM-ES{Det-Mythen:2}ROI1:SizeX_RBV", name=''),
+               EpicsSignal("XF:06BM-ES{Det-Mythen:2}ROI2:SizeX_RBV", name=''),
+               EpicsSignal("XF:06BM-ES{Det-Mythen:2}ROI3:SizeX_RBV", name=''),
+               EpicsSignal("XF:06BM-ES{Det-Mythen:2}ROI4:SizeX_RBV", name=''))
+
+def mythen_plot(roi=1, xmin=1, xmax=1280):
+    '''
+    Quick-n-dirty plot of Mythen MCA spectrum with one of the ROIs overlayed.
+    '''
+    plt.clf()
+    plt.xlabel('bin')
+    plt.ylabel('counts')
+    plt.grid(which='major', axis='both')
+    plt.title(f'Mythen Spectrum, ROI #{roi}')
+
+    sig = mythen_arraydata.get()
+    b = numpy.arange(0, len(sig))
+
+    plt.plot(b, sig, label='Mythen')
+
+    roicolor = '#aaaa7f77'
+    axis = plt.gca()
+    axis.set_xlim(xmin, xmax)
+    axis.set_facecolor((0.95, 0.95, 0.95))
+    ymin, ymax = axis.get_ylim()
+    axis.add_patch(Rectangle((mythen_lower[roi-1].get(),0), mythen_size[roi-1].get(), ymax, facecolor=roicolor))

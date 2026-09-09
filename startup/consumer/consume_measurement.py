@@ -9,8 +9,8 @@ import nslsii
 import nslsii.kafka_utils
 
 from tiled.client import from_profile, from_uri
-#bmm_catalog = from_profile('bmm')
-bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
+bmm_catalog = from_profile('bmm')
+#bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
 
 import matplotlib.pyplot as plt
 import bmm_plot
@@ -49,7 +49,7 @@ aw.logger = logger
 be_verbose = True
 doing = None
 
-from bmm_live import LineScan, XAFSScan, XRF, AreaScan, XRR
+from bmm_live import LineScan, XAFSScan, XRF, AreaScan, XRR, mythen_plot
 ls  = LineScan()
 ls.logger = logger
 xs  = XAFSScan()
@@ -95,9 +95,10 @@ def plot_from_kafka_messages(beamline_acronym):
 
         if name == 'bmm':
             if any(x in message for x in ('xafs_sequence', 'glancing_angle', 'align_wheel', 'wafer', 'mono_calibration',
-                                          'xrfat', 'linescan', 'xafsscan', 'timescan', 'xrf', 'areascan', 'close', 'logger', 'refresh_slack',
+                                          'xrfat', 'linescan', 'xafsscan', 'timescan', 'xrf', 'areascan', 'close',
+                                          'logger', 'refresh_slack', 'describe_slack', 'test_slack', 'show_metadata',
                                           'peakfit', 'stepfit', 'rectanglefit', 'reset_rois',
-                                          'backend', 'xrr', 'xrr_alignment', 'xrr_calibration_plot')) :
+                                          'backend', 'xrr', 'xrr_alignment', 'xrr_calibration_plot', 'mythen_plot')) :
                 if be_verbose is True:
                     print(f'\n[{datetime.datetime.now().isoformat(timespec="seconds")}]\n{pprint.pformat(message, compact=True)}')
                 else:
@@ -105,9 +106,12 @@ def plot_from_kafka_messages(beamline_acronym):
 
             if 'xafs_sequence' in message:
                 if message['xafs_sequence'] == 'start':
-                    xafsseq.start(element=message['element'], edge=message['edge'], folder=message['folder'],
-                                  workspace=message['workspace'],
-                                  repetitions=message['repetitions'], mode=message['mode'])
+                    xafsseq.start(element     = message['element'],
+                                  edge        = message['edge'],
+                                  folder      = message['folder'],
+                                  workspace   = message['workspace'],
+                                  repetitions = message['repetitions'],
+                                  mode        = message['mode'])
                 elif message['xafs_sequence'] == 'stop':
                     xafsseq.stop(filename=message['filename'])
                 elif message['xafs_sequence'] == 'add':
@@ -148,6 +152,9 @@ def plot_from_kafka_messages(beamline_acronym):
                 bmm_plot.xrfat(catalog=bmm_catalog, **message)
 
             elif 'linescan' in message:
+                _end_station = 'xas'
+                if '_end_station' in message:
+                    _end_station = message['_end_station']
                 if message['linescan'] == 'start':
                     ls.start(**message)
                     doing = 'linescan'
@@ -187,6 +194,10 @@ def plot_from_kafka_messages(beamline_acronym):
             elif 'xrf' in message:
                 if message['xrf'] == 'plot':
                     xrf.plot(catalog=bmm_catalog, **message)
+                elif message['xrf'] == 'quickplot':
+                    xrf.quickplot(add=message['add'], only=message['only'],
+                                  energy=message['energy'], el=message['element'], ed=message['edge'],
+                                  roi_min=message['roi_min'], roi_size=message['roi_size'])
                 elif message['xrf'] == 'write':
                     xrf.to_xdi(catalog=bmm_catalog, uid=message['uid'], filename=message['filename'])
                     
@@ -201,12 +212,16 @@ def plot_from_kafka_messages(beamline_acronym):
             elif 'xrr_alignment' in message:
                 delta=False
                 if 'delta' in message: delta = message['delta']
-                xrr.alignment(catalog=bmm_catalog, uid=message['uid'], motor=message['motor'], detector=message['detector'], delta=delta)
+                fname=None
+                if 'fname' in message: fname = message['fname']
+                xrr.alignment(catalog=bmm_catalog, uid=message['uid'], motor=message['motor'], detector=message['detector'], delta=delta, fname=fname)
 
             elif 'xrr_calibration_plot' in message:
                 xrr.calibration_plot(catalog=bmm_catalog, uid=message['uid'], motor=message['motor'],
                                      detector=message['detector'], stub=message['stub'])
 
+            elif 'mythen_plot' in message:
+                mythen_plot(roi=message['roi'], xmin=message['xmin'], xmax=message['xmax'])
                     
             elif 'reset_rois' in message:
                 xrf.reset_rois()
@@ -241,18 +256,26 @@ def plot_from_kafka_messages(beamline_acronym):
                     spinner = message['spinner']
                 else:
                     spinner = None
-                stepfit(catalog = bmm_catalog,
-                        uid     = message['uid'],
-                        motor   = message['motor_name'],
-                        signal  = message['signal'],
-                        spinner = spinner,
-                        ga      = ga)
+                if 'saveplot' in message:
+                    saveplot = message['saveplot']
+                else:
+                    saveplot = False
+                stepfit(catalog  = bmm_catalog,
+                        uid      = message['uid'],
+                        motor    = message['motor_name'],
+                        signal   = message['signal'],
+                        spinner  = spinner,
+                        saveplot = saveplot,
+                        ga       = ga)
 
 
                     
             elif 'verbose' in message:
                 be_verbose = message['verbose']
-            
+
+            elif 'show_metadata' in message:
+                print(bmm_catalog[message['uid']].metadata)
+                
             elif 'close' in message:
                 if message['close'] == 'all':
                     plt.close('all')
@@ -275,13 +298,25 @@ def plot_from_kafka_messages(beamline_acronym):
                 #    logger.info(message['text'])
 
             elif 'refresh_slack' in message:
-                refresh_slack()
+                _end_station = 'xas'
+                if '_end_station' in message:
+                    _end_station = message['_end_station']
+                time_it = False
+                if 'time_it' in message:
+                    time_it = message['time_it']
+                refresh_slack(end_station=_end_station, time_it=time_it)
                     
             elif 'describe_slack' in message:
-                describe_slack()
+                _end_station = 'xas'
+                if '_end_station' in message:
+                    _end_station = message['_end_station']
+                describe_slack(end_station=_end_station)
 
             elif 'test_slack' in message:
-                test_slack()
+                _end_station = 'xas'
+                if '_end_station' in message:
+                    _end_station = message['_end_station']
+                test_slack(end_station=_end_station)
 
             elif 'backend' in message:
                 print(matplotlib.get_backend())
@@ -326,43 +361,7 @@ def plot_from_kafka_messages(beamline_acronym):
                 
         if name == 'stop':
             pass
-            ## what was this section trying to do?
-            ## trigger a plot at the end of a scan?? If, that is now done another way....
-
         
-            #print(
-            #    f"{datetime.datetime.now().isoformat()} document: {name}\n"
-            #    f"contents: {pprint.pformat(doc)}\n"
-            #)
-            #return
-            # uid = message['run_start']  # stop document is the second item in the doc list
-            # record = bmm_catalog[uid]
-            # verbose = False
-            # if 'BMM_kafka' in record.metadata['start']:
-            #     hint = record.metadata['start']['BMM_kafka']['hint']
-                #print(f'[{datetime.datetime.now().isoformat(timespec="seconds")}]   {uid}')
-                # for k in record.metadata['start']['BMM_kafka'].keys():
-                #     if k == 'hint':
-                #         continue
-                #     print(f"\t\t{k}: {record.metadata['start']['BMM_kafka'][k]}")
-
-        #        if hint.startswith('areascan'):
-        #            if verbose: print('saw a areascan stop doc')
-        #            print(f"{datetime.datetime.now().isoformat()} areascan stop document: {name}\n")
-        #            bmm_plot.plot_areascan(bmm_catalog, uid)
-        #         elif hint.startswith('linescan'):
-        #             if verbose: print('saw a linescan stop doc')
-        #             #bmm_plot.plot_linescan(bmm_catalog, uid)
-        #         elif hint.startswith('timescan'):
-        #             if verbose: print('saw a timescan stop doc')
-        #             #bmm_plot.plot_timescan(bmm_catalog, uid)
-        #         elif hint.startswith('rectanglescan'):
-        #             if verbose: print('saw a rectanglescan stop doc')
-        #             #bmm_plot.plot_rectanglescan(bmm_catalog, uid)
-        #         elif hint.startswith('xafs'):
-        #             if verbose: print('saw an xafs stop doc')
-        #             #plt.close('all')
-        #             #bmm_plot.plot_xafs(bmm_catalog, uid)
     ## end of examine_message ##################################################################
     
     kafka_config = nslsii.kafka_utils._read_bluesky_kafka_config_file(config_file_path="/etc/bluesky/kafka.yml")

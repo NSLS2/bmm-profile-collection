@@ -46,10 +46,10 @@ md = user_ns["RE"].md
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 from bmm_tools.tools.periodictable import Z_number, edge_number
 
-from BMM.user_ns.bmm  import kafka
+from BMM.user_ns.bmm  import kafka, BMMuser
+from BMM.user_ns.base import startup_dir, profile_configuration, PROPOSALS, RE
+from BMM.user_ns.dcm  import dcm
 
-from BMM.user_ns.base import startup_dir, profile_configuration, PROPOSALS
-        
 from databroker.assets.handlers import HandlerBase, Xspress3HDF5Handler, XS3_XRF_DATA_KEY
 
 
@@ -80,7 +80,7 @@ class BMMXspress3HDF5Plugin(Xspress3HDF5Plugin):
 
     @property
     def root_path_str(self):
-        if profile_configuration.getboolean('services', 'proposal_folders_available'):
+        if profile_configuration['services']['proposal_folders_available']:
             root_path = f"{PROPOSALS}/{md['cycle']}/{md['data_session']}/assets/xspress3-1/"
         else:
             ## the current proposal folders are not available, set this to a specific folder where it is OK to write random things
@@ -110,8 +110,9 @@ class BMMXspress3HDF5Plugin(Xspress3HDF5Plugin):
         hangs.  Also to add some indication on screen for what is happening.
         """
         whisper("                        warming up the hdf5 plugin...")
-        self.enable.set(1).wait()
-
+        #self.enable.set(1).wait()
+        yield from mv(self.enable, 1)
+        
         # JOSH: proposed changes for new IOC
         sigs = OrderedDict([(self.parent.cam.array_callbacks, 1),
                             (self.parent.cam.image_mode, "Single"),
@@ -132,7 +133,8 @@ class BMMXspress3HDF5Plugin(Xspress3HDF5Plugin):
             sig.set(val).wait()
             ttime.sleep(0.1)  # abundance of caution
 
-        self.parent.cam.acquire.set(1).wait()
+        #self.parent.cam.acquire.set(1).wait()
+        yield from mv(self.parent.cam.acquire, 1)
         
         # JOSH: do we need more than 2 seconds here?
         #       adding more time here helps!
@@ -141,7 +143,8 @@ class BMMXspress3HDF5Plugin(Xspress3HDF5Plugin):
 
         for sig, val in reversed(list(original_vals.items())):
             ttime.sleep(0.1)
-            sig.set(val).wait()
+            #sig.set(val).wait()
+            yield from mv(sig, val)
         whisper("                        done")
 
     def unstage(self):
@@ -322,20 +325,9 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
 
     def describe(self):        
         res = super().describe()
-        # res[self.xrf.name]["shape"] = (8, 4096)
         for channel in self.iterate_channels():
+            res[channel.name+'_xrf']["shape"] = (1, 4096)
             res[channel.name+'_xrf']['dtype_str'] = '<f8'
-        # try:
-        #     res['4-element SDD_channel01_xrf']['dtype_str'] = '<f8'
-        #     res['4-element SDD_channel02_xrf']['dtype_str'] = '<f8'
-        #     res['4-element SDD_channel03_xrf']['dtype_str'] = '<f8'
-        #     res['4-element SDD_channel04_xrf']['dtype_str'] = '<f8'
-        # except:
-        #     pass
-        # try:
-        #     res['1-element SDD_channel08_xrf']['dtype_str'] = '<f8'
-        # except:
-        #     pass            
         return res
 
     def set_rois(self):
@@ -393,7 +385,7 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
         '''Hint the ROI currently in use for XAS
         '''
         BMMuser = user_ns['BMMuser']
-        hint_potassium = profile_configuration.getboolean('experiments', 'hint_potassium')  # special consideration for molten salt experiments
+        hint_potassium = profile_configuration['experiments']['hint_potassium']  # special consideration for molten salt experiments
         for channel in self.iterate_channels():
             for mcaroi in channel.iterate_mcarois():
                 if self.slots[mcaroi.mcaroi_number-1] == BMMuser.element:
@@ -416,7 +408,7 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
         '''Hint multiple ROIs for XAS use
         '''
         BMMuser = user_ns['BMMuser']
-        hint_potassium = profile_configuration.getboolean('experiments', 'hint_potassium')  # special consideration for molten salt experiments
+        hint_potassium = profile_configuration['experiments']['hint_potassium']  # special consideration for molten salt experiments
         for channel in self.iterate_channels():
             for mcaroi in channel.iterate_mcarois():
                 if self.slots[mcaroi.mcaroi_number-1] in roilist:
@@ -564,7 +556,7 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
         return None
             
             
-    def plot(self, uid=None, add=False, only=None, show_roi=True): 
+    def plot(self, uid=None, add=True, only=None, show_roi=True): 
         '''Make a plot appropriate for the N-element detector.
 
         The default is to sum the four channels.
@@ -582,58 +574,69 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
         if uid is not None:
             kafka.message({'xrf': 'plot', 'uid': uid, 'add': add, 'only': only})
         else:
-            dcm, BMMuser = user_ns['dcm'], user_ns['BMMuser']
-            plt.clf()
-            plt.xlabel('Energy  (eV)')
-            plt.ylabel('counts')
-            plt.grid(which='major', axis='both')
-            plt.xlim(2500, round(dcm.energy.position, -2)+500)
-            plt.title(f'XRF Spectrum {BMMuser.element} {BMMuser.edge}, incident energy={dcm.en:.1f}')
-            s = list()
-            for channel in self.iterate_channels():
-                s.append(channel.mca.array_data.get())
-            e = numpy.arange(0, len(s[0])) * 10
-            plt.ion()
-            if only is not None and only in range(1, len(list(self.iterate_channels()))+1):
-                channel = self.get_channel(channel_number=only)
-                this = channel.mca.array_data
-                plt.plot(e, this.get(), label=f'channel {only}')
-            elif add is True:
-                plt.plot(e, sum(s), label=f'sum of {len(list(self.iterate_channels()))} channels')
-            else:
-                for i, sig in enumerate(s):
-                    plt.plot(e, sig, label=f'channel {i+1}')
-            z = Z_number(BMMuser.element)
-            roicolor = '#aaaaaadd'
-            if BMMuser.edge.lower() == 'k':
-                label = f'{BMMuser.element} Kα ROI'
-                ke = (2*xraylib.LineEnergy(z, xraylib.KL3_LINE) + xraylib.LineEnergy(z, xraylib.KL2_LINE))*1000/3
-                plt.axvline(x = ke/1.0016,  color = roicolor, linewidth=1, label=label)
+            kafka.message({'xrf': 'quickplot', 'add': add, 'only': only,
+                           'energy': dcm.energy.position,
+                           'element': BMMuser.element,
+                           'edge': BMMuser.edge,
+                           'roi_min': self.hinted_roi().min_x.get() * 10,
+                           'roi_size': self.hinted_roi().size_x.get() * 10
+            })
+            
+            # dcm, BMMuser = user_ns['dcm'], user_ns['BMMuser']
+            # plt.clf()
+            # plt.xlabel('Energy  (eV)')
+            # plt.ylabel('counts')
+            # plt.grid(which='major', axis='both')
+            # plt.xlim(2500, round(dcm.energy.position, -2)+500)
+            # plt.title(f'XRF Spectrum {BMMuser.element} {BMMuser.edge}, incident energy={dcm.en:.1f}')
+            # s = list()
+            # for channel in self.iterate_channels():
+            #     s.append(channel.mca.array_data.get())
+            # e = numpy.arange(0, len(s[0])) * 10
+            # plt.ion()
+            # if only is not None and only in range(1, len(list(self.iterate_channels()))+1):
+            #     channel = self.get_channel(channel_number=only)
+            #     this = channel.mca.array_data
+            #     plt.plot(e, this.get(), label=f'channel {only}')
+            # elif add is True:
+            #     plt.plot(e, sum(s), label=f'sum of {len(list(self.iterate_channels()))} channels')
+            # else:
+            #     for i, sig in enumerate(s):
+            #         plt.plot(e, sig, label=f'channel {i+1}')
+            # z = Z_number(BMMuser.element)
+            # roicolor = '#aaaaaadd'
+            # if BMMuser.edge.lower() == 'k':
+            #     label = f'{BMMuser.element} Kα ROI'
+            #     ke = (2*xraylib.LineEnergy(z, xraylib.KL3_LINE) + xraylib.LineEnergy(z, xraylib.KL2_LINE))*1000/3
+            #     plt.axvline(x = ke/1.0016,  color = roicolor, linewidth=1, label=label)
                     
-            elif BMMuser.edge.lower() == 'l3':
-                label = f'{BMMuser.element} Lα ROI'
-                plt.axvline(x = xraylib.LineEnergy(z, xraylib.L3M5_LINE)*1000, color = roicolor, linewidth=1, label=label)
-            elif BMMuser.edge.lower() == 'l2':
-                label = f'{BMMuser.element} Kβ1 ROI'
-                plt.axvline(x = xraylib.LineEnergy(z, xraylib.L2M4_LINE)*1000, color = roicolor, linewidth=1, label=label)
-            elif BMMuser.edge.lower() == 'l1':
-                label = f'{BMMuser.element} Kβ3 ROI'
-                plt.axvline(x = xraylib.LineEnergy(z, xraylib.L1M3_LINE)*1000, color = roicolor, linewidth=1, label=label)
+            # elif BMMuser.edge.lower() == 'l3':
+            #     label = f'{BMMuser.element} Lα ROI'
+            #     plt.axvline(x = xraylib.LineEnergy(z, xraylib.L3M5_LINE)*1000, color = roicolor, linewidth=1, label=label)
+            # elif BMMuser.edge.lower() == 'l2':
+            #     label = f'{BMMuser.element} Kβ1 ROI'
+            #     plt.axvline(x = xraylib.LineEnergy(z, xraylib.L2M4_LINE)*1000, color = roicolor, linewidth=1, label=label)
+            # elif BMMuser.edge.lower() == 'l1':
+            #     label = f'{BMMuser.element} Kβ3 ROI'
+            #     plt.axvline(x = xraylib.LineEnergy(z, xraylib.L1M3_LINE)*1000, color = roicolor, linewidth=1, label=label)
 
-            ## highlight the ROI
-            if show_roi is True:
-                roi = self.hinted_roi()
-                if roi is not None:
-                    lower = roi.min_x.get() * 10
-                    upper = lower + roi.size_x.get() * 10
-                    #plt.axvline(x=lower,  color = 'tab:gray', linewidth=1, label=label)
-                    #plt.axvline(x=upper,  color = 'tab:gray', linewidth=1, label=label)
-                    axis = plt.gca()
-                    ymin, ymax = axis.get_ylim()
-                    axis.add_patch(Rectangle((lower,ymin), upper-lower, ymax-ymin, facecolor=roicolor))
-            plt.legend()
+            # ## highlight the ROI
+            # if show_roi is True:
+            #     roi = self.hinted_roi()
+            #     if roi is not None:
+            #         lower = roi.min_x.get() * 10
+            #         upper = lower + roi.size_x.get() * 10
+            #         #plt.axvline(x=lower,  color = 'tab:gray', linewidth=1, label=label)
+            #         #plt.axvline(x=upper,  color = 'tab:gray', linewidth=1, label=label)
+            #         axis = plt.gca()
+            #         ymin, ymax = axis.get_ylim()
+            #         axis.add_patch(Rectangle((lower,ymin), upper-lower, ymax-ymin, facecolor=roicolor))
+            # plt.legend()
             #plt.show()
-    
+
+    def close_plot(self, what='all'):
+        plt.close(what)
+            
     def table(self):
         '''Pretty print a table of values for each ROI and for all N channels.
         '''

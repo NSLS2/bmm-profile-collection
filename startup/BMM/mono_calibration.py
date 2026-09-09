@@ -30,13 +30,13 @@ from BMM.user_ns.suspenders import suspenders
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
-workspace = profile_configuration.get('services', 'workspace')
+workspace = profile_configuration['services']['workspace']
 
 ## this was implemented at the start of 2025-3. I needed to put the
 ## reference wheel in the normal sample position to accommodate an odd
 ## experimental setup slated for the second day of ops.  So this is
 ## for switching between "reference" and "transmission"
-reference_position = None # profile_configuration.get('dcm', 'calibration_position')
+reference_position = None # profile_configuration['dcm']['calibration_position']
 ## set dynamically in calibrate()
 
 ##  Kraft et al, Review of Scientific Instruments 67, 681 (1996)
@@ -53,8 +53,8 @@ def calibrate_low_end(mono='111', focus=False):
     BMM_log_info('Beginning low end calibration macro')
     def main_plan(focus):
         BMMuser.prompt = False
-        reference_position = profile_configuration.get('dcm', 'calibration_position')
-        startwith = profile_configuration.get('dcm', 'startwith')
+        reference_position = profile_configuration['dcm']['calibration_position']
+        startwith = profile_configuration['dcm']['startwith']
         edge = 'K'
         if startwith in ('Pt', 'Au', 'Pb'):
             edge = 'L3'
@@ -141,8 +141,8 @@ def calibrate_high_end(mono='111', focus=False):
         BMMuser.prompt = False
         datafile = os.path.join(BMMuser.workspace, 'edges%s.ini' % mono)
         handle = open(datafile, 'a')
-        reference_position = profile_configuration.get('dcm', 'calibration_position')
-        startwith = profile_configuration.get('dcm', 'startwith')
+        reference_position = profile_configuration['dcm']['calibration_position']
+        startwith = profile_configuration['dcm']['startwith']
         edge = 'K'
         if startwith in ('Pt', 'Au', 'Pb'):
             edge = 'L3'

@@ -1,7 +1,6 @@
 from ophyd import QuadEM, Component as Cpt, EpicsSignalWithRBV, Signal, DerivedSignal, EpicsSignal
 from ophyd.quadem import QuadEMPort
 
-from numpy import log, exp
 from bluesky.plan_stubs import mv, sleep
 
 from BMM.logging import BMM_log_info
@@ -33,13 +32,13 @@ class BMMQuadEM(QuadEM):
     em_range  = Cpt(EpicsSignalWithRBV, 'Range', string=True)
     I0 = Cpt(Nanoize, derived_from='current1.mean_value')
     It = Cpt(Nanoize, derived_from='current2.mean_value')
-    Ir = Cpt(Nanoize, derived_from='current3.mean_value')
-    Iy = Cpt(Nanoize, derived_from='current4.mean_value')
+    Ir = Cpt(Nanoize, derived_from='current4.mean_value')  # !!FIXME!!
+    Iy = Cpt(Nanoize, derived_from='current3.mean_value')  # !!FIXME!!
 
     compute_current_offset1 = Cpt(EpicsSignal, 'ComputeCurrentOffset1.PROC')
     compute_current_offset2 = Cpt(EpicsSignal, 'ComputeCurrentOffset2.PROC')
-    compute_current_offset3 = Cpt(EpicsSignal, 'ComputeCurrentOffset3.PROC')
-    compute_current_offset4 = Cpt(EpicsSignal, 'ComputeCurrentOffset4.PROC')
+    compute_current_offset3 = Cpt(EpicsSignal, 'ComputeCurrentOffset4.PROC')  # !!FIXME!!
+    compute_current_offset4 = Cpt(EpicsSignal, 'ComputeCurrentOffset3.PROC')  # !!FIXME!!
     
     
     #state  = Cpt(EpicsSignal, 'Acquire')
@@ -264,6 +263,7 @@ def dark_current():
     if reopen:
         print('\nClosing photon shutter')
         yield from user_ns['shb'].close_plan()
+        yield from sleep(3)
     if with_quadem:
         yield from user_ns['quadem1'].dark_current()
     if with_ic0:

@@ -20,11 +20,11 @@ from nslsii.utils import open_redis_client
 
 
 if not os.environ.get('AZURE_TESTING'):
-    #redis_host = profile_configuration.get('services', 'bmm_redis')
-    redis_host = profile_configuration.get('services', 'nsls2_redis')
-    redis_port = profile_configuration.get('services', 'redis_port')
-    redis_ssl  = profile_configuration.get('services', 'redis_ssl')
-    redis_db   = profile_configuration.get('services', 'bmm_redis')
+    #redis_host = profile_configuration['services']['bmm_redis']
+    redis_host = profile_configuration['services']['nsls2_redis']
+    redis_port = profile_configuration['services']['redis_port']
+    redis_ssl  = profile_configuration['services']['redis_ssl']
+    redis_db   = profile_configuration['services']['bmm_redis']
 else:
     redis_host = '127.0.0.1'
 class NoRedis():
@@ -42,7 +42,7 @@ class NoRedis():
 all_references = json.loads(rkvs['BMM:reference:mapping'].decode('UTF8'))
 
 
-startup_dir = profile_configuration.get('services', 'startup')
+startup_dir = profile_configuration['services']['startup']
 
 def log_entry(logger, message):
     #if logger.name == 'BMM file manager logger' or logger.name == 'bluesky_kafka':
@@ -631,12 +631,18 @@ class BMMDossier():
         '''
         if motor == 'slot':     # deal specially with major instruments
             motor_name = motor
-            position = self.wheel_slot(float(baseline["xafs_wheel"][0]))
-            text = f'              <div>{motor}, {position}</div>\n'
+            try:
+                position = self.wheel_slot(float(baseline["xafs_wheel"][0]))
+                text = f'              <div>{motor}, {position}</div>\n'
+            except:
+                text = f'              <div>{motor}, ---</div>\n'
         elif motor == 'spinner':
             motor_name = motor
-            position = self.spinner(float(baseline["xafs_garot"][0]))
-            text = f'              <div>{motor}, {position}</div>\n'
+            try:
+                position = self.spinner(float(baseline["xafs_garot"][0]))
+                text = f'              <div>{motor}, {position}</div>\n'
+            except:
+                text = f'              <div>{motor}, ---</div>\n'
         else:                   # 'xafs_table' is a long string, special case
             motor_name = motor.replace('xt', 'xafs_table')
             label = motor
@@ -1102,10 +1108,10 @@ class BMMDossier():
 class XASFile():
 
     units = {
-        'Detector': {'I0_dark'           : ('A', 5),
-                     'It_dark'           : ('A', 5),
-                     'Ir_dark'           : ('A', 5),
-        },
+        # 'Detector': {'I0_dark'           : ('A', 5),
+        #              'It_dark'           : ('A', 5),
+        #              'Ir_dark'           : ('A', 5),
+        # },
         'Facility': {'energy'            : ('geV', None),
                      'current'           : ('mA', 1),
         },
@@ -1170,7 +1176,7 @@ class XASFile():
             for k in xdi[family].keys():
                 unit, precision = '', None
                 if family in self.units and k in self.units[family]:
-                    unit, precision = units[family][k][0]  # add units if needed
+                    unit, precision = self.units[family][k]  # add units if needed
                 if family == 'Sample' and k == 'comment':
                     continue
                 if family == 'Sample' and k == 'extra_metadata':

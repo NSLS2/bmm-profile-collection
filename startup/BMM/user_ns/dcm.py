@@ -21,7 +21,7 @@ from bmm_tools.devices.dcm import DCM
 #from BMM.user_ns.motors import dcm_x
 
 dcm = DCM('XF:06BMA-OP{Mono:DCM1-Ax:', name='dcm', crystal='111')
-dcm.roll_111 = profile_configuration.getfloat('dcm', 'roll_111')
+dcm.roll_111 = profile_configuration['dcm']['roll_111']
 dcm.acc_fast = BMMuser.acc_fast
 wait_for_connection(dcm)
 

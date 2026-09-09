@@ -21,6 +21,7 @@ from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
 from bmm_tools.tools.md import proposal_base
 
 from BMM.functions         import present_options
+from BMM.user_ns.base      import bmm_catalog
 from BMM.user_ns.bmm       import kafka
 from BMM.logging           import BMM_log_info, BMM_msg_hook, report
 from BMM.linescans         import linescan, prepare_alignment_scan, fetch_peak_position_via_redis
@@ -259,7 +260,15 @@ class GlancingAngle(Device):
                        'signal'     : 'It',
                        'spinner'    : self.current() })
         target = fetch_peak_position_via_redis(verbose=True)
-        yield from mv(motor, target)
+        if target is None:
+            uid = bmm_catalog[-1].metadata['start']['uid']
+            error_msg(f'Failed to retrieve result of step fit to alignment in {motor.name}.')
+            error_msg(f'To investigate the cause, Bruce will need this UID: {uid}.')
+            whisper('This first thing you should try is to simply rerun the auto_align() plan,')
+            whisper('the problem might have been a failure to retrieve the result of the fit.')
+            return
+        else:
+            yield from mv(motor, target)
         
         
         # table  = user_ns['db'][-1].table()
@@ -294,7 +303,7 @@ class GlancingAngle(Device):
         #self.y_plot(yy, out)
 
 
-    def align_fluo(self, force=False):
+    def align_fluo(self, start=-1.8, stop=1.8, nsteps=51, force=False):
         kafka.message({'close': 'last'})
         BMMuser = user_ns['BMMuser']
         yield from prepare_alignment_scan()
@@ -302,7 +311,7 @@ class GlancingAngle(Device):
             motor = user_ns['xafs_y']
         else:
             motor = user_ns['xafs_x']
-        uid = yield from linescan(motor, 'xs', -1.8, 1.8, 51, dopluck=False, force=force, stack=False)
+        uid = yield from linescan(motor, 'xs', start, stop, nsteps, dopluck=False, force=force, stack=False)
         kafka.message({'close': 'last'})
         kafka.message({'peakfit'    : True,
                        'uid'        : 'last',
@@ -352,7 +361,7 @@ class GlancingAngle(Device):
         #                'uid'            : uid,})
 
         
-    def auto_align(self, pitch=2, drop=None):
+    def auto_align(self, pitch=2, fluo_max=1.0, drop=None):
         '''Align a sample on a spinner automatically.  This performs 5 scans.
         The first four iterate twice between linear and pitch
         against the signal in It.  This find the flat position.
@@ -388,7 +397,7 @@ class GlancingAngle(Device):
         '''
         BMMuser = user_ns['BMMuser']
 
-        def main_plan(pitch, drop):
+        def main_plan(pitch, fluo_max, drop):
             if BMMuser.macro_dryrun:
                 report(f'Auto-aligning glancing angle stage, spinner {self.current()}', level='bold', slack=False)
                 info_msg(f'\nBMMuser.macro_dryrun is True.  Sleeping for %.1f seconds at spinner %d.\n' %
@@ -430,7 +439,7 @@ class GlancingAngle(Device):
 
             ## move to measurement angle and align
             yield from mvr(user_ns['xafs_pitch'], pitch)
-            yield from self.align_fluo()
+            yield from self.align_fluo(stop=fluo_max)
             self.f_uid = user_ns['db'].v2[-1].metadata['start']['uid'] 
 
 
@@ -444,7 +453,7 @@ class GlancingAngle(Device):
             self.f_uid     = user_ns['rkvs'].get('BMM:ga:fluo_uid').decode('utf-8')
             
         user_ns['RE'].msg_hook = None
-        yield from finalize_wrapper(main_plan(pitch, drop), cleanup_plan())
+        yield from finalize_wrapper(main_plan(pitch, fluo_max, drop), cleanup_plan())
         user_ns['RE'].msg_hook = BMM_msg_hook
         suspenders.clear_suspenders()
  
@@ -666,7 +675,7 @@ class GlancingAngleMacroBuilder(BMMMacroBuilder):
                 self.content += self.tab + f'yield from mvr(xafs_detx, {self.retract})\n'
                 self.content += self.tab +  'yield from ga.flatten()\n'
                 self.content += self.tab + f'yield from mvr(xafs_detx, -{self.retract})\n'
-            self.content += self.tab + 'close_plots()\n\n'
+            self.content += self.tab + 'kafka.close_plots()\n\n'
 
 
             ########################################

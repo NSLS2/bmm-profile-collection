@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from ophyd.sim import noisy_det
 
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
+from bmm_tools.tools.md import proposal_base
 
 from BMM.user_ns.dwelltime import use_1element, use_4element, use_7element
 from BMM.resting_state     import resting_state_plan
@@ -173,6 +174,7 @@ def areascan(detector,
 
         ini_f, ini_s = fast.position, slow.position
         report(f'Starting areascan at x,y = {fast.position:.3f}, {slow.position:.3f}', level='bold', slack=True)
+        kafka.message({'mkdir': os.path.join(proposal_base(), 'maps')})
         kafka.message({'areascan'     : 'start',
                        'slow_motor'   : slow.name,
                        'slow_start'   : startslow,

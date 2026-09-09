@@ -717,6 +717,14 @@ class BMMMacroBuilder():
         #######################################
         # explain to the user what to do next #
         #######################################
+
+        print("")
+        color = 'red3'
+        text = f'''Have you set [{color}]beam focus[/{color}] correctly in the spreadsheet?  The default when changing 
+edge is to deliver unfocused, collimated beam.  If you are using focused beam, 
+you need to set that explicitly in the spreadsheet.'''
+        boxedtext(text, title='Attention', color=color)
+        
         cprint(f'\nYour new {BMMuser.instrument} plan is called:  [yellow2]{self.basename}_macro[/yellow2]')
         cprint(f'\nVerify:  [yellow2]{self.basename}_macro??[/yellow2]')
         if 'glancing angle' in self.instrument:

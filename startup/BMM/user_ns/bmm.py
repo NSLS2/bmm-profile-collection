@@ -53,15 +53,15 @@ run_report('\t'+'configuring Slack bmmbot')
 BMMuser.bmmbot = BMMbot()
 
 if is_re_worker_active:
-    BMMuser.bmmbot._bmmbot_secret = profile_configuration.get('slack_qs', 'bmmbot_secret')
+    BMMuser.bmmbot._bmmbot_secret = profile_configuration['slack_qs']['bmmbot_secret']
 else:
-    BMMuser.bmmbot._bmmbot_secret = profile_configuration.get('slack', 'bmmbot_secret')
+    BMMuser.bmmbot._bmmbot_secret = profile_configuration['slack']['bmmbot_secret']
 BMMuser.bmmbot._redis_client = RE.md    
-# BMMuser.bmmbot._redis_client = open_redis_client(profile_configuration.get('services', 'nsls2_redis'),
-#                                                  profile_configuration.get('services', 'redis_port'),
-#                                                  profile_configuration.get('services', 'redis_ssl'),
+# BMMuser.bmmbot._redis_client = open_redis_client(profile_configuration['services']['nsls2_redis'],
+#                                                  profile_configuration['services']['redis_port'],
+#                                                  profile_configuration['services']['redis_ssl'],
 #                                                  redis_db=1)
-BMMuser.bmmbot._pass_api = profile_configuration.get('services', 'pass_api') + "/{pass_id}/slack-channels"
+BMMuser.bmmbot._pass_api = profile_configuration['services']['pass_api'] + "/{pass_id}/slack-channels"
 BMMuser.bmmbot.refresh_channel()
 kafka.workspace = BMMuser.workspace
 

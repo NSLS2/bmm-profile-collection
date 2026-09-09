@@ -13,7 +13,7 @@ user_ns = vars(user_ns_module)
 
 from BMM.user_ns.bmm         import BMMuser
 from BMM.user_ns.dcm         import dcm
-from BMM.user_ns.instruments import m2, m3, m2_bender
+from BMM.user_ns.instruments import m2, m3, m2_bender, xafs_ref
 
 class TC(Device):
     temperature = Cpt(EpicsSignal, 'T-I-I')
@@ -52,15 +52,7 @@ bmm_metadata_stub = {'Beamline': {'name'        : 'BMM (06BM) -- Beamline for Ma
                               },
                      'Facility': {'name'        : 'NSLS-II',
                                   'energy'      : '3 GeV',},
-                     
-                     # 'Column':   {'01'          : 'energy eV',
-                     #              '02'          : 'requested energy eV',
-                     #              '03'          : 'measurement time sec',
-                     #              '04'          : 'mu(E)',
-                     #              '05'          : 'i0 nA',
-                     #              '06'          : 'it nA',
-                     #              '07'          : 'ir nA'},
-                 }
+}
 
 
 def bmm_metadata(measurement   = 'transmission',
@@ -132,9 +124,9 @@ def bmm_metadata(measurement   = 'transmission',
             md[k] = dict()
     md['Element']['edge']            = edge.capitalize()
     md['Element']['symbol']          = element.capitalize()
-    if element.capitalize() in user_ns['xafs_ref'].mapping:
-        md['Element']['reference']          = user_ns['xafs_ref'].mapping[element.capitalize()][2]
-        md['Element']['reference_material'] = user_ns['xafs_ref'].mapping[element.capitalize()][3]
+    if element.capitalize() in xafs_ref.mapping:
+        md['Element']['reference']          = xafs_ref.mapping[element.capitalize()][2]
+        md['Element']['reference_material'] = xafs_ref.mapping[element.capitalize()][3]
     else:
         md['Element']['reference']          = 'None'
         md['Element']['reference_material'] = 'None'

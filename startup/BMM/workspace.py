@@ -8,10 +8,10 @@ from nslsii.utils import open_redis_client
 
 
 if not os.environ.get('AZURE_TESTING'):
-    redis_host = profile_configuration.get('services', 'nsls2_redis')
-    redis_port = profile_configuration.get('services', 'redis_port')
-    redis_ssl  = profile_configuration.get('services', 'redis_ssl')
-    redis_db   = profile_configuration.get('services', 'bmm_redis')
+    redis_host = profile_configuration['services']['nsls2_redis']
+    redis_port = profile_configuration['services']['redis_port']
+    redis_ssl  = profile_configuration['services']['redis_ssl']
+    redis_db   = profile_configuration['services']['bmm_redis']
 else:
     redis_host = '127.0.0.1'
 
@@ -25,13 +25,13 @@ class NoRedis():
 # things that are configurable                                    #
 ###################################################################
 try:
-    print(redis_host, redis_port, redis_ssl, redis_db, flush=True)
+    #print(redis_host, redis_port, redis_ssl, redis_db, flush=True)
     rkvs = open_redis_client(redis_host, redis_port, redis_ssl, redis_db=redis_db)
-    print(rkvs.get('BMM:user:date'))
+    #print(rkvs.get('BMM:user:date'))
 except:
     rkvs = NoRedis()
 LUSTRE_ROOT = '/nsls2/data'
-LUSTRE_ROOT_BMM = profile_configuration.get('services', 'bmm')
+LUSTRE_ROOT_BMM = profile_configuration['services']['bmm']
 SECRETS = os.path.join(LUSTRE_ROOT_BMM, 'XAS', 'secrets')
 SECRET_FILES = ('slack_secret', 'image_uploader_token', 'bmmbot_secret')
 REDISVAR="BMM:scan:type"
@@ -45,7 +45,7 @@ def rkvs_keys(printed=True):
 
     With printed=True, write a table of keys and values to the screen
 
-    With printed=False, return a list containing keys as normal strings
+    With printed=False, return a list containing kueys as normal strings
     '''
     keys = sorted(list(x.decode('UTF-8') for x in rkvs.keys()))
     if printed is True:
@@ -125,7 +125,8 @@ def check_workstation_access():
         
 def check_lan():
     freakout = 0
-    for host in ('ioc2', 'disp1'):
+    #for host in ('ioc2', 'disp1'):
+    for host in ('ioc2',):
         response = os.system(f"ping -q -c 1 xf06bm-{host} > /dev/null")
         if response != 0:
             error_msg(f'{TAB}*** Uh oh!  xf06bm-{host} is not responding to a ping!')
@@ -145,7 +146,7 @@ def check_profile_branch():
     here = os.getcwd()
     #os.chdir(os.path.dirname(startup_dir))
     try:
-        os.chdir(profile_configuration.get('services', 'startup'))
+        os.chdir(profile_configuration['services']['startup'])
     except:
         # apparently on queueserver VM
         os.chdir('/opt/bluesky/profile_collection/startup')
@@ -172,7 +173,7 @@ def initialize_data_directories():
     Create any missing directories.
 
     '''
-    workspace = profile_configuration.get('services', 'workspace')
+    workspace = profile_configuration['services']['workspace']
     check_directory(workspace, 'workspace')
     for sub in ('Staff', 'Visitors'):
         folder = f'{workspace}/{sub}'
@@ -387,8 +388,8 @@ def check_instruments(linkam, lakeshore, xs):
     '''
     verbosebold_msg(f'\t\tverifying availability of instruments ...')
     check_linkam(linkam)
-    check_lakeshore(lakeshore)
-    check_biologic()
+    #check_lakeshore(lakeshore)
+    #check_biologic()
     check_electrometers()
     #check_xspress3(xs)
     check_diode()
