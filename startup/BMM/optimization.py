@@ -180,19 +180,19 @@ class EnergyAlignmentProfile:
 
 XAS_SI111_ALIGNMENT = EnergyAlignmentProfile(
     name="xas-si111",
-    camera="cam8",
+    camera="cam9",
     dof_bounds=MappingProxyType(
         {
-            "dcm_roll": (-0.365 - 10, -0.365 + 10),
-            "m2_yaw": (-2, 2),
-            "m2_lateral": (-2, 2),
+            "dcm_roll": (-0.365 - 1, -0.365 + 1),
+            "m2_yaw": (-0.5, 0.5),
+            "m2_lateral": (-0.5, 0.5),
         }
     ),
     search_half_widths=MappingProxyType(
-        {"dcm_roll": 1.0, "m2_yaw": 0.5, "m2_lateral": 0.5}
+        {"dcm_roll": 0.5, "m2_yaw": 0.25, "m2_lateral": 0.25}
     ),
     evaluation=BeamEvaluationConfig(
-        image_field="cam-8_image",
+        image_field="cam-9_image",
         intensity_field="I0",
         x_crop=(900, 1040),
         y_crop=None,
