@@ -589,7 +589,7 @@ def _read_nominal_dofs(
                 samples = np.atleast_1d(
                     np.asarray(data[name].read(), dtype=np.float64).squeeze()
                 )
-            except KeyError:
+            except Exception:
                 print(f"Trying to fetch key={name}, attempt={i}...")
                 time.sleep(1)
         if samples is None:
@@ -700,7 +700,7 @@ class ImageEvaluation:
                         data[self.parameters.intensity_field].read(), dtype=np.float64
                     ).squeeze()
                 )
-            except KeyError:
+            except Exception:
                 print(f"Key error on data fetch in evaluation function. Attempt {i}...")
                 time.sleep(1)
 
