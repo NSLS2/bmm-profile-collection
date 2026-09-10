@@ -31,6 +31,7 @@ from BMM.optimization import (
     _preprocess_image,
     _resolve_search_space,
     _write_agent_checkpoint,
+    _read_energy_map,
     _write_energy_map,
     acquire_target_position,
     compute_alignment_cost,
@@ -1215,15 +1216,28 @@ def test_dash_callback_builds_app(make_profile_and_resources):
     assert app.layout is not None
 
 
-def test_energy_map_write_is_atomic_and_pickle_compatible(tmp_path):
-    energy_map = {"Fe": [(0, {"motor": 0.25}, {"intensity": (10.0, 0.0)})]}
-    filename = tmp_path / "energy-map.pickle"
+def test_energy_map_write_is_atomic_and_round_trips_as_csv(tmp_path):
+    energy_map = {
+        "Fe": [
+            (
+                3,
+                {"dcm_roll": 0.25, "m2_yaw": -0.5, "m2_lateral": 0.1},
+                {"alignment_cost": (1.5, 0.0), "intensity": (1000.0, 2.0)},
+            )
+        ]
+    }
+    filename = tmp_path / "energy-map.csv"
 
     _write_energy_map(filename, energy_map)
 
-    with filename.open("rb") as stream:
-        assert pickle.load(stream) == energy_map
+    assert _read_energy_map(filename) == energy_map
     assert not (filename.parent / f".{filename.name}.tmp").exists()
+    assert filename.read_text().splitlines() == [
+        "energy,point_index,dof:dcm_roll,dof:m2_yaw,dof:m2_lateral,"
+        "outcome:alignment_cost:mean,outcome:alignment_cost:sem,"
+        "outcome:intensity:mean,outcome:intensity:sem",
+        "Fe,3,0.25,-0.5,0.1,1.5,0.0,1000.0,2.0",
+    ]
 
 
 def test_search_captures_and_reuses_target_reference(
@@ -1661,7 +1675,7 @@ def test_search_resumes_latest_incomplete_energy_from_agent_checkpoint(
         make_agent,
     )
     checkpoint_directory = tmp_path / "optimization-checkpoints"
-    energy_map_filename = tmp_path / "energy-map.pickle"
+    energy_map_filename = tmp_path / "energy-map.csv"
 
     with pytest.raises(RuntimeError, match="interrupted optimization"):
         RunEngine({})(
@@ -1677,16 +1691,15 @@ def test_search_resumes_latest_incomplete_energy_from_agent_checkpoint(
             )
         )
 
-    with energy_map_filename.open("rb") as stream:
-        assert pickle.load(stream) == {
-            "Fe": [
-                (
-                    0,
-                    {"dcm_roll": 4.0, "m2_yaw": 0.0, "m2_lateral": 0.0},
-                    {"centroid_distance": (0.0, 0.0)},
-                )
-            ]
-        }
+    assert _read_energy_map(energy_map_filename) == {
+        "Fe": [
+            (
+                0,
+                {"dcm_roll": 4.0, "m2_yaw": 0.0, "m2_lateral": 0.0},
+                {"centroid_distance": (0.0, 0.0)},
+            )
+        ]
+    }
     assert resources.prompt_state.prompt is True
 
     fail_during_cu = False
@@ -1736,8 +1749,7 @@ def test_search_resumes_latest_incomplete_energy_from_agent_checkpoint(
             )
         ],
     }
-    with energy_map_filename.open("rb") as stream:
-        assert pickle.load(stream) == result.plan_result
+    assert _read_energy_map(energy_map_filename) == result.plan_result
     assert sorted(path.name for path in checkpoint_directory.iterdir()) == [
         "agent-Cu.json",
         "agent-Fe.json",

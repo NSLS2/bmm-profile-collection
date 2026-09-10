@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass, replace
 from functools import partial
 from numbers import Real
 from pathlib import Path
-import pickle
+import csv
 import threading
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Protocol, cast
@@ -1051,16 +1051,59 @@ def acquire_target_position(sensors: Sequence[Readable]) -> MsgGenerator[str]:
     )
 
 
+# A best point from ``Agent.get_best_points``: the trial index, the DOF
+# setpoints, and each outcome's ``(mean, standard-error)`` estimate.
+_BestPoint = tuple[int, dict[str, float], dict[str, tuple[float, float]]]
+
+
+def _energy_map_columns(
+    energy_map: Mapping[str, Any],
+) -> tuple[list[str], list[str]]:
+    """DOF and outcome names in first-seen order across every best point."""
+    dof_names: dict[str, None] = {}
+    outcome_names: dict[str, None] = {}
+    for best_points in energy_map.values():
+        for _index, dof_values, outcomes in best_points:
+            dof_names.update(dict.fromkeys(dof_values))
+            outcome_names.update(dict.fromkeys(outcomes))
+    return list(dof_names), list(outcome_names)
+
+
 def _write_energy_map(
     filename: str | Path,
     energy_map: Mapping[str, Any],
 ) -> None:
-    """Atomically persist an energy map using the established pickle format."""
+    """Atomically persist the energy map as CSV, one row per best point.
+
+    Columns are the energy, the trial index (``point_index``), each DOF
+    (``dof:<name>``), and each outcome's mean and standard error
+    (``outcome:<name>:mean`` / ``outcome:<name>:sem``).
+    """
+    dof_names, outcome_names = _energy_map_columns(energy_map)
+    header = [
+        "energy",
+        "point_index",
+        *(f"dof:{name}" for name in dof_names),
+        *(
+            column
+            for name in outcome_names
+            for column in (f"outcome:{name}:mean", f"outcome:{name}:sem")
+        ),
+    ]
     target = Path(filename)
     temporary = target.with_name(f".{target.name}.tmp")
     try:
-        with temporary.open("wb") as stream:
-            pickle.dump(energy_map, stream, protocol=pickle.HIGHEST_PROTOCOL)
+        with temporary.open("w", newline="") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(header)
+            for energy, best_points in energy_map.items():
+                for index, dof_values, outcomes in best_points:
+                    row = [energy, index, *(dof_values[name] for name in dof_names)]
+                    for name in outcome_names:
+                        mean, sem = outcomes[name]
+                        row.append(mean)
+                        row.append(sem)
+                    writer.writerow(row)
         temporary.replace(target)
     except BaseException:
         temporary.unlink(missing_ok=True)
@@ -1068,12 +1111,24 @@ def _write_energy_map(
 
 
 def _read_energy_map(filename: str | Path) -> dict[str, Any]:
-    """Read an existing energy map, or return an empty map when absent."""
+    """Read the CSV energy map, or return an empty map when absent."""
     source = Path(filename)
     if not source.is_file():
         return {}
-    with source.open("rb") as stream:
-        return pickle.load(stream)
+    energy_map: dict[str, list[_BestPoint]] = {}
+    with source.open("r", newline="") as stream:
+        for row in csv.DictReader(stream):
+            dof_values: dict[str, float] = {}
+            outcomes: dict[str, tuple[float, float]] = {}
+            for column, value in row.items():
+                if column.startswith("dof:"):
+                    dof_values[column[len("dof:"):]] = float(value)
+                elif column.startswith("outcome:") and column.endswith(":mean"):
+                    name = column[len("outcome:"):-len(":mean")]
+                    outcomes[name] = (float(value), float(row[f"outcome:{name}:sem"]))
+            best_point = (int(row["point_index"]), dof_values, outcomes)
+            energy_map.setdefault(row["energy"], []).append(best_point)
+    return energy_map
 
 
 def _agent_checkpoint_path(directory: Path, energy: str) -> Path:
