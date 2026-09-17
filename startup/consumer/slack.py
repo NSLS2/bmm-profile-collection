@@ -17,14 +17,21 @@ bmmbot._bmmbot_secret = profile_configuration['slack']['bmmbot_secret']
 #                                          redis_db=1)
 with open("/etc/bluesky/redis.secret") as f:
     secret = f.read().strip()
-rc = redis.Redis(host=profile_configuration['services']['nsls2_redis'],
-                 port=profile_configuration['services']['redis_port'],
-                 ssl=profile_configuration['services']['redis_port'],
-                 password=secret,
-                 db=1)
-bmmbot._redis_client = RedisJSONDict(rc, prefix='')
+rc_xas = redis.Redis(host=profile_configuration['services']['nsls2_redis'],
+                     port=profile_configuration['services']['redis_port'],
+                     ssl=profile_configuration['services']['redis_port'],
+                     password=secret,
+                     db=1)
+rc_xrd = redis.Redis(host=profile_configuration['services']['nsls2_redis'],
+                     port=profile_configuration['services']['redis_port'],
+                     ssl=profile_configuration['services']['redis_port'],
+                     password=secret,
+                     db=2)
+bmmbot._redis_client_xas = RedisJSONDict(rc_xas, prefix='')
+bmmbot._redis_client_xrd = RedisJSONDict(rc_xrd, prefix='')
 
 bmmbot._pass_api = profile_configuration['services']['pass_api'] + "/{pass_id}/slack-channels"
+bmmbot._redis_client = bmmbot._redis_client_xas
 bmmbot.refresh_channel()
 
 #-------------------------------------------------------------------
@@ -43,14 +50,30 @@ except:
     print(error_msg('\t\t\tslack_secret file not found!'))
 #-------------------------------------------------------------------
 
-def refresh_slack():
-    bmmbot.refresh_channel()
 
-def describe_slack():
-    bmmbot.describe()
+def refresh_slack(end_station='xas', time_it=False):
+    global bmmbot
+    if end_station == 'xrd':
+        bmmbot._redis_client = bmmbot._redis_client_xrd
+    else:
+        bmmbot._redis_client = bmmbot._redis_client_xas
+    bmmbot.refresh_channel(end_station=end_station, time_it=time_it)
 
-def test_slack():
-    bmmbot.test()
+def describe_slack(end_station='xas'):
+    global bmmbot
+    if end_station == 'xrd':
+        bmmbot._redis_client = bmmbot._redis_client_xrd
+    else:
+        bmmbot._redis_client = bmmbot._redis_client_xas
+    bmmbot.describe(end_station=end_station)
+
+def test_slack(end_station='xas'):
+    global bmmbot
+    if end_station == 'xrd':
+        bmmbot._redis_client = bmmbot._redis_client_xrd
+    else:
+        bmmbot._redis_client = bmmbot._redis_client_xas
+    bmmbot.test(end_station=end_station)
 
     
 def post_to_slack(text, rid=None):

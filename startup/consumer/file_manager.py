@@ -192,17 +192,32 @@ def manage_files_from_kafka_messages(beamline_acronym):
                     img_to_slack(message['img'])
 
             elif 'refresh_slack' in message:
-                refresh_slack()
+                _end_station = 'xas'
+                if '_end_station' in message:
+                    _end_station = message['_end_station']
+                time_it = False
+                if 'time_it' in message:
+                    time_it = message['time_it']
+                refresh_slack(end_station=_end_station, time_it=time_it)
 
             elif 'show_experimental_folder' in message:
-                fd = facility_dict()
+                _end_station = 'xas'
+                if '_end_station' in message:
+                    _end_station = message['_end_station']
+                fd = facility_dict(_end_station)
                 print(os.path.join(profile_configuration['services']['proposals'], fd['cycle'], fd['data_session']))
 
             elif 'describe_slack' in message:
-                describe_slack()
+                _end_station = 'xas'
+                if '_end_station' in message:
+                    _end_station = message['_end_station']
+                describe_slack(end_station=_end_station)
 
             elif 'test_slack' in message:
-                test_slack()
+                _end_station = 'xas'
+                if '_end_station' in message:
+                    _end_station = message['_end_station']
+                test_slack(end_station=_end_station)
 
             elif 'mkdir' in message:
                 if os.path.exists(message['mkdir']) is False:

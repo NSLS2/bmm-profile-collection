@@ -8,8 +8,8 @@ version = "2026.2.0"
 [system-requirements]
 
 [feature.profile.dependencies]
-bluesky-base = "==1.15.0"
-tiled-client = ">=0.2.11"
+bluesky-base = "==1.15.1"
+tiled-client = ">=0.2.18"
 python = ">=3.12,<3.13"
 xraylib = "*"
 lmfit = "*"
@@ -24,14 +24,14 @@ pyepics = "<=3.5.6"
 tqdm = "<=4.66.4"
 #tqdm = "==4.67.1"
 appdirs = "*"
-bluesky-queueserver-api = ">=0.0.12"
+bluesky-queueserver-api = ">=0.0.13"
 hdf5-external-filter-plugins = ">=0.1.0,<0.2"
 blosc-hdf5-plugin = ">=1.0.1,<2"
 databroker = "==2.0.0"
 epicscorelibs = ">=7.0.7.99.1.1,<8"
 emojis = ">=0.7.0,<0.8"
-bluesky-tiled-plugins = ">=2.0.6"
-ophyd-async = ">=0.20.0,<0.21"
+bluesky-tiled-plugins = ">=2.0.10"
+ophyd-async = ">=0.21.2"
 matplotlib-base = ">=3.10"
 nslsii = "==0.11.9"
 
@@ -55,6 +55,8 @@ sync-experiment = { cmd = "sync-experiment -s -b bmm -p {{proposal}} -d {{databa
 # launch BMM's kafka-based workflow clients
 plotmanager = "/home/xf06bm/.ipython/profile_collection/startup/consumer/bin/run-plotmanager"
 filemanager = "/home/xf06bm/.ipython/profile_collection/startup/consumer/bin/run-filemanager"
+# tool for prepping Eiger for use
+
 
 [feature.qs.dependencies ]
 "bluesky-httpserver" = "*"

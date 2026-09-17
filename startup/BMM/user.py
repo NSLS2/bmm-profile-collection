@@ -931,7 +931,10 @@ Remote desktop sharing: https://nsls2.github.io/bmm-beamline-manual/manage.html#
         self.trigger = True
         if self.name is not None:
             self.begin_experiment(name=self.name, date=self.date, gup=self.gup, saf=self.saf, startup=True)
+            #self.begin_experiment(name='Bruce Ravel', date='2026-09-04', gup=321384, saf=319347, startup=True)
 
+
+            
     def show_experiment(self):
         '''Show basic experiment configuration'''
         experimenters = textwrap.wrap(self.experimenters, subsequent_indent='                ')

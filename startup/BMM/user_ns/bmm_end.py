@@ -32,8 +32,8 @@ run_report('\t'+'FMBO motor tools')
 from bmm_tools.devices.fmbo import FMBO_status
 
 from BMM.user_ns.base import profile_configuration, sd
-from BMM.desc_string  import set_desc_strings
 if profile_configuration['miscellaneous']['set_desc_strings']:
+    from BMM.desc_string  import set_desc_strings
     run_report('\t'+'setting motor description strings')
     set_desc_strings()
 
