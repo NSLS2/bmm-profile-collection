@@ -15,7 +15,6 @@ internal dataflow are trusted as-is.
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 from functools import partial
@@ -548,8 +547,7 @@ def load_bmm_energy_alignment_resources() -> EnergyAlignmentResources:
             "m2_lateral": m2.lateral,
         },
         sensors={"cam8": cam8, "cam9": cam9, _ALIGNMENT_ION_CHAMBER_KEY: ic0},
-        # change_edge_plan=change_edge,
-        change_edge_plan=MagicMock(),
+        change_edge_plan=change_edge,
         prompt_state=BMMuser,
         read_energy=read_energy,
     )

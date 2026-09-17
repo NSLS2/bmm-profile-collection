@@ -1,6 +1,7 @@
 from dataclasses import replace
 import pickle
-from types import SimpleNamespace
+import sys
+from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
 from blop.plans import default_acquire
@@ -40,6 +41,7 @@ from BMM.optimization import (
     compute_multi_energy_alignment_metrics_from_catalog,
     compute_stats,
     get_energy_alignment_profile,
+    load_bmm_energy_alignment_resources,
     make_energy_alignment_agent,
     search_for_optimal_positions,
     show_energy_alignment_debug,
@@ -136,6 +138,59 @@ def make_profile_and_resources():
         return profile, resources
 
     return factory
+
+
+def test_live_resource_loader_binds_real_edge_change_plan(monkeypatch):
+    def change_edge(*args, **kwargs):
+        yield from null()
+
+    catalog = object()
+    dcm_roll = object()
+    m2_yaw = object()
+    m2_lateral = object()
+    cam8 = object()
+    cam9 = object()
+    ic0 = object()
+    user = SimpleNamespace(prompt=True)
+    edge_module = ModuleType("BMM.edge")
+    edge_module.change_edge = change_edge
+    base_module = ModuleType("BMM.user_ns.base")
+    base_module.bmm_catalog = catalog
+    bmm_module = ModuleType("BMM.user_ns.bmm")
+    bmm_module.BMMuser = user
+    dcm_module = ModuleType("BMM.user_ns.dcm")
+    dcm_module.dcm = SimpleNamespace(
+        roll=dcm_roll,
+        energy=SimpleNamespace(readback=SimpleNamespace(get=lambda: 7112.5)),
+    )
+    detectors_module = ModuleType("BMM.user_ns.detectors")
+    detectors_module.cam8 = cam8
+    detectors_module.cam9 = cam9
+    detectors_module.ic0 = ic0
+    instruments_module = ModuleType("BMM.user_ns.instruments")
+    instruments_module.m2 = SimpleNamespace(yaw=m2_yaw, lateral=m2_lateral)
+    for module in (
+        edge_module,
+        base_module,
+        bmm_module,
+        dcm_module,
+        detectors_module,
+        instruments_module,
+    ):
+        monkeypatch.setitem(sys.modules, module.__name__, module)
+
+    resources = load_bmm_energy_alignment_resources()
+
+    assert resources.catalog is catalog
+    assert resources.actuators == {
+        "dcm_roll": dcm_roll,
+        "m2_yaw": m2_yaw,
+        "m2_lateral": m2_lateral,
+    }
+    assert resources.sensors == {"cam8": cam8, "cam9": cam9, "i0": ic0}
+    assert resources.change_edge_plan is change_edge
+    assert resources.prompt_state is user
+    assert resources.read_energy() == 7112.5
 
 
 def test_full_width_half_maximum_interpolates_crossings():
