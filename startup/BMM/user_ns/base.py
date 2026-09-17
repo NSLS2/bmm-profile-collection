@@ -1,8 +1,10 @@
 import nslsii
 from nslsii.utils import open_redis_client
 import os, time, datetime, configparser
+import subprocess
 import tomllib
 from collections import deque
+from pathlib import Path
 
 from event_model import pack_datum_page
 from bluesky.plan_stubs import mv, mvr, sleep
@@ -26,6 +28,34 @@ except ImportError:
 ## the intent here is to return $HOME/.profile_collection/startup
 #startup_dir = os.path.split(os.path.split(os.path.split(__file__)[0])[0])[0]
 startup_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+
+
+def _git_info(git_dir):
+    """Mirror nslsii's startup Git metadata helper until we can use it directly."""
+    cwd = Path(git_dir).resolve()
+    try:
+        ref = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=cwd,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        branch = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=cwd,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        dirty = bool(subprocess.check_output(
+            ["git", "status", "--porcelain"],
+            cwd=cwd,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip())
+        return ref, branch, dirty
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None, None, None
+
     
 # cfile = os.path.join(startup_dir, "BMM_configuration.ini")
 # profile_configuration = configparser.ConfigParser(interpolation=None)
@@ -109,6 +139,13 @@ else:
     nslsii.configure_kafka_publisher(RE, "bmm")
     sd  = uns_dict['sd']
     bec = uns_dict['bec']
+
+# Capture once at startup, matching nslsii.configure_base(startup_dir=...).
+_ref, _branch, _dirty = _git_info(startup_dir)
+RE.md['startup_git_metadata'] = {
+    'ref': _ref, 'branch': _branch, 'dirty': _dirty,
+}
+
 RE.unsubscribe(0)  # remove databroker, which was subscribed first by configure_base
 
 tiled_writing_client = from_uri(profile_configuration['services']['tiled'],
