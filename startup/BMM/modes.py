@@ -68,7 +68,7 @@ from BMM.user_ns.suspenders import suspenders
 #if os.path.isfile(os.path.join(user_ns["BMM_CONFIGURATION_LOCATION"], 'Modes.json')):
 #     MODEDATA = read_mode_data()
 
-def motors_in_position(mode=None):
+def motors_in_position(mode=None, verbose=True):
     all_of_them = ['dm3_bct',
                    'xafs_yu', 'xafs_yd', # xafs_ydo
                    'm2_yu', 'm2_ydo', 'm2_ydi', #'m2_xu', 'm2_xd',
@@ -79,9 +79,18 @@ def motors_in_position(mode=None):
         achieved = user_ns[m].position
         diff = abs(target - achieved)
         if diff > 0.5:
-            print(f'{m} is out of position, target={target}, current position={achieved}')
-            ok = False
+             if verbose is True:
+                  print(f'{m} is out of position, target={target}, current position={achieved}')
+             ok = False
     return ok
+
+def motor_in_position(mode=None, motor=None, margin=0.1):
+     target = float(MODEDATA[user_ns[motor].name][mode])
+     achieved = user_ns[m].position
+     diff = abs(target - achieved)
+     if diff > margin:
+          return False
+     return True
 
 
 def pds_motors_ready():
@@ -362,9 +371,28 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
           print('Slit height appears to be set for collimated beam.  Narrowing slits.')
           yield from mv(user_ns['slits3'].vsize, 0.3)
 
+     
+
+     motors_in_mode = {'A': False, 'B': False, 'C': False, 'D': False, 'E': False, 'F': False,}
+     for mo in motors_in_position.keys():
+          motors_in_mode[mo] = motors_in_position(mo):
+     if any(motors_in_mode.values()):
+          insist = False
+     else:
+          insist = True
+     ## this is trying to catch the situation where change_edge() was
+     ## interrupted and motors are left in "in between" positions,
+     ## that is, there are motors in positions that do not correspond
+     ## to any mode.  In that case, motor_in_position will return
+     ## False for all 6 odes
+
+
      ## only poke at M3 is mode is changing
-     if mode != current_mode:
+     if mode != current_mode or insist = True:
           base.extend(mirror3)
+
+
+     
           
      if mode in ('D', 'E', 'F') and current_mode in ('D', 'E', 'F') and insist is False:
           if verify_limits(base) is False:
