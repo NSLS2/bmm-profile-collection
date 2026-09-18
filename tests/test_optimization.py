@@ -532,6 +532,7 @@ def make_image_evaluator():
         cost=AlignmentCostConfig(),
         nominal_dof_values={"motor": 0.0},
         dof_half_ranges={"motor": 1.0},
+        intensity_reference=1_000_000.0,
     )
     return evaluator, catalog
 
@@ -558,6 +559,9 @@ def test_image_evaluation_pairs_acquisition_metadata_with_suggestions():
         1_250_000.0,
         2_500_000.0,
     ]
+    assert [outcome["intensity_ratio"] for outcome in outcomes] == pytest.approx(
+        [1.25, 2.5]
+    )
     metric_names = {
         "fwhm_x",
         "fwhm_y",
@@ -566,6 +570,7 @@ def test_image_evaluation_pairs_acquisition_metadata_with_suggestions():
         "centroid_distance",
         "centroid_x_distance",
         "intensity",
+        "intensity_ratio",
         "alignment_cost",
     }
     assert set(outcomes[0]) == {"_id", *metric_names}
@@ -615,6 +620,56 @@ def test_image_evaluation_accepts_one_scalar_ion_reading(intensity_data):
     outcomes = evaluator("acquired", [{"_id": "only", "motor": 0.0}])
 
     assert outcomes[0]["intensity"] == 1_250_000.0
+
+
+def test_image_evaluation_captures_per_energy_baseline_intensity():
+    parameters = BeamEvaluationConfig(
+        image_field="image",
+        intensity_field="i0",
+        x_crop=(4, 37),
+    )
+    catalog = {"reference": run_with_fields(image=gaussian_image())}
+    evaluator = ImageEvaluation(
+        catalog,
+        "reference",
+        parameters,
+        cost=AlignmentCostConfig(),
+        nominal_dof_values={"motor": 0.0},
+        dof_half_ranges={"motor": 1.0},
+    )
+    catalog["baseline"] = run_with_fields(image=gaussian_image(), i0=400.0)
+    catalog["acquired"] = run_with_fields(image=gaussian_image(), i0=200.0)
+
+    baseline = evaluator("baseline", [{"_id": "baseline", "motor": 0.0}])[0]
+    acquired = evaluator("acquired", [{"_id": "candidate", "motor": 0.0}])[0]
+
+    assert evaluator.intensity_reference == 400.0
+    assert baseline["intensity_ratio"] == pytest.approx(1.0)
+    assert acquired["intensity_ratio"] == pytest.approx(0.5)
+    assert acquired["alignment_cost"] - baseline["alignment_cost"] == pytest.approx(
+        0.5
+    )
+
+
+def test_image_evaluation_requires_baseline_before_intensity_cost():
+    parameters = BeamEvaluationConfig(
+        image_field="image",
+        intensity_field="i0",
+        x_crop=(4, 37),
+    )
+    catalog = {"reference": run_with_fields(image=gaussian_image())}
+    evaluator = ImageEvaluation(
+        catalog,
+        "reference",
+        parameters,
+        cost=AlignmentCostConfig(),
+        nominal_dof_values={"motor": 0.0},
+        dof_half_ranges={"motor": 1.0},
+    )
+    catalog["acquired"] = run_with_fields(image=gaussian_image(), i0=200.0)
+
+    with pytest.raises(RuntimeError, match="per-energy baseline intensity"):
+        evaluator("acquired", [{"_id": "candidate", "motor": 0.0}])
 
 
 @pytest.mark.parametrize(
@@ -1153,6 +1208,7 @@ def test_agent_factory_restores_checkpointed_optimizer(
                 "m2_lateral": 0.0,
                 "alignment_cost": 0.5,
                 "intensity": 1_000_000.0,
+                "intensity_ratio": 1.0,
                 "_id": "baseline",
             }
         ]
@@ -1171,6 +1227,46 @@ def test_agent_factory_restores_checkpointed_optimizer(
     assert restored.checkpoint_path == str(checkpoint_path)
     assert "baseline" in set(restored.ax_client.summarize()["arm_name"])
     assert restored.to_optimization_problem().optimizer.should_stop() == (False, None)
+    assert isinstance(restored.evaluation_function, ImageEvaluation)
+    assert restored.evaluation_function.intensity_reference == 1_000_000.0
+
+
+def test_agent_factory_rejects_checkpoint_without_intensity_ratio(
+    tmp_path,
+    make_profile_and_resources,
+):
+    profile, resources = make_profile_and_resources()
+    checkpoint_path = tmp_path / "agent.json"
+    original = make_energy_alignment_agent(
+        "reference",
+        profile=profile,
+        resources=resources,
+        checkpoint_path=checkpoint_path,
+        subscribe_to_dash=False,
+    )
+    original.ingest(
+        [
+            {
+                "dcm_roll": 0.25,
+                "m2_yaw": 0.0,
+                "m2_lateral": 0.0,
+                "alignment_cost": 0.5,
+                "intensity": 1_000_000.0,
+                "_id": "baseline",
+            }
+        ]
+    )
+    _write_agent_checkpoint(original, checkpoint_path)
+
+    with pytest.raises(RuntimeError, match="lacks intensity and intensity_ratio"):
+        make_energy_alignment_agent(
+            "reference",
+            profile=profile,
+            resources=resources,
+            checkpoint_path=checkpoint_path,
+            resume=True,
+            subscribe_to_dash=False,
+        )
 
 
 def test_acquire_target_position_records_supplied_readables():
@@ -1235,6 +1331,7 @@ def test_metadata_uses_profile_and_live_resources(make_profile_and_resources):
         "position_tolerance_px": 5.0,
         "focus_weight": 0.5,
         "dof_weight": 0.1,
+        "intensity_weight": 2.0,
     }
     assert agent_metadata["search_half_widths"] == {
         "dcm_roll": 0.5,
@@ -1445,7 +1542,8 @@ def test_search_captures_and_reuses_target_reference(
         for start in starts
     ] == [("Fe", "target"), ("Cu", "target")]
     assert len(evaluation_functions) == 2
-    assert evaluation_functions[0] is evaluation_functions[1]
+    assert evaluation_functions[0] is not evaluation_functions[1]
+    assert all(isinstance(function, ImageEvaluation) for function in evaluation_functions)
     assert reference_image.read_count == 1
     nominal_dof_values = {"dcm_roll": 0.25, "m2_yaw": 0.0, "m2_lateral": 0.0}
     assert agent_events == [
@@ -1522,7 +1620,8 @@ def test_search_uses_supplied_target_reference(
         for plan in acquisition_plans
     ] == [("Fe", "reference"), ("Cu", "reference")]
     assert len(evaluation_functions) == 2
-    assert evaluation_functions[0] is evaluation_functions[1]
+    assert evaluation_functions[0] is not evaluation_functions[1]
+    assert all(isinstance(function, ImageEvaluation) for function in evaluation_functions)
     assert reference_image.read_count == 1
 
 
@@ -1833,12 +1932,14 @@ def test_compute_alignment_cost_matches_reference_formula():
         reference_centroid_x=100.0,
         fwhm_x=10.0,
         reference_fwhm_x=10.0,
+        intensity=100.0,
+        reference_intensity=100.0,
         dof_values={"motor": 0.5},
         nominal_dof_values={"motor": 0.5},
         dof_half_ranges={"motor": 10.0},
         config=AlignmentCostConfig(),
     )
-    # (5 / 5) ** 2 + 0.5 * (10 / 10) + 0.1 * 0 == 1.5
+    # (5 / 5) ** 2 + 0.5 * (10 / 10) + 2.0 * 0 + 0.1 * 0 == 1.5
     assert cost == pytest.approx(1.5)
 
 
@@ -1847,21 +1948,75 @@ def test_compute_alignment_cost_increases_with_offset_and_dof_deviation():
         reference_centroid_x=100.0,
         fwhm_x=10.0,
         reference_fwhm_x=10.0,
+        reference_intensity=100.0,
         nominal_dof_values={"motor": 0.0},
         dof_half_ranges={"motor": 10.0},
         config=AlignmentCostConfig(),
     )
     aligned = compute_alignment_cost(
-        centroid_x=100.0, dof_values={"motor": 0.0}, **fixed
+        centroid_x=100.0, intensity=100.0, dof_values={"motor": 0.0}, **fixed
     )
     off_position = compute_alignment_cost(
-        centroid_x=110.0, dof_values={"motor": 0.0}, **fixed
+        centroid_x=110.0, intensity=100.0, dof_values={"motor": 0.0}, **fixed
     )
     off_nominal = compute_alignment_cost(
-        centroid_x=100.0, dof_values={"motor": 8.0}, **fixed
+        centroid_x=100.0, intensity=100.0, dof_values={"motor": 8.0}, **fixed
+    )
+    low_intensity = compute_alignment_cost(
+        centroid_x=100.0, intensity=50.0, dof_values={"motor": 0.0}, **fixed
     )
     assert off_position > aligned
     assert off_nominal > aligned
+    assert low_intensity > aligned
+
+
+def test_compute_alignment_cost_normalizes_intensity_by_energy_baseline():
+    fixed = dict(
+        centroid_x=100.0,
+        reference_centroid_x=100.0,
+        fwhm_x=10.0,
+        reference_fwhm_x=10.0,
+        dof_values={"motor": 0.0},
+        nominal_dof_values={"motor": 0.0},
+        dof_half_ranges={"motor": 10.0},
+        config=AlignmentCostConfig(),
+    )
+
+    baseline_scale = compute_alignment_cost(
+        intensity=100.0, reference_intensity=100.0, **fixed
+    )
+    low_fe_scale = compute_alignment_cost(
+        intensity=50.0, reference_intensity=100.0, **fixed
+    )
+    low_cu_scale = compute_alignment_cost(
+        intensity=500.0, reference_intensity=1000.0, **fixed
+    )
+    high_scale = compute_alignment_cost(
+        intensity=200.0, reference_intensity=100.0, **fixed
+    )
+
+    assert low_fe_scale == pytest.approx(low_cu_scale)
+    assert low_fe_scale - baseline_scale == pytest.approx(0.5)
+    assert high_scale == pytest.approx(baseline_scale)
+
+
+@pytest.mark.parametrize("reference_intensity", [0.0, -1.0, np.nan])
+def test_compute_alignment_cost_rejects_invalid_intensity_reference(
+    reference_intensity,
+):
+    with pytest.raises(ValueError, match="Reference intensity"):
+        compute_alignment_cost(
+            centroid_x=100.0,
+            reference_centroid_x=100.0,
+            fwhm_x=10.0,
+            reference_fwhm_x=10.0,
+            intensity=100.0,
+            reference_intensity=reference_intensity,
+            dof_values={"motor": 0.0},
+            nominal_dof_values={"motor": 0.0},
+            dof_half_ranges={"motor": 10.0},
+            config=AlignmentCostConfig(),
+        )
 
 
 def test_unusable_beam_error_subclasses_value_error():
@@ -1919,6 +2074,7 @@ def test_image_evaluation_reports_unusable_frame_as_partial_observation():
     [outcome] = evaluator("acquired", [{"_id": "only", "motor": 0.3}])
 
     assert outcome["intensity"] == 1_250_000.0
+    assert outcome["intensity_ratio"] == pytest.approx(1.25)
     assert np.isnan(outcome["alignment_cost"])
     assert np.isnan(outcome["centroid_distance"])
     assert np.isnan(outcome["centroid_x_distance"])
@@ -1932,6 +2088,7 @@ def test_image_evaluation_reports_unusable_frame_as_partial_observation():
         "centroid_distance",
         "centroid_x_distance",
         "intensity",
+        "intensity_ratio",
         "alignment_cost",
     }
 

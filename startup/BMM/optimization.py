@@ -74,7 +74,7 @@ def _primary_data(run: Any) -> Any:
     return run["primary"]
 
 
-_TILED_POLL_ATTEMPTS = 50
+_TILED_POLL_ATTEMPTS = 10
 _TILED_POLL_DELAY_S = 1.0
 
 
@@ -137,6 +137,7 @@ class AlignmentCostConfig:
     position_tolerance_px: float = 5.0
     focus_weight: float = 0.5
     dof_weight: float = 0.1
+    intensity_weight: float = 2.0
 
 
 _ALIGNMENT_DOF_NAMES = ("dcm_roll", "m2_yaw", "m2_lateral")
@@ -221,6 +222,7 @@ XAS_SI111_ALIGNMENT = EnergyAlignmentProfile(
         position_tolerance_px=5.0,
         focus_weight=0.5,
         dof_weight=0.1,
+        intensity_weight=2.0,
     ),
     minimum_intensity_fraction=0.5,
     optimization=OptimizationConfig(
@@ -472,12 +474,39 @@ def compute_image_stats(
     )
 
 
+def _read_reference_image_stats(
+    tiled_client: Container | Mapping[str, Any],
+    reference_scan_uid: str,
+    parameters: BeamEvaluationConfig,
+) -> BeamStats:
+    reference_image = _primary_data(tiled_client[reference_scan_uid])[
+        parameters.image_field
+    ].read()
+    return compute_image_stats(reference_image, parameters)
+
+
+def _validate_intensity_reference(intensity: float) -> float:
+    reference = float(intensity)
+    if not np.isfinite(reference) or reference <= 0:
+        raise ValueError("Reference intensity must be finite and positive")
+    return reference
+
+
+def _intensity_ratio(intensity: float, reference_intensity: float) -> float:
+    value = float(intensity)
+    if not np.isfinite(value):
+        return float("nan")
+    return value / _validate_intensity_reference(reference_intensity)
+
+
 def compute_alignment_cost(
     *,
     centroid_x: float,
     reference_centroid_x: float,
     fwhm_x: float,
     reference_fwhm_x: float,
+    intensity: float,
+    reference_intensity: float,
     dof_values: Mapping[str, float],
     nominal_dof_values: Mapping[str, float],
     dof_half_ranges: Mapping[str, float],
@@ -485,19 +514,28 @@ def compute_alignment_cost(
 ) -> float:
     """Scalar per-energy alignment objective (smaller is better).
 
-    Combines three dimensionless terms: horizontal position error relative to the
-    reference spot, horizontal focus (width ratio), and a Tikhonov penalty pulling
-    each DOF toward its manually-aligned nominal, normalized by the actual search
-    half-range so mrad and mm deviations are comparable without camera calibration.
+    Combines four dimensionless terms: horizontal position error relative to the
+    reference spot, horizontal focus (width ratio), per-energy intensity loss
+    relative to that energy's baseline, and a Tikhonov penalty pulling each DOF
+    toward its manually-aligned nominal, normalized by the actual search
+    half-range so mrad and mm deviations are comparable without camera
+    calibration.
     """
     dx = abs(centroid_x - reference_centroid_x)
     position_term = (dx / config.position_tolerance_px) ** 2
     focus_term = config.focus_weight * (fwhm_x / reference_fwhm_x)
+    ratio = _intensity_ratio(intensity, reference_intensity)
+    if not np.isfinite(ratio):
+        return float("nan")
+    intensity_loss = max(0.0, 1.0 - ratio)
+    intensity_term = config.intensity_weight * intensity_loss**2
     dof_term = sum(
         ((dof_values[name] - nominal) / dof_half_ranges[name]) ** 2
         for name, nominal in nominal_dof_values.items()
     )
-    return float(position_term + focus_term + config.dof_weight * dof_term)
+    return float(
+        position_term + focus_term + intensity_term + config.dof_weight * dof_term
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -667,13 +705,15 @@ class ImageEvaluation:
 
     def __init__(
         self,
-        tiled_client: Container,
+        tiled_client: Container | Mapping[str, Any],
         reference_scan_uid: str,
         parameters: BeamEvaluationConfig,
         *,
         cost: AlignmentCostConfig,
         nominal_dof_values: Mapping[str, float],
         dof_half_ranges: Mapping[str, float],
+        reference_stats: BeamStats | None = None,
+        intensity_reference: float | None = None,
     ):
         self.tiled_client = tiled_client
         self.reference_scan_uid = reference_scan_uid
@@ -681,13 +721,40 @@ class ImageEvaluation:
         self.cost = cost
         self.nominal_dof_values = dict(nominal_dof_values)
         self.dof_half_ranges = dict(dof_half_ranges)
-        reference_image = _primary_data(tiled_client[reference_scan_uid])[
-            parameters.image_field
-        ].read()
-        reference_stats = compute_image_stats(reference_image, parameters)
+        self._intensity_reference: float | None = None
+        if reference_stats is None:
+            reference_stats = _read_reference_image_stats(
+                tiled_client, reference_scan_uid, parameters
+            )
+        if intensity_reference is not None:
+            self.set_intensity_reference(intensity_reference)
         self.reference_centroid_x = reference_stats.centroid_x
         self.reference_centroid_y = reference_stats.centroid_y
         self.reference_fwhm_x = reference_stats.fwhm_x
+
+    @property
+    def intensity_reference(self) -> float | None:
+        """Per-energy baseline intensity used to normalize I0 in the cost."""
+        return self._intensity_reference
+
+    def set_intensity_reference(self, intensity: float) -> None:
+        """Set the positive same-energy baseline intensity for I0 normalization."""
+        self._intensity_reference = _validate_intensity_reference(intensity)
+
+    def _intensity_ratio_for(
+        self,
+        suggestion: Mapping[str, Any],
+        intensity: float,
+    ) -> float:
+        if suggestion.get("_id") == "baseline":
+            self.set_intensity_reference(intensity)
+        if self._intensity_reference is None:
+            raise RuntimeError(
+                "ImageEvaluation needs a per-energy baseline intensity before "
+                "computing alignment_cost; acquire the baseline first or "
+                "restore it from the agent checkpoint."
+            )
+        return _intensity_ratio(intensity, self._intensity_reference)
 
     def __call__(self, uid: str, suggestions: list[dict]) -> list[dict]:
         if not suggestions:
@@ -730,6 +797,7 @@ class ImageEvaluation:
         outcomes = []
         for suggestion in suggestions:
             image, intensity = paired_by_id[suggestion["_id"]]
+            intensity_ratio = self._intensity_ratio_for(suggestion, intensity)
             # A blank/unusable frame is a partial observation: the objective and
             # its diagnostics are missing (NaN, dropped by Ax as unmeasured), but
             # the I0 reading is always finite and keeps training the constraint.
@@ -748,6 +816,7 @@ class ImageEvaluation:
                         "centroid_distance": float("nan"),
                         "centroid_x_distance": float("nan"),
                         "intensity": intensity,
+                        "intensity_ratio": intensity_ratio,
                         "alignment_cost": float("nan"),
                     }
                 )
@@ -772,11 +841,14 @@ class ImageEvaluation:
                         abs(stats.centroid_x - self.reference_centroid_x)
                     ),
                     "intensity": intensity,
+                    "intensity_ratio": intensity_ratio,
                     "alignment_cost": compute_alignment_cost(
                         centroid_x=stats.centroid_x,
                         reference_centroid_x=self.reference_centroid_x,
                         fwhm_x=stats.fwhm_x,
                         reference_fwhm_x=self.reference_fwhm_x,
+                        intensity=intensity,
+                        reference_intensity=self._intensity_reference,
                         dof_values=dof_values,
                         nominal_dof_values=self.nominal_dof_values,
                         dof_half_ranges=self.dof_half_ranges,
@@ -785,6 +857,39 @@ class ImageEvaluation:
                 }
             )
         return outcomes
+
+
+def _baseline_outcome_from_agent(agent: Agent, metric_name: str) -> float | None:
+    data = agent.ax_client._experiment.lookup_data().df
+    required_columns = {"arm_name", "metric_name", "mean", "trial_index"}
+    if not required_columns.issubset(data.columns):
+        return None
+    rows = data[(data["arm_name"] == "baseline") & (data["metric_name"] == metric_name)]
+    if rows.empty:
+        return None
+    return float(rows.sort_values("trial_index").iloc[-1]["mean"])
+
+
+def _restore_intensity_reference_from_agent(
+    agent: Agent,
+    evaluation_function: EvaluationFunction | None,
+) -> None:
+    if not isinstance(evaluation_function, ImageEvaluation):
+        return
+    intensity = _baseline_outcome_from_agent(agent, "intensity")
+    ratio = _baseline_outcome_from_agent(agent, "intensity_ratio")
+    if intensity is None or ratio is None:
+        raise RuntimeError(
+            "Cannot resume an intensity-normalized alignment checkpoint because "
+            "its baseline trial lacks intensity and intensity_ratio outcomes; "
+            "restart this energy without resume."
+        )
+    if not np.isfinite(ratio) or not np.isclose(ratio, 1.0):
+        raise RuntimeError(
+            "Cannot resume an intensity-normalized alignment checkpoint because "
+            f"its baseline intensity_ratio is {ratio!r}, not 1.0."
+        )
+    evaluation_function.set_intensity_reference(intensity)
 
 
 def compute_stats(
@@ -1009,6 +1114,7 @@ def make_energy_alignment_agent(
         # restore this optional policy. Fresh BMM agents use no stopping policy.
         if not hasattr(optimizer, "_stopping_strategy"):
             optimizer._stopping_strategy = None  # type: ignore[attr-defined]
+        _restore_intensity_reference_from_agent(agent, evaluation_function)
     else:
         agent = Agent(
             sensors=sensors,
@@ -1120,9 +1226,9 @@ def _read_energy_map(filename: str | Path) -> dict[str, Any]:
             outcomes: dict[str, tuple[float, float]] = {}
             for column, value in row.items():
                 if column.startswith("dof:"):
-                    dof_values[column[len("dof:"):]] = float(value)
+                    dof_values[column[len("dof:") :]] = float(value)
                 elif column.startswith("outcome:") and column.endswith(":mean"):
-                    name = column[len("outcome:"):-len(":mean")]
+                    name = column[len("outcome:") : -len(":mean")]
                     outcomes[name] = (float(value), float(row[f"outcome:{name}:sem"]))
             best_point = (int(row["point_index"]), dof_values, outcomes)
             energy_map.setdefault(row["energy"], []).append(best_point)
@@ -1196,6 +1302,8 @@ def search_for_optimal_positions(
             if iterations is None
             else iterations
         )
+        if checkpoint_interval < 1:
+            raise ValueError("checkpoint_interval must be at least one")
 
         checkpoint_root = (
             Path(checkpoint_directory) if checkpoint_directory is not None else None
@@ -1242,13 +1350,10 @@ def search_for_optimal_positions(
             resolved_resources,
             resolved_profile,
         )
-        evaluation_function = ImageEvaluation(
+        reference_stats = _read_reference_image_stats(
             resolved_resources.catalog,
-            reference_scan_uid=target_uid,
-            parameters=resolved_profile.evaluation,
-            cost=resolved_profile.cost,
-            nominal_dof_values=nominal_dof_values,
-            dof_half_ranges=dof_half_ranges,
+            target_uid,
+            resolved_profile.evaluation,
         )
         resolved_resources.prompt_state.prompt = False
 
@@ -1267,6 +1372,15 @@ def search_for_optimal_positions(
             )
             resume_agent = (
                 resume and agent_checkpoint is not None and agent_checkpoint.is_file()
+            )
+            evaluation_function = ImageEvaluation(
+                resolved_resources.catalog,
+                reference_scan_uid=target_uid,
+                parameters=resolved_profile.evaluation,
+                cost=resolved_profile.cost,
+                nominal_dof_values=nominal_dof_values,
+                dof_half_ranges=dof_half_ranges,
+                reference_stats=reference_stats,
             )
             agent = make_energy_alignment_agent(
                 target_uid,

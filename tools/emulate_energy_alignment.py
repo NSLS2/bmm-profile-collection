@@ -68,6 +68,8 @@ _ENERGY_MODELS = {
     "Fe": (7112.0, {"dcm_roll": 0.35, "m2_yaw": -0.25, "m2_lateral": 0.20}),
     "Cu": (8979.0, {"dcm_roll": -0.30, "m2_yaw": 0.20, "m2_lateral": -0.25}),
 }
+_ENERGY_INTENSITY_SCALES = {"Fe": 1.0, "Cu": 0.55}
+
 
 
 @dataclass
@@ -171,6 +173,7 @@ class EnergyAlignmentEmulator:
                 position_tolerance_px=3.0,
                 focus_weight=0.5,
                 dof_weight=0.08,
+                intensity_weight=2.0,
             ),
             minimum_intensity_fraction=0.5,
             optimization=OptimizationConfig(
@@ -233,7 +236,13 @@ class EnergyAlignmentEmulator:
 
     def _ion_chamber_intensity(self) -> float:
         radius_squared = sum(error**2 for error in self._position_errors().values())
-        return float(250_000.0 + 750_000.0 * np.exp(-1.2 * radius_squared))
+        alignment_intensity = 250_000.0 + 750_000.0 * np.exp(-1.2 * radius_squared)
+        energy_scale = (
+            1.0
+            if self.state.element is None
+            else _ENERGY_INTENSITY_SCALES[self.state.element]
+        )
+        return float(energy_scale * alignment_intensity)
 
     def _change_edge(self, element: str, **kwargs: Any):
         try:
