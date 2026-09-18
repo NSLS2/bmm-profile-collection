@@ -374,8 +374,8 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
      
 
      motors_in_mode = {'A': False, 'B': False, 'C': False, 'D': False, 'E': False, 'F': False,}
-     for mo in motors_in_position.keys():
-          motors_in_mode[mo] = motors_in_position(mo):
+     for mo in motors_in_mode.keys():
+          motors_in_mode[mo] = motors_in_position(mo, verbose=False)
      if any(motors_in_mode.values()):
           insist = False
      else:
@@ -388,7 +388,7 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
 
 
      ## only poke at M3 is mode is changing
-     if mode != current_mode or insist = True:
+     if mode != current_mode or insist == True:
           base.extend(mirror3)
 
 
