@@ -371,6 +371,7 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
           print('Slit height appears to be set for collimated beam.  Narrowing slits.')
           yield from mv(user_ns['slits3'].vsize, 0.3)
 
+     yield from mv(user_ns['slits3'].vsize, 3)
      
 
      motors_in_mode = {'A': False, 'B': False, 'C': False, 'D': False, 'E': False, 'F': False,}

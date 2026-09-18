@@ -74,7 +74,7 @@ def _primary_data(run: Any) -> Any:
     return run["primary"]
 
 
-_TILED_POLL_ATTEMPTS = 10
+_TILED_POLL_ATTEMPTS = 50
 _TILED_POLL_DELAY_S = 1.0
 
 
