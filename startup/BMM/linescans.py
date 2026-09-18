@@ -245,7 +245,7 @@ def prepare_alignment_scan(inttime=0.1):
     yield from mv(_locked_dwell_time, inttime)
     
 
-def fetch_peak_position_via_redis(maxtries=6, verbose=False):
+def fetch_peak_position_via_redis(maxtries=7, verbose=False):
     '''Retrieve a result found by the Kafka consumer and posted to redis.
 
     The function prepare_alignment_scan() should have been called

@@ -100,7 +100,10 @@ class XAFSSequence():
         if len(self.uidlist) == 0:
             return 0
         elif len(self.uidlist) == 1:
-            toplot = self.panlist[0]
+            try:
+                toplot = self.panlist[0]
+            except:             # maybe got aborted or is otherwise unavailable...
+                return 0
         else:
             toplot = self.kek.merge()
             # try:

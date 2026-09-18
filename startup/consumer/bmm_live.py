@@ -1,4 +1,4 @@
-import os, json
+import os, json, time
 from matplotlib import get_backend
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -1030,19 +1030,33 @@ class XRF():
             nelem = 7
             channels = tuple(range(1, 8))
 
+        isok, count = False, 0
+        while isok is False:
+            try:
+                datatable = catalog[uid].primary[f'{nelem}-element SDD_channel01_xrf']
+                isok = True
+            except:
+                count += 1
+                if count >= 6:
+                    return
+                print(f'wating for XRF data to be available, attempt {count}, sleeping for {0.5*2**count}')
+                time.sleep(0.5*2**count)
+                
 
         if nelem == 1:
-            s.append(catalog[uid].primary.data['1-element SDD_channel08_xrf'][0])  #  note channel number!
+            s.append(catalog[uid].primary['1-element SDD_channel08_xrf'].read()[0])  #  note channel number!
             only = 1
             add = False
         elif 'dante-1' in catalog[uid].metadata['start']['detectors']:
             for i in channels:
-                s.append(catalog[uid].primary.data[f'dante-1_image'][0][0][i-1])
-        else:
+                s.append(catalog[uid].primary[f'dante-1_image'].read()[0])  # this is not correct
+        else:                   # this is inefficient
             for i in channels:
-                s.append(catalog[uid].primary.data[f'{nelem}-element SDD_channel0{i+1}_xrf'][0])
+                print(f'reading {nelem}-element SDD_channel0{i+1}_xrf')
+                s.append(catalog[uid].primary[f'{nelem}-element SDD_channel0{i+1}_xrf'].read()[0])
+                #                          compress the (1,4096) array to 1D (4096) -----------^
 
-
+                
         e = numpy.arange(0, len(s[0])) * 10
 
         if only is not None and only in channels:
@@ -1054,7 +1068,7 @@ class XRF():
             plt.plot(e, ss, label=f'sum of {nelem} channels')
         else:
             for i in channels:
-                plt.plot(e, s[i-1], label=f'channel {i+1}')
+                plt.plot(e, s[i], label=f'channel {i+1}')
 
         if 'XDI' in catalog[uid].metadata['start']:
             if 'Element' in catalog[uid].metadata['start']['XDI']:
@@ -1219,14 +1233,14 @@ class XRF():
         ## data table
         s = []
         if nchan == 1:
-            s.append(catalog[uid].primary.data['1-element SDD_channel08_xrf'][0])  #  note channel number!
+            s.append(catalog[uid].primary['1-element SDD_channel08_xrf'].read()[0])  #  note channel number!
             datatable = numpy.array([s,])
         elif 'dante-1' in catalog[uid].metadata['start']['detectors']:
-            s.append(catalog[uid].primary.data['dante-1_image'][0][0])  #  note channel number!
+            s.append(catalog[uid].primary['dante-1_image'].read()[0][0])  #  note channel number!  works?
             datatable = numpy.array([s,])
         else:
             for i in range(1, nchan+1):
-                s.append(catalog[uid].primary.data[f'{nchan}-element SDD_channel0{i}_xrf'][0])
+                s.append(catalog[uid].primary[f'{nchan}-element SDD_channel0{i}_xrf'].read()[0])
             datatable = numpy.vstack(s)
 
         e=numpy.arange(0, len(s[0])) * 10

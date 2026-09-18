@@ -233,6 +233,7 @@ try:                            # might not be in use
     toss = ic0.Ia.describe()
     set_precision(ic0.current2.mean_value, 3)
     toss = ic0.Ib.describe()
+    ic0.capacitor_range.put(0)
     if with_ic0:
         ION_CHAMBERS.append(ic0)
 except Exception as E:
@@ -253,6 +254,7 @@ try:                            # might not be in use
     toss = ic1.Ia.describe()
     set_precision(ic1.current2.mean_value, 3)
     toss = ic1.Ib.describe()
+    ic1.capacitor_range.put(7)
     if with_ic1:
         ION_CHAMBERS.append(ic1)
 except:    
@@ -273,6 +275,7 @@ try:                            # might not be in use
     toss = ic2.Ia.describe()
     set_precision(ic2.current2.mean_value, 3)
     toss = ic2.Ib.describe()
+    ic1.capacitor_range.put(7)
     if with_ic2:
         ION_CHAMBERS.append(ic2)
 except:    
@@ -304,7 +307,6 @@ from bmm_tools.devices.axis_webcam import AxisCaprotoCam
 from BMM.user_ns.base import bmm_catalog, PROPOSALS, BMM
 
 import bmm_tools.tools.db
-bmm_tools.tools.db.bmm_catalog = bmm_catalog
 file_resource = bmm_tools.tools.db.file_resource
 show_snapshot = bmm_tools.tools.db.show_snapshot
 

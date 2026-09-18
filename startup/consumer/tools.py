@@ -96,7 +96,11 @@ def experiment_folder(catalog, uid, endstation='XAS'):
     else:
         proposal = fd['data_session']
     if 'XDI' in catalog[uid].metadata['start'] and 'Facility' in catalog[uid].metadata['start']['XDI']:
-        cycle = catalog[uid].metadata['start']['XDI']['Facility']['cycle']
+        if catalog[uid].metadata['start']['XDI']['Facility']['commissioning'] is True:
+            cycle = 'commissioning'
+        else:
+            cycle = catalog[uid].metadata['start']['XDI']['Facility']['cycle']            
+            
     else:
         if 'xas_cycle' in fd:
             cycle = fd['xas-cycle']
@@ -127,6 +131,13 @@ def file_resource(catalog, uid):
             if '_%d' in this or re.search(r'%\d\.\dd', this) is not None:
                 this = this % 0
             found.append(this)
+        elif d[0] == 'stream_resource':
+            uri = d[1]['uri']
+            f = uri.replace('file://localhost', '')
+            if f[-1] == '/':
+                f = f[:-1]
+            found.append(f)
+
     return found
 
 
@@ -253,7 +264,21 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
         print(f'last UID was {uid}')
 
     top = 0
-    t  = catalog[uid].primary.read() # ['data']
+
+    ## be sure that the stop document is written
+    t, count = None, 0
+    while t is None:
+        try:
+            t = catalog[uid].primary.read() # ['data']
+        except:
+            pass
+        if t is not None:
+            continue
+        count  += 1
+        if count >= 5:
+            return
+        time.sleep(1)
+        print("retrying table read in peakfit")
 
     if signal == 'I0':
         ylabel = 'I0'
@@ -356,6 +381,22 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
 def rectanglefit(catalog=None, uid=None, motor=None, signal='It', drop=None, aw=None):
 
     top = 0
+
+    ## be sure that the stop document is written
+    stopdoc, count = None, 0
+    while stopdoc is None:
+        try:
+            stopdoc = catalog[uid].stop
+        except:
+            pass
+        if stopdoc is not None:
+            continue
+        count  += 1
+        if count >= 5:
+            return
+        time.sleep(1)
+        print("retrying stopdoc query in peakfit")
+
     t  = catalog[uid].primary.read() # ['data']
     positions = numpy.array(t[motor])
     signal = signal.capitalize()
@@ -425,6 +466,23 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, ga=No
 
     target = 0
     t  = catalog[uid].primary.read() # ['data']
+
+    ## be sure that the stop document is written
+    stopdoc, count = None, 0
+    while stopdoc is None:
+        try:
+            stopdoc = catalog[uid].stop
+        except:
+            pass
+        if stopdoc is not None:
+            continue
+        count  += 1
+        if count >= 5:
+            return
+        time.sleep(1)
+        print("retrying stopdoc query in peakfit")
+
+    
     positions = numpy.array(t[motor])
     backwards = False
     if float(positions[-1]) < float(positions[0]):

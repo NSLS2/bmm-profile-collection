@@ -7,7 +7,7 @@ logger.setLevel('WARNING')
 
 import redis
 from nslsii.utils import open_redis_client
-from BMM.user_ns.base import startup_dir, profile_configuration, RE
+from BMM.user_ns.base import startup_dir, profile_configuration, RE, bmm_catalog
 from BMM.user_ns.kafka import kafka
 from BMM.workspace import initialize_workspace, rkvs, rkvs_keys
 initialize_workspace()
@@ -31,6 +31,9 @@ from BMM.logging import report, BMM_log_info, BMM_msg_hook#, BMMbot
 
 from bmm_tools.tools.misc   import now
 from bmm_tools.slack.bmmbot import BMMbot
+
+import bmm_tools.tools.db
+bmm_tools.tools.db.bmm_catalog = bmm_catalog
 
 from bluesky.preprocessors   import finalize_wrapper
 

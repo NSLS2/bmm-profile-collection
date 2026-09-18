@@ -26,8 +26,8 @@ def motor_metadata(uid=None):
                user_ns['m3'].yu, user_ns['m3'].ydo, user_ns['m3'].ydi, user_ns['m3'].xu, user_ns['m3'].xd,
                user_ns['m3'].vertical, user_ns['m3'].lateral, user_ns['m3'].pitch, user_ns['m3'].roll, user_ns['m3'].yaw,
                
-               user_ns['xafs_table'].yu, user_ns['xafs_table'].ydo, user_ns['xafs_table'].ydi, #user_ns['xafs_xu'], user_ns['xafs_xd'],
-               user_ns['xafs_table'].vertical, user_ns['xafs_table'].pitch, user_ns['xafs_table'].roll, 
+               user_ns['xafs_table'].yu, user_ns['xafs_table'].yd, # user_ns['xafs_table'].ydi, #user_ns['xafs_xu'], user_ns['xafs_xd'],
+               user_ns['xafs_table'].vertical, user_ns['xafs_table'].pitch, # user_ns['xafs_table'].roll, 
            )
     md = dict()
     table = None
@@ -90,10 +90,10 @@ def motor_status():
     text += ' DM3_foils: %7.3f mm      ' % md[user_ns['dm3_foils'].name]
     text += ' DM2_fs: %7.3f mm\n\n'      % md[user_ns['dm2_fs'].name]
 
-    text += ' XAFS table:\n      vertical  pitch    roll   YU     YDO     YDI\n'
-    text += '       %7.3f %7.3f %7.3f %7.3f %7.3f %7.3f\n\n' % \
-            (md[user_ns['xafs_table'].vertical.name], md[user_ns['xafs_table'].pitch.name], md[user_ns['xafs_table'].roll.name],
-             md[user_ns['xafs_table'].yu.name], md[user_ns['xafs_table'].ydo.name], md[user_ns['xafs_table'].ydi.name])
+    text += ' XAFS table:\n      vertical  pitch    YU     YD\n'
+    text += '       %7.3f %7.3f %7.3f %7.3f\n\n' % \
+            (md[user_ns['xafs_table'].vertical.name], md[user_ns['xafs_table'].pitch.name], # md[user_ns['xafs_table'].roll.name],
+             md[user_ns['xafs_table'].yu.name], md[user_ns['xafs_table'].yd.name]) #, md[user_ns['xafs_table'].ydi.name])
 
     text += ' XAFS stages (motor names are xafs_<name>, units mm or deg):\n'
     text += '     name =     x        y     pitch    wheel (slot)   ref\n'

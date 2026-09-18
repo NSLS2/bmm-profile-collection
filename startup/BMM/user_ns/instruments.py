@@ -380,7 +380,7 @@ xafs_ref.mapping = {'empty0': [0,  1, 'empty0', 'empty', True],
                     'U' :     [0, 24, 'Y',  'Y foil',  False],  # use Y K for U L3
                     'Pu':     [0, 16, 'Zr', 'Zr foil', False],  # use Zr K for Pu L3
                     'Am':     [0, 16, 'Zr', 'Zr foil', False],  # use Nb K for Am L3
-                    'Pm':     [0,  5, 'Mn', 'Mn metal powder', True],   # use Mn K for Pm L3
+                    'Pm':     [0,  5, 'Mn', 'Mn metal powder', False],   # use Mn K for Pm L3
 
                     'Ca':     [0,  1, '--', 'None', False],     # missing standard, no reserved slot
                     'Ir':     [0,  1, '--', 'None', False],     # missing standard, no reserved slot

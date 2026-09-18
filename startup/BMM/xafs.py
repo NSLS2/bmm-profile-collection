@@ -1114,18 +1114,38 @@ def xafs(inifile=None, **kwargs):
         print('Finishing up after an XAFS scan sequence')
         suspenders.clear_suspenders()
 
-        if not is_re_worker_active():
-            how = 'finished  :tada:'
-            try:
-                if 'primary' not in bmm_catalog[-1].metadata['stop']['num_events']:
-                    how = '*stopped*  :warning:'
-                elif bmm_catalog[-1].metadata['stop']['num_events']['primary'] != bmm_catalog[-1].metadata['start']['num_points']:
-                    how = '*stopped*  :warning:'
-            except:
-                how = '*stopped*  :warning:'
-        else:
-            how = 'finished or stopped on QS'
+        # if not is_re_worker_active():
 
+        #     ## be sure that the stop document is written
+        #     stopdoc, count = None, 0
+        #     while stopdoc is None:
+        #         try:
+        #             stopdoc = bmm_catalog[-1].stop
+        #         except:
+        #             pass
+        #         if stopdoc is not None:
+        #             continue
+        #         count  += 1
+        #         if count >= 8:
+        #             return
+        #         sleepfor = 2+0.125*2**count
+        #         print(f"sleeping for {sleepfor} sec. then retrying stopdoc query (end of xafs plan) ({count=})")
+        #         time.sleep(sleepfor)
+
+            
+        #     how = 'finished  :tada:'
+        #     try:
+        #         if 'primary' not in bmm_catalog[-1].metadata['stop']['num_events']:
+        #             how = '*stopped*  :warning:'
+        #         elif bmm_catalog[-1].metadata['stop']['num_events']['primary'] != bmm_catalog[-1].metadata['start']['num_points']:
+        #             how = '*stopped*  :warning:'
+        #     except:
+        #         how = '*stopped*  :warning:'
+        # else:
+        #     how = 'finished or stopped on QS'
+
+        how = 'finished'
+            
         if len(uidlist) > 0:
             basename = rkvs.get('BMM:dossier:basename').decode('utf-8')
             if basename is None:
@@ -1138,10 +1158,10 @@ def xafs(inifile=None, **kwargs):
                 
         if BMMuser.final_log_entry is True:
             report(f'== XAFS scan sequence {how}', level='bold', slack=True)
-            if not is_re_worker_active():
-                BMM_log_info(f'most recent uid = {bmm_catalog[-1].metadata["start"]["uid"]}, scan_id = {bmm_catalog[-1].metadata["start"]["scan_id"]}')
-            else:
-                pass
+            # if not is_re_worker_active():
+            #     BMM_log_info(f'most recent uid = {bmm_catalog[-1].metadata["start"]["uid"]}, scan_id = {bmm_catalog[-1].metadata["start"]["scan_id"]}')
+            # else:
+            #     pass
 
             kafka.message({'dossier' : 'set', 'uidlist' : uidlist, })
             time.sleep(3.0)

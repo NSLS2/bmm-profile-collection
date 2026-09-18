@@ -17,18 +17,18 @@ from PIL import Image
 from bmm_tools.tools.messages import error_msg, bold_msg, whisper
 from bmm_tools.tools.md       import proposal_base
 
-from BMM.user_ns.bmm       import kafka
-from BMM.logging           import report
-from BMM.modes             import get_mode, describe_mode
+from BMM.user_ns.bmm          import kafka
+from BMM.logging              import report
+from BMM.modes                import get_mode, describe_mode
 
-from bmm_tools.tools.misc import now
+from bmm_tools.tools.misc     import now
 from bmm_tools.tools.periodictable import edge_energy, Z_number, element_name
 
-from BMM.user_ns.base      import bmm_catalog
-from BMM.user_ns.bmm       import BMMuser
-from BMM.user_ns.detectors import with_cam1, with_cam2, with_cam7, with_cam8, with_cam9, with_webcam, with_anacam
-from BMM.user_ns.detectors import anacam, usb1, usb2, cam8, cam9, cam7, xascam
-from BMM.user_ns.dwelltime import use_7element, use_4element, use_1element
+from BMM.user_ns.base         import bmm_catalog
+from BMM.user_ns.bmm          import BMMuser
+from BMM.user_ns.detectors    import with_cam1, with_cam2, with_cam7, with_cam8, with_cam9, with_webcam, with_anacam
+from BMM.user_ns.detectors    import anacam, usb1, usb2, cam8, cam9, cam7, xascam
+from BMM.user_ns.dwelltime    import use_7element, use_4element, use_1element
 
 
 from BMM import user_ns as user_ns_module
@@ -233,13 +233,6 @@ class DossierTools():
             bold_msg('XAS webcam snapshot')
             webuid = yield from count([xascam], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
             self.websnap, self.webuid = websnap, webuid
-            kafka.message({'copy': True,
-                           'uuid': webuid,
-                           'target': os.path.join(proposal_base(), 'snapshots', websnap), })
-
-            if BMMuser.post_webcam:
-                kafka.message({'echoslack': True,
-                               'img': os.path.join(proposal_base(), 'snapshots', websnap)})
 
         ### --- analog camera using redgo dongle ------------------------------------------
         ###     this can only be read by a client on xf06bm-ws3, so... not QS on srv1
@@ -259,12 +252,6 @@ class DossierTools():
             whisper('The error text above saying "Error opening file for output:"')
             whisper('happens every time and does not indicate a problem of any sort.\n')
             self.anasnap, self.anauid = anasnap, anauid
-            kafka.message({'copy': True,
-                           'file': localfile,
-                           'target': os.path.join(proposal_base(), 'snapshots', anasnap), })
-            if BMMuser.post_anacam:
-                kafka.message({'echoslack': True,
-                               'img': os.path.join(proposal_base(), 'snapshots', anasnap)})
 
             
         ### --- USB camera #1 --------------------------------------------------------------
@@ -278,12 +265,6 @@ class DossierTools():
                                                               # this is a throwaway image in hopes of capturing a good one
             usb1uid = yield from count([usb1], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
             self.usb1snap, self.usb1uid = usb1snap, usb1uid
-            kafka.message({'copy': True,
-                           'uuid': usb1uid,
-                           'target': os.path.join(proposal_base(), 'snapshots', usb1snap), })
-            if BMMuser.post_usbcam1:
-                kafka.message({'echoslack': True,
-                               'img': os.path.join(proposal_base(), 'snapshots', usb1snap)})
 
         ### --- USB camera #2 --------------------------------------------------------------
         if with_cam2 is True:
@@ -294,12 +275,6 @@ class DossierTools():
             bold_msg('USB camera #2 snapshot')
             usb2uid = yield from count([usb2], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
             self.usb2snap, self.usb2uid = usb2snap, usb2uid
-            kafka.message({'copy': True,
-                           'uuid': usb2uid,
-                           'target': os.path.join(proposal_base(), 'snapshots', usb2snap), })
-            if BMMuser.post_usbcam2:
-                kafka.message({'echoslack': True,
-                               'img': os.path.join(proposal_base(), 'snapshots', usb2snap)})
        
         ### --- Mako camera 8 --------------------------------------------------------------
         if with_cam8 is True:
@@ -309,12 +284,6 @@ class DossierTools():
             bold_msg('GigE cam8 snapshot')
             cam8uid = yield from count([cam8], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
             self.cam8snap, self.cam8uid = cam8snap, cam8uid
-            kafka.message({'copy': True,
-                           'uuid': cam8uid,
-                           'target': os.path.join(proposal_base(), 'snapshots', cam8snap), })
-            if BMMuser.post_cam8:
-                kafka.message({'echoslack': True,
-                               'img': os.path.join(proposal_base(), 'snapshots', cam8snap)})
        
         ### --- Mako camera 9 --------------------------------------------------------------
         if with_cam9 is True:
@@ -324,12 +293,6 @@ class DossierTools():
             bold_msg('GigE cam9 snapshot')
             cam9uid = yield from count([cam9], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
             self.cam9snap, self.cam9uid = cam9snap, cam9uid
-            kafka.message({'copy': True,
-                           'uuid': cam9uid,
-                           'target': os.path.join(proposal_base(), 'snapshots', cam9snap), })
-            if BMMuser.post_cam9:
-                kafka.message({'echoslack': True,
-                               'img': os.path.join(proposal_base(), 'snapshots', cam9snap)})
        
         ### --- capture metadata for dossier -----------------------------------------------
         self.cameras_md = {'webcam_file': websnap,  'webcam_uid': webuid,
@@ -339,3 +302,56 @@ class DossierTools():
                            'cam8_file':   cam8snap, 'cam8_uid': cam8uid,
                            'cam9_file':   cam9snap, 'cam9_uid': cam9uid,
         }
+
+        ## move the images into the snapshots folder in the proposal folder
+        yield from sleep(2)
+        
+        if with_anacam and anacam is not None:
+            kafka.message({'copy': True,
+                           'file': localfile,
+                           'target': os.path.join(proposal_base(), 'snapshots', anasnap), })
+            if BMMuser.post_anacam:
+                kafka.message({'echoslack': True,
+                               'img': os.path.join(proposal_base(), 'snapshots', anasnap)})
+
+        if with_cam1:
+            kafka.message({'copy': True,
+                           'uuid': usb1uid,
+                           'target': os.path.join(proposal_base(), 'snapshots', usb1snap), })
+            if BMMuser.post_usbcam1:
+                kafka.message({'echoslack': True,
+                               'img': os.path.join(proposal_base(), 'snapshots', usb1snap)})
+
+        if with_cam2:
+            kafka.message({'copy': True,
+                           'uuid': usb2uid,
+                           'target': os.path.join(proposal_base(), 'snapshots', usb2snap), })
+            if BMMuser.post_usbcam2:
+                kafka.message({'echoslack': True,
+                               'img': os.path.join(proposal_base(), 'snapshots', usb2snap)})
+
+        if with_cam8:
+            kafka.message({'copy': True,
+                           'uuid': cam8uid,
+                           'target': os.path.join(proposal_base(), 'snapshots', cam8snap), })
+            if BMMuser.post_cam8:
+                kafka.message({'echoslack': True,
+                               'img': os.path.join(proposal_base(), 'snapshots', cam8snap)})
+
+        if with_cam9:
+            kafka.message({'copy': True,
+                           'uuid': cam9uid,
+                           'target': os.path.join(proposal_base(), 'snapshots', cam9snap), })
+            if BMMuser.post_cam9:
+                kafka.message({'echoslack': True,
+                               'img': os.path.join(proposal_base(), 'snapshots', cam9snap)})
+
+        if with_webcam:
+            kafka.message({'copy': True,
+                           'uuid': webuid,
+                           'target': os.path.join(proposal_base(), 'snapshots', websnap), })
+
+            if BMMuser.post_webcam:
+                kafka.message({'echoslack': True,
+                               'img': os.path.join(proposal_base(), 'snapshots', websnap)})
+                

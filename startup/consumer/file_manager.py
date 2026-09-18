@@ -14,15 +14,15 @@ from bluesky_kafka.consume import BasicConsumer
 import nslsii
 import nslsii.kafka_utils
 
-from tools import echo_slack, next_index, file_exists, profile_configuration, rkvs, facility_dict
+from tools import echo_slack, next_index, file_exists, profile_configuration, rkvs, facility_dict, experiment_folder
 from slack import img_to_slack, post_to_slack, refresh_slack, describe_slack, test_slack
 from nslsii.utils import open_redis_client
 
 import bmm_tools.tools.db
 
 from tiled.client import from_profile, from_uri
-bmm_catalog = from_profile('bmm')
-#bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
+#bmm_catalog = from_profile('bmm')
+bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
 bmm_tools.tools.db.bmm_catalog = bmm_catalog
 from bmm_tools.tools.db import file_resource
 
@@ -204,6 +204,8 @@ def manage_files_from_kafka_messages(beamline_acronym):
                 _end_station = 'xas'
                 if '_end_station' in message:
                     _end_station = message['_end_station']
+
+                print(experiment_folder(bmm_catalog))
                 fd = facility_dict(_end_station)
                 print(os.path.join(profile_configuration['services']['proposals'], fd['cycle'], fd['data_session']))
 
@@ -225,27 +227,32 @@ def manage_files_from_kafka_messages(beamline_acronym):
                     logger.info(f'made directory {message["mkdir"]}')
 
             elif 'copy' in message:
-                if 'file' in message:
+                source = None
+                if 'file' in message:  # copying a local file to proposal folder
                     source = message['file']
-                elif 'uuid' in message:
-                    print(message['uuid'])
-                    found = file_resource(message['uuid'])
-                    print(found)
-                    # record = bmm_catalog[message['uuid']]
-                    # docs = record.documents()
-                    # found = []
-                    # for d in docs:
-                    #     if d[0] == 'resource':
-                    #         this = os.path.join(d[1]['root'], d[1]['resource_path'])
-                    #         if '_%d' in this or re.search(r'%\d\.\dd', this) is not None:
-                    #             this = this % 0
-                    #         found.append(this)
-                    source = found[0]
-                    #uuid = True
-                target = message['target']
-                shutil.copy(source, target)
-                logger.info(f'copied {source} to {target}')
+                elif 'uuid' in message:  # copying a data resource elsewhere in proposal folder (e.g. camera snapshots)
+                    print(f"  uid = {message['uuid']}")
+                    count, found = 0, []
+                    while found == []:
+                        found = file_resource(message['uuid'])
+                        count += 1
+                        if count >= 6:
+                            continue
+                        time.sleep(0.5*2**count)
+                        print(f'  (try #{count} to copy file to {message["target"]}')
+                    if len(found) > 0:
+                        print(f'  {found = }')
+                        source = found[0]
+                        #uuid = True
 
+                if source is not None:
+                    target = message['target']
+                    shutil.copy(source, target)
+                    logger.info(f'copied {source} to {target}')
+                else:
+                    logger.info('could not find requested file')
+                        
+                        
 
             elif 'touch' in message:
                 target = message['touch']
