@@ -1313,7 +1313,7 @@ def search_for_optimal_positions(
         if checkpoint_root is not None:
             checkpoint_root.mkdir(parents=True, exist_ok=True)
 
-        if resume:
+        if energy_map_filename:
             existing_energy_map = _read_energy_map(energy_map_filename)
             energy_map = {
                 energy: existing_energy_map[energy]
@@ -1322,8 +1322,6 @@ def search_for_optimal_positions(
             }
         else:
             energy_map: dict[str, Any] = {}
-            if energy_map_filename is not None:
-                _write_energy_map(energy_map_filename, energy_map)
 
         pending_energies = [
             energy for energy in requested_energies if energy not in energy_map
