@@ -74,7 +74,7 @@ def _primary_data(run: Any) -> Any:
     return run["primary"]
 
 
-_TILED_POLL_ATTEMPTS = 50
+_TILED_POLL_ATTEMPTS = 100
 _TILED_POLL_DELAY_S = 1.0
 
 
@@ -208,7 +208,7 @@ XAS_SI111_ALIGNMENT = EnergyAlignmentProfile(
     name="xas-si111",
     camera="cam9",
     search_half_widths=MappingProxyType(
-        {"dcm_roll": 1.0, "m2_yaw": 0.35, "m2_lateral": 0.35}
+        {"dcm_roll": 1.0, "m2_yaw": 0.5, "m2_lateral": 0.5}
     ),
     evaluation=BeamEvaluationConfig(
         image_field="cam-9_image",
@@ -226,9 +226,9 @@ XAS_SI111_ALIGNMENT = EnergyAlignmentProfile(
     ),
     minimum_intensity_fraction=0.5,
     optimization=OptimizationConfig(
-        iterations=20,
-        initialization_budget=5,
-        initialize_with_center=False,
+        iterations=100,
+        initialization_budget=25,
+        initialize_with_center=True,
     ),
     change_edge_kwargs=MappingProxyType(
         {"focus": True, "no_hslits": True, "mirror": False}
@@ -1424,6 +1424,10 @@ def search_for_optimal_positions(
             if energy_map_filename is not None:
                 _write_energy_map(energy_map_filename, energy_map)
             yield from checkpoint()
+            try:
+                yield from agent.navigate_to_best()
+            except Exception as e:
+                print("Failed to navigate to the best point. Continuing...")
 
         print(f"energy_map={energy_map}")
         return energy_map
