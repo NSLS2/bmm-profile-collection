@@ -769,6 +769,8 @@ class ImageEvaluation:
                     data[self.parameters.intensity_field].read(), dtype=np.float64
                 ).squeeze()
             )
+            if acquired_images.shape[0] == 0:
+                raise ValueError(f"Empty initial dimension: {acquired_images.shape}")
             return run, acquired_images, intensities
 
         run, acquired_images, intensities = _poll_tiled_read(
