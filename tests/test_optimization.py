@@ -1932,6 +1932,8 @@ def test_compute_alignment_cost_matches_reference_formula():
         reference_centroid_x=100.0,
         fwhm_x=10.0,
         reference_fwhm_x=10.0,
+        fwhm_y=10.0,
+        reference_fwhm_y=10.0,
         intensity=100.0,
         reference_intensity=100.0,
         dof_values={"motor": 0.5},
@@ -1948,6 +1950,8 @@ def test_compute_alignment_cost_increases_with_offset_and_dof_deviation():
         reference_centroid_x=100.0,
         fwhm_x=10.0,
         reference_fwhm_x=10.0,
+        fwhm_y=10.0,
+        reference_fwhm_y=10.0,
         reference_intensity=100.0,
         nominal_dof_values={"motor": 0.0},
         dof_half_ranges={"motor": 10.0},
@@ -1965,9 +1969,16 @@ def test_compute_alignment_cost_increases_with_offset_and_dof_deviation():
     low_intensity = compute_alignment_cost(
         centroid_x=100.0, intensity=50.0, dof_values={"motor": 0.0}, **fixed
     )
+    off_y_focus = compute_alignment_cost(
+        centroid_x=100.0,
+        intensity=100.0,
+        dof_values={"motor": 0.0},
+        **{**fixed, "fwhm_y": 20.0},
+    )
     assert off_position > aligned
     assert off_nominal > aligned
     assert low_intensity > aligned
+    assert off_y_focus > aligned
 
 
 def test_compute_alignment_cost_normalizes_intensity_by_energy_baseline():
@@ -1976,6 +1987,8 @@ def test_compute_alignment_cost_normalizes_intensity_by_energy_baseline():
         reference_centroid_x=100.0,
         fwhm_x=10.0,
         reference_fwhm_x=10.0,
+        fwhm_y=10.0,
+        reference_fwhm_y=10.0,
         dof_values={"motor": 0.0},
         nominal_dof_values={"motor": 0.0},
         dof_half_ranges={"motor": 10.0},
@@ -2010,6 +2023,8 @@ def test_compute_alignment_cost_rejects_invalid_intensity_reference(
             reference_centroid_x=100.0,
             fwhm_x=10.0,
             reference_fwhm_x=10.0,
+            fwhm_y=10.0,
+            reference_fwhm_y=10.0,
             intensity=100.0,
             reference_intensity=reference_intensity,
             dof_values={"motor": 0.0},

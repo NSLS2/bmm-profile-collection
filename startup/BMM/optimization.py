@@ -505,6 +505,8 @@ def compute_alignment_cost(
     reference_centroid_x: float,
     fwhm_x: float,
     reference_fwhm_x: float,
+    fwhm_y: float,
+    reference_fwhm_y: float,
     intensity: float,
     reference_intensity: float,
     dof_values: Mapping[str, float],
@@ -515,15 +517,17 @@ def compute_alignment_cost(
     """Scalar per-energy alignment objective (smaller is better).
 
     Combines four dimensionless terms: horizontal position error relative to the
-    reference spot, horizontal focus (width ratio), per-energy intensity loss
-    relative to that energy's baseline, and a Tikhonov penalty pulling each DOF
-    toward its manually-aligned nominal, normalized by the actual search
-    half-range so mrad and mm deviations are comparable without camera
-    calibration.
+    reference spot, beam focus (the mean of the horizontal and vertical width
+    ratios), per-energy intensity loss relative to that energy's baseline, and a
+    Tikhonov penalty pulling each DOF toward its manually-aligned nominal,
+    normalized by the actual search half-range so mrad and mm deviations are
+    comparable without camera calibration.
     """
     dx = abs(centroid_x - reference_centroid_x)
     position_term = (dx / config.position_tolerance_px) ** 2
-    focus_term = config.focus_weight * (fwhm_x / reference_fwhm_x)
+    focus_term = config.focus_weight * 0.5 * (
+        (fwhm_x / reference_fwhm_x) + (fwhm_y / reference_fwhm_y)
+    )
     ratio = _intensity_ratio(intensity, reference_intensity)
     if not np.isfinite(ratio):
         return float("nan")
@@ -731,6 +735,7 @@ class ImageEvaluation:
         self.reference_centroid_x = reference_stats.centroid_x
         self.reference_centroid_y = reference_stats.centroid_y
         self.reference_fwhm_x = reference_stats.fwhm_x
+        self.reference_fwhm_y = reference_stats.fwhm_y
 
     @property
     def intensity_reference(self) -> float | None:
@@ -849,6 +854,8 @@ class ImageEvaluation:
                         reference_centroid_x=self.reference_centroid_x,
                         fwhm_x=stats.fwhm_x,
                         reference_fwhm_x=self.reference_fwhm_x,
+                        fwhm_y=stats.fwhm_y,
+                        reference_fwhm_y=self.reference_fwhm_y,
                         intensity=intensity,
                         reference_intensity=self._intensity_reference,
                         dof_values=dof_values,
