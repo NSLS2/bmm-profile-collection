@@ -45,7 +45,7 @@ def tune(step=0):
     Tune 2nd crystal pitch from the command line.  Argument is a value for the step, so a relative motion.
     '''
     dcm.pitch.kill_cmd.put(1)
-    dcm.pitch.user_setpoint.put(dcm_pitch.user_readback.get() + step)
+    dcm.pitch.user_setpoint.put(dcm.pitch.user_readback.get() + step)
     time.sleep(2.0)
     dcm.pitch.kill_cmd.put(1)
 def tu():

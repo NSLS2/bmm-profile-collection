@@ -173,71 +173,59 @@ class Pandrosus():
             record = self.db[self.uid]
             header = record.metadata
             start = header['start']
-            table  = record.primary['data']  # .read()
+            table  = record.primary
             
-        self.group.energy = numpy.array(table['dcm_energy'])
-        self.group.i0 = numpy.array(table['I0'])
+        self.group.energy = table['dcm_energy'].read()
+        self.group.i0 = table['I0'].read()
         #if mode in ('flourescence', 'xs', 'xs1', 'fluo', 'flou', 'both'): mode = 'fluorescence'
         if mode == 'reference':
-            self.group.mu = numpy.log(numpy.array(table['It'])/numpy.array(table['Ir']))
-            self.group.i0 = numpy.array(table['It'])
-            self.group.signal = numpy.array(table['Ir'])
+            self.group.mu = numpy.log(table['It'].read()/table['Ir'].read())
+            self.group.i0 = table['It'].read()
+            self.group.signal = table['Ir'].read()
 
         #######################################################################################
         # CAUTION!!  This only works when BMMuser is correctly set.  This is unlikely to work #
         # on data in past history.  See new '_dtc' element of start document.  9 Sep 2020     #
         #######################################################################################
         elif mode in ('yield', 'fluo+yield'):
-            self.group.mu = numpy.array(table['Iy'])/numpy.array(table['I0'])
-            self.group.i0 = numpy.array(table['I0'])
-            self.group.signal = numpy.array(table['Iy'])
+            self.group.mu = table['Iy'].read()/table['I0'].read()
+            self.group.i0 = table['I0'].read()
+            self.group.signal = table['Iy'].read()
 
         elif mode in ('pips'):
-            self.group.mu = numpy.array(table['Pips'])/numpy.array(table['I0'])
-            self.group.i0 = numpy.array(table['I0'])
-            self.group.signal = numpy.array(table['Pips'])
+            self.group.mu = table['Pips'].read()/table['I0'].read()
+            self.group.i0 = table['I0'].read()
+            self.group.signal = table['Pips'].read()
 
         elif mode in ('fluorescence', 'flourescence', 'fluo', 'flou', 'xs', 'xs1', 'xs4', 'xs7', 'both'):
             columns = start['XDI']['_dtc']
             if self.verbose:
                 print(columns)
-            self.group.i0 = numpy.array(table['I0'])
+            self.group.i0 = table['I0'].read()
             self.group.signal = numpy.zeros(len(self.group.i0))
             for col in columns:
-                self.group.signal += numpy.array(table[col])
+                self.group.signal += table[col].read()
             self.group.mu = self.group.signal / self.group.i0
 
         elif mode in ('icit', 'ici0'):
             if mode == 'icit':
-                self.group.mu = numpy.log(numpy.array(table['I0'])/numpy.array(table['I0a']))
-                self.group.i0 = numpy.array(table['I0'])
-                self.group.signal = numpy.array(table['I0a'])
+                self.group.mu = numpy.log(table['I0'].read()/table['I0a'].read())
+                self.group.i0 = table['I0'].read()
+                self.group.signal = table['I0a'].read()
             elif mode == 'icit':
-                self.group.mu = numpy.log(numpy.array(table['I0a'])/numpy.array(table['It']))
-                self.group.i0 = numpy.array(table['I0a'])
-                self.group.signal = numpy.array(table['It'])
-
-        # elif mode == 'xs1':
-        #     columns = start['XDI']['_dtc']
-        #     self.group.mu = numpy.array(table[columns[0]]/table['I0'])
-        #     self.group.i0 = numpy.array(table['I0'])
-        #     self.group.signal = numpy.array(table[columns[0]])
-
-        # elif mode == 'xs':
-        #     columns = start['XDI']['_dtc']
-        #     self.group.mu = numpy.array((table[columns[0]]+table[columns[1]]+table[columns[2]]+table[columns[3]])/table['I0'])
-        #     self.group.i0 = numpy.array(table['I0'])
-        #     self.group.signal = numpy.array(table[columns[0]]+table[columns[1]]+table[columns[2]]+table[columns[3]])
+                self.group.mu = numpy.log(table['I0a'].read()/table['It'].read())
+                self.group.i0 = table['I0a'].read()
+                self.group.signal = table['It'].read()
 
         elif mode == 'ref':
-            self.group.mu = numpy.log(numpy.array(table['It'])/numpy.array(table['Ir']))
-            self.group.i0 = numpy.array(table['It'])
-            self.group.signal = numpy.array(table['Ir'])
+            self.group.mu = numpy.log(table['It'].read()/table['Ir'].read())
+            self.group.i0 = table['It'].read()
+            self.group.signal = table['Ir'].read()
 
         else:
-            self.group.mu = numpy.log(numpy.array(table['I0'])/numpy.array(table['It']))
-            self.group.i0 = numpy.array(table['I0'])
-            self.group.signal = numpy.array(table['It'])
+            self.group.mu = numpy.log(table['I0'].read()/table['It'].read())
+            self.group.i0 = table['I0'].read()
+            self.group.signal = table['It'].read()
 
         # why does self.group.signal get lost? weird....
         #print(self.group.signal)
@@ -245,17 +233,17 @@ class Pandrosus():
 
 
     def make_ref(self, uid):
-        if 'v1' in str(type(self.db)):  # v1 databroker
+        if 'v1' in str(type(self.db)):  # v1 databroker  (probably won't work correctly ... was .read() a thing back then?)
             header = self.db[uid]
             start = header.start
             table  = header.table()
         else:                               # tiled catalog
             header = self.db[uid].metadata
             start = header['start']
-            table  = self.db[uid].primary['data']  # .read()
+            table  = self.db[uid].primary
             
-        self.group.energy = numpy.array(table['dcm_energy'])
-        self.group.reference = numpy.log(numpy.array(table['It'])/numpy.array(table['Ir']))
+        self.group.energy = table['dcm_energy'].read()
+        self.group.reference = numpy.log(table['It'].read()/table['Ir'].read())
 
             
     def fetch(self, uid, name=None, mode='transmission', working_folder=None):

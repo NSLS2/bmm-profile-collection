@@ -11,6 +11,7 @@ import sys, re
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
+from BMM.user_ns.base        import RE
 from BMM.user_ns.bmm         import BMMuser
 from BMM.user_ns.dcm         import dcm
 from BMM.user_ns.instruments import m2, m3, m2_bender, xafs_ref
@@ -143,6 +144,9 @@ def bmm_metadata(measurement   = 'transmission',
     md['Facility']['GUP']            = BMMuser.gup
     md['Facility']['SAF']            = BMMuser.saf
     md['Facility']['cycle']          = BMMuser.cycle
+    md['Facility']['commissioning']  = False
+    if RE.md['cycle'] == 'commissioning':
+        md['Facility']['commissioning']  = True
     md['Sample']['name']             = sample
     md['Sample']['prep']             = prep
     #md['XDI']['Sample']['x_position']       = xafs_x.user_readback.get()

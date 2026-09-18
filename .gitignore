@@ -1,6 +1,7 @@
 history.sqlite
 *.save
 *~
+*.nfs*
 static/
 security/
 db/

@@ -1,9 +1,10 @@
-import os, sys, re, socket, json, datetime, pathlib, uuid
+import os, sys, re, socket, json, datetime, pathlib, uuid, time
 from urllib.parse import quote
 import numpy, pandas, openpyxl
 from scipy.io import savemat
 from bluesky import __version__ as bluesky_version
 import traceback
+import stamina
 
 from databroker.queries import TimeRange
 from tiled.queries import FullText, Regex, Eq
@@ -322,32 +323,32 @@ class BMMDossier():
                 el = XDI['Element']['symbol']
                 if 'xrf_uid' in XDI['_snapshots']:
                     if '4-element SDD' in bmm_catalog[self.uidlist[0]].start['detectors']:
-                        rois = [int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'1'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'2'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'3'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'4'][0])]
-                        ocrs = [int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['4-element SDD_channel01_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['4-element SDD_channel02_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['4-element SDD_channel03_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['4-element SDD_channel04_xrf']).sum()) ]
+                        rois = [int(bmm_catalog[snapshots['xrf_uid']].primary[el+'1'][0]),
+                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'2'][0]),
+                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'3'][0]),
+                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'4'][0])]
+                        ocrs = [int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['4-element SDD_channel01_xrf']).sum()),
+                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['4-element SDD_channel02_xrf']).sum()),
+                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['4-element SDD_channel03_xrf']).sum()),
+                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['4-element SDD_channel04_xrf']).sum()) ]
                     elif '1-element SDD' in bmm_catalog[self.uidlist[0]].start['detectors']:
-                        rois = [int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'8'][0]),]
-                        ocrs = [int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['1-element SDD_channel08_xrf']).sum()),]
+                        rois = [int(bmm_catalog[snapshots['xrf_uid']].primary[el+'8'][0]),]
+                        ocrs = [int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['1-element SDD_channel08_xrf']).sum()),]
                     elif '7-element SDD' in bmm_catalog[self.uidlist[0]].start['detectors']:
-                        rois = [int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'1'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'2'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'3'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'4'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'5'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'6'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary.data[el+'7'][0]) ]
-                        ocrs = [int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['7-element SDD_channel01_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['7-element SDD_channel02_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['7-element SDD_channel03_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['7-element SDD_channel04_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['7-element SDD_channel05_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['7-element SDD_channel06_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary.data['7-element SDD_channel07_xrf']).sum()) ]
+                        rois = [int(bmm_catalog[snapshots['xrf_uid']].primary[el+'1'][0]),
+                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'2'][0]),
+                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'3'][0]),
+                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'4'][0]),
+                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'5'][0]),
+                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'6'][0]),
+                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'7'][0]) ]
+                        ocrs = [int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel01_xrf']).sum()),
+                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel02_xrf']).sum()),
+                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel03_xrf']).sum()),
+                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel04_xrf']).sum()),
+                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel05_xrf']).sum()),
+                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel06_xrf']).sum()),
+                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel07_xrf']).sum()) ]
 
                     with open(os.path.join(startup_dir, 'consumer', 'tmpl', 'dossier_xrf_image.tmpl')) as f:
                         content = f.readlines()
@@ -536,7 +537,7 @@ class BMMDossier():
     def mono_text(self, bmm_catalog):
         '''Text explaining the monochromator used for the measurement.  This
         is computed from motor values in the baseline.'''
-        dcmx = bmm_catalog[self.uidlist[0]].baseline.data['dcm_x'][0]
+        dcmx = float(bmm_catalog[self.uidlist[0]].baseline['dcm_x'].read()[0])
         if dcmx > 10:
             return 'Si(311)'
         elif bmm_catalog[self.uidlist[0]].start['XDI']['_user']['ththth'] is True:
@@ -548,11 +549,11 @@ class BMMDossier():
     def pdstext(self, bmm_catalog):
         '''Text explaining the photon delivery mode used for the measurement.
         This is computed from motor values in the baseline.'''
-        m2v = bmm_catalog[self.uidlist[0]].baseline.data['m2_vertical'][0]
-        m2p = bmm_catalog[self.uidlist[0]].baseline.data['m2_pitch'][0]
-        m3p = bmm_catalog[self.uidlist[0]].baseline.data['m3_pitch'][0]
-        m3v = bmm_catalog[self.uidlist[0]].baseline.data['m3_vertical'][0]
-        m3l = bmm_catalog[self.uidlist[0]].baseline.data['m3_lateral'][0]
+        m2v = float(bmm_catalog[self.uidlist[0]].baseline['m2_vertical'][0])
+        m2p = float(bmm_catalog[self.uidlist[0]].baseline['m2_pitch'][0])
+        m3p = float(bmm_catalog[self.uidlist[0]].baseline['m3_pitch'][0])
+        m3v = float(bmm_catalog[self.uidlist[0]].baseline['m3_vertical'][0])
+        m3l = float(bmm_catalog[self.uidlist[0]].baseline['m3_lateral'][0])
         if m2v < 0: # this is a focused mode
             if m2p > 3:
                 return ('XRD', 'focused at goniometer, >8 keV')
@@ -665,7 +666,7 @@ class BMMDossier():
 {content}            </div>
 '''
         for m in motorlist:
-            content += self. motor_entry(baseline, m)
+            content += self.motor_entry(baseline, m)
         text = tmpl.format(title = title,
                            content = content)
         return text
@@ -710,7 +711,7 @@ class BMMDossier():
         motorlist = ('m3_vertical', 'm3_lateral', 'm3_pitch', 'm3_roll', 'm3_yaw', 'm3_yu', 'm3_ydo', 'm3_ydi', 'm3_xu', 'm3_xd')
         motors += self.motor_paragrph(baseline, f'M3 {stripe}', motorlist)
 
-        motorlist = ('xt_vertical', 'xt_pitch', 'xt_roll', 'xt_yu', 'xt_ydo', 'xt_ydi')
+        motorlist = ('xt_vertical', 'xt_pitch', 'xt_yu', 'xt_yd')
         motors += self.motor_paragrph(baseline, 'XAFS table', motorlist)
 
         motorlist = ('slits2_vsize', 'slits2_vcenter', 'slits2_hsize', 'slits2_hcenter', 'slits2_top', 'slits2_bottom', 'slits2_inboard', 'slits2_outboard')
@@ -816,10 +817,10 @@ class BMMDossier():
         motors +=  '            <div id="motorgrid">\n'
         motors += f'              <div>xt_vertical, {baseline["xafs_table_vertical"][0]:.3f}</div>\n'
         motors += f'              <div>xt_pitch, {baseline["xafs_table_pitch"][0]:.3f}</div>\n'
-        motors += f'              <div>xt_roll, {baseline["xafs_table_roll"][0]:.3f}</div>\n'
+        #motors += f'              <div>xt_roll, {baseline["xafs_table_roll"][0]:.3f}</div>\n'
         motors += f'              <div>xt_yu, {baseline["xafs_table_yu"][0]:.3f}</div>\n'
-        motors += f'              <div>xt_ydo, {baseline["xafs_table_ydo"][0]:.3f}</div>\n'
-        motors += f'              <div>xt_ydi, {baseline["xafs_table_ydi"][0]:.3f}</div>\n'
+        motors += f'              <div>xt_yd, {baseline["xafs_table_yd"][0]:.3f}</div>\n'
+        #motors += f'              <div>xt_ydi, {baseline["xafs_table_ydi"][0]:.3f}</div>\n'
         motors +=  '            </div>\n'
 
 
@@ -1185,8 +1186,41 @@ class XASFile():
                 if precision is not None:  # add precision if needed
                     value = round(float(value), precision)
                 handle.write(f'# {family}.{k}: {value} {unit}\n')
-        start = datetime.datetime.fromtimestamp(r.start['time']).strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
-        end   = datetime.datetime.fromtimestamp(r.stop['time']).strftime("%Y-%m-%dT%H:%M:%S")  # '%A, %d %B, %Y %I:%M %p')
+
+
+        # end = 'unavailable'
+        # #for attempt in stamina.retry_context
+                
+        # ## be sure that the stop document is written
+        # stopdoc = None
+        # try:
+        #     stopdoc = metadata['stop']
+        # except:
+        #     pass
+        # count = 0
+        # while type(stopdoc) != dict or 'time' not in stopdoc:
+        #     count  += 1
+        #     if count >= 6:
+        #         continue
+        #     print(f"retrying stopdoc query in to_xdi ({count})")
+        #     sleepfor = 0.5*2**count
+        #     if sleepfor > 8.1:
+        #         sleepfor = 8
+        #     time.sleep(sleepfor)
+        #     try:
+        #         stopdoc = metadata['stop']
+        #     except:
+        #         pass
+        #     print(stopdoc)
+            
+
+        start  = datetime.datetime.fromtimestamp(r.start['time']).strftime("%Y-%m-%dT%H:%M:%S")
+        end = 'approximately ' + datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        # try:
+        #     end = datetime.datetime.fromtimestamp(r.stop['time']).strftime("%Y-%m-%dT%H:%M:%S")
+        # except:
+        #     end = 'unavailable'
+
         handle.write(f'# Scan.start_time: {start}\n')
         handle.write(f'# Scan.end_time: {end}\n')
         handle.write(f'# Scan.uid: {uid}\n')

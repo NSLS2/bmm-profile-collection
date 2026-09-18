@@ -1,3 +1,6 @@
+
+from ophyd import EpicsMotor
+
 from BMM.functions import run_report
 run_report(__file__, text='Monochromator definitions')
 
@@ -16,9 +19,7 @@ from ophyd.sim import SynAxis
 TAB = '\t\t\t'
 
 dcm = False
-#from BMM.dcm import DCM
 from bmm_tools.devices.dcm import DCM
-#from BMM.user_ns.motors import dcm_x
 
 dcm = DCM('XF:06BMA-OP{Mono:DCM1-Ax:', name='dcm', crystal='111')
 dcm.roll_111 = profile_configuration['dcm']['roll_111']
@@ -69,16 +70,9 @@ if dcm.connected is True:
     else:
         dcm.set_crystal('111')
     
-# else:
-#     dcm.bragg = SynAxis(name='dcm_bragg')
-#     dcm.pitch = SynAxis(name='dcm_pitch')
-#     dcm.roll  = SynAxis(name='dcm_roll')
-#     dcm.perp  = SynAxis(name='dcm_perp')
-#     dcm.para  = SynAxis(name='dcm_para')
-#     dcm.x     = SynAxis(name='dcm_x')
-#     dcm.y     = SynAxis(name='dcm_y')
     
 dcmlist = [dcm.bragg, dcm.pitch, dcm.roll, dcm.perp, dcm.para, dcm.x, dcm._y]
 mcs8_motors.extend(dcmlist)
 examine_fmbo_motor_group(dcmlist)
+
 
