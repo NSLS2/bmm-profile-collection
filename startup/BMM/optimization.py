@@ -74,7 +74,7 @@ def _primary_data(run: Any) -> Any:
     return run["primary"]
 
 
-_TILED_POLL_ATTEMPTS = 10
+_TILED_POLL_ATTEMPTS = 50
 _TILED_POLL_DELAY_S = 1.0
 
 
@@ -212,8 +212,8 @@ XAS_SI111_ALIGNMENT = EnergyAlignmentProfile(
     evaluation=BeamEvaluationConfig(
         image_field="cam-9_image",
         intensity_field="I0",
-        x_crop=(900, 1040),
-        y_crop=None,
+        x_crop=(600, 800),
+        y_crop=(550, 850),
         blur_sigma=2.0,
         upscale_factor=4,
     ),
@@ -1293,23 +1293,9 @@ def search_for_optimal_positions(
                     _write_agent_checkpoint(agent, agent_checkpoint)
                 yield from checkpoint()
 
-            if agent_checkpoint is None:
-                if requested_iterations:
-                    yield from agent.optimize(requested_iterations)
-                    yield from checkpoint()
-            else:
-                for first_iteration in range(
-                    0,
-                    requested_iterations,
-                    checkpoint_interval,
-                ):
-                    chunk_iterations = min(
-                        checkpoint_interval,
-                        requested_iterations - first_iteration,
-                    )
-                    yield from agent.optimize(chunk_iterations)
-                    _write_agent_checkpoint(agent, agent_checkpoint)
-                    yield from checkpoint()
+            yield from agent.optimize(requested_iterations)
+            agent.checkpoint()
+            yield from checkpoint()
 
             best_points = agent.get_best_points()
             print(f"best point for {energy} is {best_points}")

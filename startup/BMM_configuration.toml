@@ -73,7 +73,7 @@ anacam_description      = "set to true to record analog pinhole camera  <good ni
 cam8                    = true
 cam8_description        = "set to true to record Mako cam8"
 
-cam9                    = false
+cam9                    = true
 cam9_description        = "set to true to record Mako cam9"
 
 cam7                    = true
