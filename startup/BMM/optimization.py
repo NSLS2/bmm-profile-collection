@@ -208,7 +208,7 @@ XAS_SI111_ALIGNMENT = EnergyAlignmentProfile(
     name="xas-si111",
     camera="cam9",
     search_half_widths=MappingProxyType(
-        {"dcm_roll": 1.0, "m2_yaw": 0.25, "m2_lateral": 0.25}
+        {"dcm_roll": 1.0, "m2_yaw": 0.35, "m2_lateral": 0.35}
     ),
     evaluation=BeamEvaluationConfig(
         image_field="cam-9_image",
