@@ -182,7 +182,7 @@ def plot_rectanglescan(bmm_catalog, uid):
 def plot_areascan(bmm_catalog, uid):
     record = bmm_catalog[uid]
     if finished(record) is False: return
-    hint = record.metadata['start']['plan_name']
+    hint = record.metadata['start']['BMM_kafka']['hint']
     if checkhint(hint, 'areascan') is False: return
     detector, slow, fast, contour, log, energy = hint.split()[1:]
     pngout = record.metadata['start']['BMM_kafka']['pngout']

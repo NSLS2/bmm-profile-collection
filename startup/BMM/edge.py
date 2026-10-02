@@ -13,14 +13,14 @@ from bluesky.preprocessors import finalize_wrapper
 
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
-from bmm_tools.optics.dcm_parameters import approximate_pitch
+from bmm_tools.optics.dcm_parameters import approximate_pitch, predict_roll
 
 from BMM.exceptions    import FailedDCMParaException, ArrivedInModeException
 from BMM.logging       import BMM_log_info, BMM_msg_hook, report
 from BMM.user_ns.bmm   import kafka
 from BMM.wheel         import show_reference_wheel
 from BMM.modes         import change_mode, get_mode, pds_motors_ready, MODEDATA
-from BMM.linescans     import rocking_curve, slit_height, mirror_pitch, wiggle_bct, hcenter
+from BMM.linescans     import rocking_curve, slit_height, mirror_pitch, wiggle_bct, hcenter, dcmroll
 from BMM.resting_state import resting_state_plan
 from BMM.workspace     import rkvs, wa
 
@@ -174,6 +174,7 @@ def correct_table_yu(energy=None, mode='A'):
         energy = float(dcm.energy.position)
     return(energy*m + b)
 
+
         
 def xrd_mode(energy=8600):
      '''Thin wrapper around change_edge() to prepare for XRD measurements.
@@ -191,10 +192,10 @@ def quick_change(el, focus=False, edge='K', target=300., reference=False):
 
     '''
     yield from change_edge(el, focus=focus, edge=edge, slits=False,  mirror=False, tune=True, target=target, xrd=False,
-                           bender=True, insist=False, no_ref=not reference, no_hslits=True)
+                           bender=True, insist=False, no_ref=not reference, no_hslits=True, do_dcmroll=False)
     
 def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True, tune=True, target=300.,
-                xrd=False, bender=True, insist=False, no_ref=False, no_hslits=False):
+                xrd=False, bender=True, insist=False, no_ref=False, no_hslits=True, do_dcmroll=True):
     '''Change edge energy by:
     1. Moving the DCM above the edge energy
     2. Moving the photon delivery system to the correct mode
@@ -231,6 +232,9 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
     no_hslits : boolean, optional
         when True, skip the adjustment of horizontal slit size [False]
         (this was implemented for the quick_change() function)
+    do_dcmroll : boolean, optional
+        When True, perform a scan of dcm.roll to optimize flux going
+        through the hutch slits
 
     Examples
     --------
@@ -260,7 +264,7 @@ def change_edge(el, focus=False, edge='K', energy=None, slits=False, mirror=True
 
     '''
 
-    def main_plan(el, focus, edge, energy, slits, mirror, tune, target, xrd, bender, insist, no_ref, no_hslits):
+    def main_plan(el, focus, edge, energy, slits, mirror, tune, target, xrd, bender, insist, no_ref, no_hslits, do_dcmroll):
         el = el.capitalize()
         ######################################################################
         # this is a tool for verifying a macro.  this replaces an xafsmod scan  #
@@ -496,7 +500,7 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
             yield from mv(slits3.hsize, 3)
         elif mode in ('A', 'B', 'C'):
             yield from mv(m2_bender.kill_cmd, 1)            
-            yield from mv(slits3.hsize, 0.4)
+            yield from mv(slits3.hsize, 0.7)
 
         ## these two instruments involve hijacking the refx and refy motors for other purposes,
         ## so the reference stages should NOT be moved
@@ -508,6 +512,8 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
             dcm.bragg_small_move(verbose=True)
         else:
             dcm.bragg_small_move(direction=-1, verbose=True)
+
+        yield from mv(dcm.roll, predict_roll(energy+target))
         yield from wiggle_bct()
         yield from mv(dcm.bragg.acceleration, BMMuser.acc_slow)
         print(f'mmode={mode}, edge={energy+target}, reference={el}, bender={bender}, insist={insist}, no_ref={no_ref}')
@@ -611,18 +617,23 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
         # run a slit horizontal center scan if focused #
         ################################################
         if mode in ('A', 'B', 'C'):
-            yield from mv(m2.yaw, 0.129)
+            #yield from mv(m2.yaw, 0.129)
+            yield from mv(m2.yaw, 0.0988)
+            yield from mv(m2.lateral, -1.2459)
             if no_hslits is False:
                 yield from hcenter(move=True)
                 kafka.message({'close': 'last'})
-
+            if do_dcmroll is True:
+                yield from dcmroll(move=True)
+                kafka.message({'close': 'last'})
+                
         ########################################
         # correct xafs_table_yu in mode A or C #
         ########################################
-        if mode == 'A' and dcm._crystal == '111':
-            yu = correct_table_yu(energy=energy+target)
-            if yu is not None:
-                yield from mv(xafs_table.yu, yu)
+        # if mode == 'A' and dcm._crystal == '111':
+        #     yu = correct_table_yu(energy=energy+target)
+        #     if yu is not None:
+        #         yield from mv(xafs_table.yu, yu)
         # if mode == 'C' and dcm._crystal == '111':
         #     yu = correct_table_yu(energy=energy+target, mode='C')
         #     if yu is not None:
@@ -676,6 +687,6 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
     #dcm_roll, dcm_bragg = user_ns["dcm_roll"], user_ns["dcm_bragg"]
     dm3_bct, slits3 = user_ns['dm3_bct'], user_ns['slits3']
     yield from finalize_wrapper(
-        main_plan(el, focus, edge, energy, slits, mirror, tune, target, xrd, bender, insist, no_ref, no_hslits),
+        main_plan(el, focus, edge, energy, slits, mirror, tune, target, xrd, bender, insist, no_ref, no_hslits, do_dcmroll),
         cleanup_plan())
     user_ns['RE'].msg_hook = BMM_msg_hook

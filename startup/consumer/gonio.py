@@ -1,5 +1,5 @@
 
-import numpy, os, sys, pandas, pathlib, datetime, re
+import numpy, os, sys, pandas, pathlib, datetime, re, time
 from bluesky import __version__ as bluesky_version
 
 from pptx import Presentation
@@ -9,7 +9,10 @@ from pptx.enum.text import PP_ALIGN
 from pptx.enum.shapes import MSO_SHAPE
 import datetime
 
-from tools import echo_slack, experiment_folder, file_resource, profile_configuration
+from tools import echo_slack, experiment_folder, profile_configuration
+
+from bmm_tools.devices.attenuators import KNOWN_ATTENUATION
+from bmm_tools.tools.db import file_resource
 
 def log_entry(logger, message):
     #if logger.name == 'BMM file manager logger' or logger.name == 'bluesky_kafka':
@@ -25,20 +28,37 @@ def log_entry(logger, message):
 class XRRFile():
 
 
-    # binary                0  1        2                  3                                         4
-    # level                 0  1        2        3         4         5         6         7*          8
-    measured_attenuation = [1, 6.85865, 47.0088, 318.6107, 2225.346, 15046.19, 97500.05, 668718.718, ]
-
     
     def to_xdi(self, catalog=None, uid=None, stub=None, logger=None):
         '''Write an XDI-style file for an XRR scan.
 
         '''
+
+
+        etaval, count = None, 0
+        while etaval is None:
+            try:
+                etaval = float(catalog[uid].baseline['eta'].read()[0])
+            except:
+                pass
+            if etaval is not None:
+                break
+            count += 1
+            if count > 6:
+                return
+            this_pause = 0.1 * 2**count
+            print(f"looking for eta array in primary {count = }, {this_pause = }", flush=True)
+            time.sleep(this_pause)
+            
+
+
+        
         metadata = catalog[uid].metadata
         xdi = metadata["start"]["XDI"]
         if stub is None:
             stub = xdi['_filename']
         fname = os.path.join(experiment_folder(catalog, uid), stub+'.xdi')
+        fname = self.unclobbered_filename(fname)
         handle = open(fname, 'w')
         handle.write(f'# XDI/1.0 BlueSky/{bluesky_version} BMM/{pathlib.Path(sys.executable).parts[-3]}\n')
         
@@ -49,11 +69,19 @@ class XRRFile():
                     continue
                 if family == 'Sample' and k == 'extra_metadata':
                     continue
+                if family == 'Beamline' and k in ('eta_refinement', 'sample_alignment'):
+                    continue
                 handle.write(f'# {family}.{k}: {xdi[family][k]}\n')
         start = datetime.datetime.fromtimestamp(metadata['start']['time']).strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
-        end   = datetime.datetime.fromtimestamp(metadata['stop']['time']).strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
+        #end   = datetime.datetime.fromtimestamp(metadata['stop']['time']).strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
+
+        ## check age of record with
+        ## (datetime.datetime.now() - datetime.datetime.fromtimestamp(metadata['start']['time'])).seconds
+        ## if it is old enough , use the stop doc, else use now() and "(approximate)"
+        
+        end   = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S") # '%A, %d %B, %Y %I:%M %p')
         handle.write(f'# Scan.start_time: {start}\n')
-        handle.write(f'# Scan.end_time: {end}\n')
+        handle.write(f'# Scan.end_time: {end} (approximate)\n')
         handle.write(f'# Scan.uid: {uid}\n')
         handle.write(f'# Scan.transient_id: {metadata["start"]["scan_id"]}\n')
 
@@ -70,15 +98,23 @@ class XRRFile():
         handle.write( '# Column.3: measurement_time seconds\n')
         handle.write( '# Column.4: monitor counts\n')
         handle.write( '# Column.5: mca_full counts\n')
-        handle.write( '# Column.6: mca_narrow counts\n')
+        handle.write( '# Column.6: dir counts\n')
         handle.write( '# Column.7: attenuator\n')
+        handle.write( '# Column.8: XRR\n')
 
+
+        
         ## Column.N header lines
-        column_list = ['eta', 'delta', 'dwti_dwell_time', 'monitor', 'mca_full', 'mca_narrow', 'attenuator_attenuation']
-        column_labels = ['eta', 'delta', 'measurement_time', 'monitor', 'mca_full', 'mac_narrow', 'attenuator']
+        column_list = ['eta', 'delta', 'dwti_dwell_time', 'monitor', 'mca_full', 'dir', 'refl', 'max_counts', 'attenuator_attenuation']
+        column_labels = ['eta', 'delta', 'measurement_time', 'monitor', 'mca_full', 'dir', 'refl', 'max_counts', 'attenuator', 'xrr']
 
         xa = catalog[uid].primary.read(column_list)
         p = xa.to_pandas()
+        i = numpy.array(p['attenuator_attenuation']).astype(int)  # fetch attenuation factor from attenuator settings
+        
+        factor = numpy.array(list(KNOWN_ATTENUATION[x] for x in i))
+        p['xrr'] = factor * p['refl'] / p['monitor'] / p['dwti_dwell_time']  # insert reduced XRR into dataframe
+        column_list.append('xrr')
         
         ## use eta as the pandas index
         p.set_index('eta')
@@ -117,22 +153,38 @@ class XRRFile():
 '''
         longheader = '%D	LinearDetector	9	1288\n'
 
-        nuval = catalog[uid].baseline.read()['nu'][0]
-        column_list = ['delta', 'eta', 'attenuator_attenuation', 'mca_full', 'mca_narrow', 'monitor', 'dwti_dwell_time']
+        nuval, count = None, 0
+        while nuval is None:
+            try:
+                nuval = float(catalog[uid].baseline['nu'].read()[0])
+            except:
+                pass
+            if nuval is not None:
+                break
+            count += 1
+            if count > 6:
+                return
+            this_pause = 0.1 * 2**count
+            print(f"looking for nu in baseline {count = }, {this_pause = }", flush=True)
+            time.sleep(this_pause)
+            
+
+        column_list = ['delta', 'eta', 'attenuator_attenuation', 'mca_full', 'dir', 'monitor', 'dwti_dwell_time']
         xa = catalog[uid].primary.read(column_list)
         p = xa.to_pandas()
         column_list.insert(2, 'nu')
-        npoints = len(catalog[uid].primary.read()['eta'])
+        npoints = len(catalog[uid].primary['eta'].read())
         nu = nuval * numpy.ones(npoints)
         p['nu'] = nu
 
 
         if style in ('short', 'both'):
             fname = os.path.join(experiment_folder(catalog, uid), stub+'_short.txt')
+            fname = self.unclobbered_filename(fname)
             handle = open(fname, 'w')
             handle.write(header)
             handle.write('\n')
-            handle.write(p.to_csv(None, sep=' ', columns=column_list, index=False, header=False, float_format='%.6f'))
+            handle.write(p.to_csv(None, sep='\t', columns=column_list, index=False, header=False, float_format='%.6f'))
             handle.flush()
             handle.close()
             
@@ -144,14 +196,15 @@ class XRRFile():
             mcabins = list((f'bin{i+1}' for i in range(fullmca.shape[-1]) ))
             mcaFrame = pandas.DataFrame(fullmca, columns=mcabins)
             
-            fname = os.path.join(experiment_folder(catalog, uid), stub+'_long.txt')
+            fname = os.path.join(experiment_folder(catalog, uid), stub+'_XRR_MAT')
+            fname = self.unclobbered_filename(fname)
             handle = open(fname, 'w')
             handle.write(header)
             handle.write(longheader)
             handle.write('\n')
 
             p = p.join(mcaFrame)
-            handle.write(p.to_csv(None, sep=' ', columns=column_list+mcabins, index=False, header=False, float_format='%.6f'))
+            handle.write(p.to_csv(None, sep='\t', columns=column_list+mcabins, index=False, header=False, float_format='%.6f'))
             handle.flush()
             handle.close()
 
@@ -213,7 +266,7 @@ class XRRFile():
         handle.write(header)
 
         p = p.join(mcaFrame)
-        handle.write(p.to_csv(None, sep=' ', columns=column_list+mcabins, index=False, header=False, float_format='%.6f'))
+        handle.write(p.to_csv(None, sep='\t', columns=column_list+mcabins, index=False, header=False, float_format='%.6f'))
         handle.flush()
         handle.close()
 
@@ -229,7 +282,7 @@ class XRRFile():
 %D	LinearDetector  4	1283
 
 '''
-        etaval = catalog[uid].baseline.read()['eta'][0]
+        etaval = catalog[uid].baseline['eta'].read()[0]
         column_list = ['delta', 'monitor']
         xa = catalog[uid].primary.read(column_list)
         p = xa.to_pandas()
@@ -258,7 +311,7 @@ class XRRFile():
 
 
         
-    def mythen_calibration(self, catalog=None, uid=None, path=None, now=None, stamp=None, setup=None, gap=None,
+    def mythen_calibration(self, catalog=None, uid=None, path=None, hdffile=None, now=None, stamp=None, setup=None, gap=None,
                            energy=8600, pixel0=None, angle_per_pixel=None, stub=None, dw=3,
                            rw=9, slits_b=0.3, slits_i=0.5, slits_o=0.5, slits_t=0.3, logger=None):  # fixme! fitA, fitB, fitC
         '''Write a PowerPoint summary of the calibration using the established
@@ -285,13 +338,13 @@ class XRRFile():
         tf1 = txBox1.text_frame
         p = tf1.paragraphs[0]
         run = p.add_run()
-        run.text = f'{path}\n{uid}'
+        run.text = f'{path}\n{uid}\nhdffile'
         run.font.size = Pt(10)
 
         ## make a Text box for the all the header information, date,
         ## measurement type, gap, energy, calibration fit result,
         ## center pixel position, detector distance calculation
-        top = Inches(0.75)
+        top = Inches(0.8)
         left = Inches(4)
         width = Inches(1)
         height = Inches(1)
@@ -311,7 +364,7 @@ class XRRFile():
         p.text = f'FIT: arctan((channel - {pixel0})/{angle_per_pixel})'
 
         p = tf2.add_paragraph()
-        p.text = f'PIXEL 0 = {pixel0}; D=0.05 x {angle_per_pixel} = {angle_per_pixel/0.05} mm'
+        p.text = f'PIXEL 0 = {pixel0}; D=0.05 x {angle_per_pixel} = {angle_per_pixel*0.05} mm'
 
         ## justify the first two text boxes
         for para in tf1.paragraphs:

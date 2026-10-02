@@ -289,7 +289,7 @@ def manage_files_from_kafka_messages(beamline_acronym):
 
             elif 'xrrout' in message:
                 xrr.to_xdi(catalog=bmm_catalog, uid=message['uid'], stub=message['stub'], logger=logger)
-                xrr.to_txt(catalog=bmm_catalog, uid=message['uid'], stub=message['stub'], style='both', logger=logger)
+                xrr.to_txt(catalog=bmm_catalog, uid=message['uid'], stub=message['stub'], style=message['style'], logger=logger)
 
             elif 'xrrxdi' in message:
                 xrr.to_xdi(catalog=bmm_catalog, uid=message['uid'], stub=message['stub'], logger=logger)
@@ -302,13 +302,27 @@ def manage_files_from_kafka_messages(beamline_acronym):
                                      motor=message['motor'], detector=message['detector'], logger=logger)
                 
             elif 'xrr_calibration_file' in message:
-                xrr.calibration_file(catalog=bmm_catalog, uid=message['uid'], stub=message['stub'],
+                stop, count = None, 0
+                while stop is None:
+                    try:
+                        stop = bmm_catalog[message['uid']]
+                    except:
+                        pass
+                    count += 1
+                    if count > 7:
+                        return
+                    this_pause = 0.1 * 2**count
+                    print(f"before writing XRR files: {count = }, {this_pause = }", flush=True)
+                    time.sleep(this_pause)
+                    ## found it, can move on
+                    xrr.calibration_file(catalog=bmm_catalog, uid=message['uid'], stub=message['stub'],
                                      motor=message['motor'], detector=['detector'], logger=logger)
 
             elif 'mythen_calibration' in message:
                 xrr.mythen_calibration(catalog=bmm_catalog,
                                        uid=message['uid'],
                                        path=message['path'],
+                                       hdffile=message['hdffile'],
                                        now=message['now'],
                                        stamp=message['stamp'],
                                        setup=message['setup'],

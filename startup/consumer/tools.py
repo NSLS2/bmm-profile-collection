@@ -257,7 +257,7 @@ def peak(signal):
     return numpy.argmax(signal)
 
 
-def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spinner=None, ga=None):
+def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spinner=None, rate=False, ga=None):
 
     if uid == 'last':
         uid = catalog[-1].start['uid']
@@ -266,13 +266,14 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
     top = 0
 
     ## be sure that the stop document is written
-    t, count = None, 0
-    while t is None:
+    t, dwti, count = None, None, 0
+    while dwti is None:
         try:
-            t = catalog[uid].primary.read() # ['data']
+            t = catalog[uid].primary # ['data']
+            dwti = t['dwti_dwell_time'].read()
         except:
             pass
-        if t is not None:
+        if dwti is not None:
             continue
         count  += 1
         if count >= 5:
@@ -282,13 +283,13 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
 
     if signal == 'I0':
         ylabel = 'I0'
-        sig = numpy.array(t[signal])
+        sig = t[signal].read()
     elif signal == 'It':
         ylabel = 'It/I0'
-        sig = numpy.array(t[signal]) / numpy.array(t['I0'])
+        sig = t[signal].read() / t['I0'].read()
     elif signal == 'Ir':
         ylabel = 'Ir/It'
-        sig = numpy.array(t[signal]) / numpy.array(t['It'])
+        sig = t[signal].read() / t['It'].read()
     elif signal == 'If':
         ylabel = 'If/I0'
         fluo_detectors = catalog[uid].metadata['start']['detectors']
@@ -299,33 +300,36 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
                 if element_regex8.match(k):
                     el = element_regex8.match(k).groups()[0]
                     break
-            sig = numpy.array(t[el+'8']) / numpy.array(t['I0'])
+            sig = t[el+'8'].read() / t['I0'].read()
         elif '4-element SDD' in fluo_detectors:
             for k in catalog[uid].primary.read().keys():
                 if element_regex1.match(k):
                     el = element_regex1.match(k).groups()[0]
                     break
-            sig = (numpy.array(t[el+'1']) +
-                   numpy.array(t[el+'2']) +
-                   numpy.array(t[el+'3']) +
-                   numpy.array(t[el+'4'])) / numpy.array(t['I0'])
+            sig = (t[el+'1'].read() +
+                   t[el+'2'].read() +
+                   t[el+'3'].read() +
+                   t[el+'4'].read()) / t['I0'].read()
         elif '7-element SDD' in fluo_detectors:
             for k in catalog[uid].primary.read().keys():
                 if element_regex1.match(k):
                     el = element_regex1.match(k).groups()[0]
                     break
-            sig = (numpy.array(t[el+'1']) +
-                   numpy.array(t[el+'2']) +
-                   numpy.array(t[el+'3']) +
-                   numpy.array(t[el+'4']) +
-                   numpy.array(t[el+'5']) +
-                   numpy.array(t[el+'6']) +
-                   numpy.array(t[el+'7'])) / numpy.array(t['I0'])
+            sig = (t[el+'1'].read() +
+                   t[el+'2'].read() +
+                   t[el+'3'].read() +
+                   t[el+'4'].read() +
+                   t[el+'5'].read() +
+                   t[el+'6'].read() +
+                   t[el+'7'].read()) / t['I0'].read()
     else:
         ylabel = signal
-        sig = numpy.array(t[signal])
+        sig = t[signal].read()
 
-    positions = numpy.array(t[motor])
+    if rate is True:
+        sig = sig / t['dwti_dwell_time'].read()
+
+    positions = t[motor].read()
     if choice.lower() == 'com':
         position = com(sig)
         top      = positions[position]
@@ -383,31 +387,29 @@ def rectanglefit(catalog=None, uid=None, motor=None, signal='It', drop=None, aw=
     top = 0
 
     ## be sure that the stop document is written
-    stopdoc, count = None, 0
-    while stopdoc is None:
+    t, count = None, 0
+    while t is None:
         try:
-            stopdoc = catalog[uid].stop
+            t = catalog[uid].primary
         except:
             pass
-        if stopdoc is not None:
-            continue
+        if t is not None:
+            break
         count  += 1
         if count >= 5:
             return
         time.sleep(1)
-        print("retrying stopdoc query in peakfit")
 
-    t  = catalog[uid].primary.read() # ['data']
-    positions = numpy.array(t[motor])
+    positions = t[motor].read()
     signal = signal.capitalize()
     if signal == 'I0':
-        sig = numpy.array(t[signal])
+        sig = t[signal].read()
     elif signal == 'It':
-        sig = numpy.array(t[signal]) / numpy.array(t['I0'])
+        sig = t[signal].read() / t['I0'].read()
     elif signal == 'Ir':
-        sig = numpy.array(t[signal]) / numpy.array(t['It'])
+        sig = t[signal].read() / t['It'].read()
     else:
-        sig = numpy.array(t[signal])
+        sig = t[signal].read()
 
     if drop is not None:
         positions = positions[:-drop]
@@ -465,25 +467,27 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, ga=No
         print(f'last UID was {uid}')
 
     target = 0
-    t  = catalog[uid].primary.read() # ['data']
 
-    ## be sure that the stop document is written
-    stopdoc, count = None, 0
-    while stopdoc is None:
+    t, positions, count = None, None, 0
+    while positions is None:
         try:
-            stopdoc = catalog[uid].stop
+            t  = catalog[uid].primary # ['data']
+            positions = t[motor].read()
         except:
             pass
-        if stopdoc is not None:
-            continue
-        count  += 1
-        if count >= 5:
+        if positions is not None:
+            break
+        count += 1
+        if count > 6:
+            print(f'Data access failed: {uid = }, {motor = }')
             return
-        time.sleep(1)
-        print("retrying stopdoc query in peakfit")
+        this_pause = 0.1 * 2**count
+        print(f"{count = }, {this_pause = }", flush=True)
+        time.sleep(this_pause)
 
+    print(f'{t = }')
+    print(f'{positions = }')
     
-    positions = numpy.array(t[motor])
     backwards = False
     if float(positions[-1]) < float(positions[0]):
         backwards = True
@@ -491,22 +495,22 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, ga=No
         signal = 'monitor'
 
     if signal == 'I0':
-        sig = numpy.array(t[signal])
+        sig = t[signal].read()
         thissig = 'I0'
     elif signal == 'It':
-        sig = numpy.array(t[signal]) / numpy.array(t['I0'])
+        sig = t[signal].read() / t['I0'].read()
         thissig = 'It/I0'
     elif signal == 'Ir':
-        sig = numpy.array(t[signal]) / numpy.array(t['It'])
+        sig = t[signal].read() / t['It'].read()
         thissig = 'Ir/It'
     elif signal == 'monitor':
-        sig = numpy.array(t[signal])
+        sig = t[signal].read()
         thissig = 'monitor'
     elif signal == 'mythen_dir':
-        sig = numpy.array(t['dir']) / numpy.array(t['dwti_dwell_time'])
+        sig = t['dir'].read() / t['dwti_dwell_time'].read()
         thissig = 'monitor'
     else:
-        sig = numpy.array(t[signal])
+        sig = t[signal].read()
         thissig = signal
 
     if signal == 'monitor' and backwards is True:

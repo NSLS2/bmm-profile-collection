@@ -5,7 +5,7 @@
 ## This uses some concepts swiped from bsui's start-up script
 ######################################################################
 
-. /etc/profile.d/bluesky.sh 
+#. /etc/profile.d/bluesky.sh 
 cd /home/xf06bm/.ipython/profile_collection/startup/consumer
 
 . bin/set-konsole-tab-title.sh

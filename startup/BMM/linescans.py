@@ -245,7 +245,7 @@ def prepare_alignment_scan(inttime=0.1):
     yield from mv(_locked_dwell_time, inttime)
     
 
-def fetch_peak_position_via_redis(maxtries=7, verbose=False):
+def fetch_peak_position_via_redis(maxtries=7, verbose=True):
     '''Retrieve a result found by the Kafka consumer and posted to redis.
 
     The function prepare_alignment_scan() should have been called
@@ -340,10 +340,13 @@ def slit_height(start=-1.5, stop=1.5, nsteps=31, move=False, force=False, slp=1.
                                'motor_name' : motor.name,
                                'signal' : 'I0',
                                'choice' : choice})
-                top = fetch_peak_position_via_redis()
+                maxtries = 7
+                top = fetch_peak_position_via_redis(maxtries)
                 if top is None:
-                    error_msg('Failed to slit_height curve peak position.')
-                    raise ValueError('Failed to find slit_height peak position.')
+                    totaltime = numpy.sum(0.1*2**x for x in range(1,maxtries+1))
+                    text = f'Failed to find slit height peak position ({maxtries} tries, {totaltime:.2f} seconds elapsed).'
+                    error_msg(text)
+                    raise ValueError(text)
                 yield from mv(motor, top)
                 
             else:
@@ -453,10 +456,13 @@ def mirror_pitch(start=None, stop=None, nsteps=41, mirror='m3', move=False, forc
                                'motor_name' : motor.name,
                                'signal' : 'I0',
                                'choice' : choice})
-                top = fetch_peak_position_via_redis()
+                maxtries = 7
+                top = fetch_peak_position_via_redis(maxtries)
                 if top is None:
-                    error_msg('Failed to find mirror pitch peak position.')
-                    raise ValueError('Failed to find mirror pitch peak position.')
+                    totaltime = numpy.sum(0.1*2**x for x in range(1,maxtries+1))
+                    text = f'Failed to find mirror pitch peak position ({maxtries} tries, {totaltime:.2f} seconds elapsed).'
+                    error_msg(text)
+                    raise ValueError(text)
                 yield from mv(motor, top)
 
             else:
@@ -574,10 +580,14 @@ def rocking_curve(start=-0.10, stop=0.10, nsteps=101, detector='I0', choice='pea
                            'signal' : 'I0',
                            'choice' : choice})
 
-            top = fetch_peak_position_via_redis()
+            maxtries = 7
+            top = fetch_peak_position_via_redis(maxtries=maxtries)
             if top is None:
-                error_msg('Failed to find rocking curve peak position.')
-                raise ValueError('Failed to find rocking curve peak position.')
+                totaltime = numpy.sum(0.1*2**x for x in range(1,maxtries+1))
+                text = f'Failed to find rocking curve peak position ({maxtries} tries, {totaltime:.2f} seconds elapsed).'
+                error_msg(text)
+                raise ValueError(text)
+            yield from mv(motor, top)
                 
             yield from mv(motor.kill_cmd, 1)
             yield from sleep(1.0)
@@ -685,10 +695,13 @@ def hcenter(start=-1, stop=1, nsteps=41, move=False, force=False, choice='peak')
                                'motor_name' : motor.name,
                                'signal' : 'I0',
                                'choice' : choice})
-                top = fetch_peak_position_via_redis()
+                maxtries = 7
+                top = fetch_peak_position_via_redis(maxtries)
                 if top is None:
-                    error_msg('Failed to find rocking curve peak position.')
-                    raise ValueError('Failed to find rocking curve peak position.')
+                    totaltime = numpy.sum(0.1*2**x for x in range(1,maxtries+1))
+                    text = f'Failed to find hcenter peak position ({maxtries} tries, {totaltime:.2f} seconds elapsed).'
+                    error_msg(text)
+                    raise ValueError(text)
                 yield from mv(motor, top)
 
             else:
@@ -721,6 +734,107 @@ def hcenter(start=-1, stop=1, nsteps=41, move=False, force=False, choice='peak')
 
 
 
+def dcmroll(start=-1.5, stop=1.5, nsteps=41, move=False, force=False, choice='peak'):
+    '''Perform a relative scan of dcm.roll to optimize the signal going
+    through the slits into I0.
+
+    Optionally, the motor will moved to the peak at the end of the
+    scan.
+
+    Parameters
+    ----------
+    start : float
+        starting position relative to current [-3.0]
+    end : float 
+        ending position relative to current [3.0]
+    nsteps : int
+        number of steps [61]
+    move : bool
+        True=move to position of max signal, False=pluck and move [False]
+    force : bool
+        True=run scan even if not clear to start, False=respect clear-to-start [False]
+    choice : str 
+        'peak' or 'com' (center of mass) ['peak']  (com not currently implemented)
+
+    '''
+
+    def main_plan(start, stop, nsteps, move, force):
+        (ok, text) = suspenders.clear_to_start()
+        if force is False and ok is False:
+            error_msg(text)
+            yield from null()
+            return
+
+        user_ns['RE'].msg_hook = None
+        line1 = '%s, %s, %.3f, %.3f, %d -- starting at %.3f\n' % \
+                (motor.name, 'i0', start, stop, nsteps, motor.position)
+        rkvs.set('BMM:scan:type',      'line')
+        rkvs.set('BMM:scan:starttime', str(datetime.datetime.timestamp(datetime.datetime.now())))
+        rkvs.set('BMM:scan:estimated', 0)
+
+        def scan_dcmroll():
+            yield from prepare_alignment_scan()
+            #rkvs.set('BMM:peakposition', -10_000_000_000.1)
+            #yield from mv(_locked_dwell_time, 0.1)
+
+            xdi = fetch_XDI_for_linescan()
+            kafka.message({'linescan': 'start',
+                           'motor' : motor.name,
+                           'detector' : 'I0',
+                           'fluo_detector': None,})
+            uid = yield from rel_scan([*ION_CHAMBERS], motor, start, stop, nsteps, md={**xdi, 'plan_name' : f'rel_scan linescan {motor.name} I0'})
+            kafka.message({'linescan': 'stop',})
+            
+            user_ns['RE'].msg_hook = BMM_msg_hook
+            BMM_log_info(f'dcmroll scan: {line1}\tuid = {uid}')
+            if move:
+                kafka.message({'close': 'last'})
+                kafka.message({'peakfit' : True,
+                               'uid' : uid,
+                               'motor_name' : motor.name,
+                               'signal' : 'I0',
+                               'choice' : choice})
+                maxtries = 7
+                top = fetch_peak_position_via_redis(maxtries)
+                if top is None:
+                    totaltime = numpy.sum(0.1*2**x for x in range(1,maxtries+1))
+                    text = f'Failed to find dcmroll peak position ({maxtries} tries, {totaltime:.2f} seconds elapsed).'
+                    error_msg(text)
+                    raise ValueError(text)
+                yield from mv(motor, top)
+
+            else:
+                print()
+                action = animated_prompt('Pluck dcm.roll position from the plot? ' + PROMPTNC)
+                if action != '':
+                    if action[0].lower() == 'n' or action[0].lower() == 'q':
+                        return(yield from null())
+                yield from pluck(suggested_motor=motor)
+        yield from scan_dcmroll()
+
+    def cleanup_plan():
+        yield from mv(_locked_dwell_time, 0.5)
+        yield from resting_state_plan()
+
+    #######################################################################
+    # this is a tool for verifying a macro.  this replaces this slit      #
+    # height scan with a sleep, allowing the user to easily map out motor #
+    # motions in a macro                                                  #
+    if BMMuser.macro_dryrun:
+        info_msg('\nBMMuser.macro_dryrun is True.  Sleeping for %.1f seconds rather than running a dcmroll scan.\n' %
+                 BMMuser.macro_sleep)
+        countdown(BMMuser.macro_sleep)
+        return(yield from null())
+    #######################################################################
+    motor = dcm.roll
+    user_ns['RE'].msg_hook = None
+    yield from finalize_wrapper(main_plan(start, stop, nsteps, move, force), cleanup_plan())
+    user_ns['RE'].msg_hook = BMM_msg_hook
+
+
+
+
+    
 
 
     
@@ -816,10 +930,13 @@ def rectangle_scan(motor=None, start=-20, stop=20, nsteps=41, detector='It',
                                'signal'       : detector.capitalize(),
                                'motor_name'   : motor.name })
 
-                top = fetch_peak_position_via_redis() # verbose=True)
+                maxtries = 7
+                top = fetch_peak_position_via_redis(maxtries)
                 if top is None:
-                    error_msg('Failed to find rectangle midpoint.')
-                    raise ValueError('Failed to find rectangle midpoint.')
+                    totaltime = numpy.sum(0.1*2**x for x in range(1,maxtries+1))
+                    text = f'Failed to find rectangle midpoint position ({maxtries} tries, {totaltime:.2f} seconds elapsed).'
+                    error_msg(text)
+                    raise ValueError(text)
                 yield from mv(motor, top)
                 bold_msg(f'Found center at {motor.name} = {motor.position}')
             else:

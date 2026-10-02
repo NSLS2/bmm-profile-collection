@@ -19,6 +19,7 @@ from slack import img_to_slack
 from tools import experiment_folder, echo_slack, file_resource, profile_configuration, rkvs
 
 from bmm_tools.tools.periodictable import Z_number, edge_number
+from bmm_tools.devices.attenuators import KNOWN_ATTENUATION
 
 #from nslsii.kafka_utils import _read_bluesky_kafka_config_file
 #from bluesky_kafka.produce import BasicProducer
@@ -234,8 +235,8 @@ class LineScan():
         #     self.axes.set_ylabel(f'{self.numerator}/{self.denominator}')
 
         elif self.numerator == 'Eiger':
-            self.line.set_label('specular (ROI3)')
-            self.line2, = self.axes.plot([],[], label='diffuse (ROI2)')
+            self.line.set_label('dir (ROI2)')
+            self.line2, = self.axes.plot([],[], label='refl (ROI3)')
             self.description = 'specular (ROI3)'
             self.denominator = None
             self.axes.set_ylabel(self.numerator)
@@ -253,15 +254,23 @@ class LineScan():
         elif self.numerator == 'Mythen':
             self.description = 'reflectivity'
             self.denominator = None
-            self.axes.set_ylabel(f'{self.numerator}')
+            self.axes.set_ylabel(f'{self.numerator} count rate')
             self.axes.legend(loc='best', shadow=True)
             
         elif self.numerator == 'Mca_full':
             self.line.set_label('mca_full')
-            self.numerator = 'mca_full'
+            self.numerator = 'Mca_full'
             self.description = 'MCA full'
             self.denominator = None
-            self.axes.set_ylabel('MCA full')
+            self.axes.set_ylabel('MCA full count rate')
+            self.axes.legend(loc='best', shadow=True)
+            
+        elif self.numerator == 'Dir':
+            self.line.set_label('dir')
+            self.numerator = 'Dir'
+            self.description = 'Direct beam'
+            self.denominator = None
+            self.axes.set_ylabel('Direct beam count rate')
             self.axes.legend(loc='best', shadow=True)
             
 
@@ -402,7 +411,7 @@ class LineScan():
     # this helped: https://techoverflow.net/2021/08/20/how-to-autoscale-matplotlib-xy-axis-after-set_data-call/
     def add(self, **kwargs):
 
-        if 'dcm_roll' in kwargs['data']:
+        if 'dcm_x' in kwargs['data']:
             return              # this is a baseline event document, dcm_roll is almost never scanned
 
         if 'wheel1' in kwargs['data']:
@@ -453,12 +462,12 @@ class LineScan():
             #     signal2 = kwargs['data']['K8']
             #     signal3 = kwargs['data']['OCR']
         elif self.numerator == 'Eiger':
-            signal  = kwargs['data']['specular']
-            signal2 = kwargs['data']['diffuse']
+            signal  = kwargs['data']['dir']
+            signal2 = kwargs['data']['refl']
 
         elif self.numerator in kwargs['data']:  # numerator will not be in baseline document
             signal = kwargs['data'][self.numerator]
-        elif self.numerator == 'mca_full':
+        elif self.numerator == 'Mca_full':
             signal = kwargs['data']['mca_full'] / kwargs['data']['dwti_dwell_time']
         elif self.numerator == 'Mythen':
             if self.add_refl is False:
@@ -469,10 +478,13 @@ class LineScan():
         elif self.numerator == 'Dir':
             signal  = kwargs['data']['dir'] / kwargs['data']['dwti_dwell_time']
         elif self.numerator == 'Refl':
-            signal  = kwargs['data']['dir'] / kwargs['data']['dwti_dwell_time']
+            signal  = kwargs['data']['refl'] / kwargs['data']['dwti_dwell_time']
         elif self.numerator == 'Diode':
             signal = kwargs['data'][self.numerator]
-            
+
+        elif self.numerator == 'Ic0':
+            signal = kwargs['data']['I0']
+
         elif self.numerator in ('Struck', 'Bicron', 'Apd', 'Monitor'):
             if self.numerator in kwargs['data']:
                 signal = kwargs['data'][self.numerator]
@@ -1327,8 +1339,14 @@ class AreaScan():
         self.figure.gca().invert_yaxis()  # plot an xafs_x/xafs_y plot upright
         self.cb = self.figure.colorbar(self.im)
 
-        self.axes.set_xlabel(f'fast axis ({self.fast_motor}) position (mm)')
-        self.axes.set_ylabel(f'slow axis ({self.slow_motor}) position (mm)')
+        if self.fast_motor in ('chi', 'phi'):
+            self.axes.set_xlabel(f'fast axis ({self.fast_motor}) position (deg)')
+        else:
+            self.axes.set_xlabel(f'fast axis ({self.fast_motor}) position (mm)')
+        if self.fast_motor in ('chi', 'phi'):
+            self.axes.set_ylabel(f'slow axis ({self.slow_motor}) position (deg)')
+        else:            
+            self.axes.set_ylabel(f'slow axis ({self.slow_motor}) position (mm)')
         self.axes.set_title(f'{self.detector}   Energy = {self.energy:.1f}')
 
 
@@ -1395,6 +1413,9 @@ class AreaScan():
             signal  = kwargs['data'][f'{self.element}8'] / kwargs['data']['I0']
         elif self.detector == 'Xs':
             signal  = (kwargs['data'][f'{self.element}1']+kwargs['data'][f'{self.element}2']+kwargs['data'][f'{self.element}3']+kwargs['data'][f'{self.element}4']) / kwargs['data']['I0']
+        elif self.detector == 'Eiger':
+            signal = kwargs['data']['full']
+            
 
         self.cdata[self.count] = signal
         self.axes.pcolormesh(self.fast, self.slow, self.cdata.reshape(self.slow_steps, self.fast_steps), cmap=plt.cm.viridis)
@@ -1424,10 +1445,6 @@ class XRR():
     detatcor = 'mythen'
     title = 'eta/delta v. Mythen'
 
-    # binary                0  1        2                  3                                         4
-    # level                 0  1        2        3         4         5         6         7*          8
-    measured_attenuation = [1, 6.85865, 47.0088, 318.6107, 2225.346, 15046.19, 97500.05, 668718.718, ]
-
     mythen_channels = 1280
     mythen_pixel_size = 0.05 # mm
     
@@ -1436,8 +1453,12 @@ class XRR():
         #    plt.close(self.figure.number)
         self.ongoing = True
         self.xdata = []
-        self.rawdata = []
+        self.dirdata = []
+        self.refldata = []
+        self.maxcdata = []
         self.xrrdata = []
+        self.xrrdata_plus = []
+        self.xrrdata_minus = []
         print(kwargs)
         if 'motor'    in kwargs: self.motor    = kwargs['motor']
         if 'detector' in kwargs: self.detector = kwargs['detector']
@@ -1447,7 +1468,7 @@ class XRR():
         cid = self.figure.canvas.mpl_connect('button_press_event', self.interpret_click)
 
         if get_backend().lower() == 'agg':
-            self.figure.set_figheight(9.5)
+            self.figure.set_figheight(5)
             self.figure.set_figwidth(15)
         else:
             self.figure.canvas.manager.window.setGeometry(1800, 2274, 1600, 545)
@@ -1470,9 +1491,19 @@ class XRR():
         self.xrr.set_yscale('log')
         self.xrr.set_xlabel(self.motor)
 
-        self.lineraw, = self.raw.plot([],[], 'o', label='raw Mythen data', markersize=3)
-        self.linexrr, = self.xrr.plot([],[], label='')
-    
+        self.linedir,  = self.raw.plot([],[], 'o', label='dir counts',  markersize=4)
+        self.linerefl, = self.raw.plot([],[], '^', label='refl counts', markersize=4)
+        self.linemaxc, = self.raw.plot([],[], label='max count')
+        self.linexrr,  = self.xrr.plot([],[], label='XRR')
+        self.fb        = self.xrr.fill_between([], [], [], color='c', alpha=0.3)
+
+        self.raw.legend(loc='best', shadow=True)
+        self.xrr.legend(loc='best', shadow=True)
+        
+        # self.linedir.set_label('dir counts')
+        # self.linerefl.set_label('refl counts')
+        # self.linemaxc.set_label('max count')
+        
     def interpret_click(self, ev):
         '''Grab location of mouse click.  Identify motor by grabbing the
         x-axis label from the canvas clicked upon.
@@ -1489,18 +1520,21 @@ class XRR():
 
     def stop(self, catalog, **kwargs):
         if get_backend().lower() == 'agg':
-            if 'filename' in kwargs and kwargs['filename'] is not None and kwargs['filename'] != '':
-                folder = os.path.join(experiment_folder(catalog, kwargs["uid"]), 'pictures')
-                if os.path.isdir(folder) is False:
-                    os.mkdir(folder)
-                fname = os.path.join(folder, kwargs["filename"])
-                self.figure.savefig(fname)
-                self.logger.info(f'saved XRR figure {fname}')
-                #img_to_slack(fname, title=f'XRR: {self.title}', measurement='XRR')
+            if kwargs["uid"] != '':
+                if 'filename' in kwargs and kwargs['filename'] is not None and kwargs['filename'] != '':
+                    folder = os.path.join(experiment_folder(catalog, kwargs["uid"]), 'pictures')
+                    if os.path.isdir(folder) is False:
+                        os.mkdir(folder)
+                    fname = os.path.join(folder, kwargs["filename"])
+                    self.figure.savefig(fname)
+                    self.logger.info(f'saved XRR figure {fname}')
+                    img_to_slack(fname, title=f'XRR: {self.title}', measurement='XRR')
 
         self.ongoing  = False
         self.xdata    = []
-        self.rawdata  = []
+        self.dirdata  = []
+        self.refldata = []
+        self.maxcdata = []
         self.xrrdata  = []
         self.y2data   = []
         self.motor    = 'eta'
@@ -1508,7 +1542,9 @@ class XRR():
         self.title    = 'eta/delta v. Mythen'
         self.figure   = None
         self.axes     = None
-        self.lineraw  = None
+        self.linedir  = None
+        self.linerefl = None
+        self.linemaxc = None
         self.linexrr  = None
         self.line2    = None
         
@@ -1518,16 +1554,34 @@ class XRR():
             return              # this is a baseline event document, wheel1 is not part of an XRR scan
 
         self.xdata.append(kwargs['data'][self.motor])
-        self.rawdata.append(kwargs['data']['mca_full'])
+        self.dirdata.append(kwargs['data']['dir'])
+        self.refldata.append(kwargs['data']['refl'])
+        self.maxcdata.append(kwargs['data']['max_counts'])
 
+        if kwargs['data']['max_counts'] > 120000:
+            self.raw.set_facecolor('#ffe7e7')  # pale red
+            
         i = int(kwargs['data']['attenuator_attenuation'])
-        factor = self.measured_attenuation[i]
-        rando = 0 # 5000 * numpy.random.rand()
-        self.xrrdata.append(rando + factor * kwargs['data']['mca_full'] / kwargs['data']['dwti_dwell_time'])
-        
-        self.lineraw.set_data(self.xdata, self.rawdata)
-        self.linexrr.set_data(self.xdata, self.xrrdata)
+        factor = KNOWN_ATTENUATION[i]
+        #rando = 0 # 5000 * numpy.random.rand()
+        self.xrrdata.append(factor * (kwargs['data']['refl'] / kwargs['data']['monitor']) / kwargs['data']['dwti_dwell_time'])
 
+        term1 = numpy.sqrt(kwargs['data']['monitor']) / kwargs['data']['monitor']
+        term2 = numpy.sqrt(kwargs['data']['refl']) / kwargs['data']['refl']
+
+        error = numpy.sqrt(term1**2 + term2**2) * (factor * (kwargs['data']['refl']) / kwargs['data']['monitor'] / kwargs['data']['dwti_dwell_time'])
+
+        
+        self.xrrdata_plus.append(factor * (kwargs['data']['refl']) / kwargs['data']['monitor'] / kwargs['data']['dwti_dwell_time'] + error)
+        self.xrrdata_minus.append(factor * (kwargs['data']['refl']) / kwargs['data']['monitor'] / kwargs['data']['dwti_dwell_time'] - error)
+        
+        self.linedir.set_data(self.xdata, self.dirdata)
+        self.linerefl.set_data(self.xdata, self.refldata)
+        self.linemaxc.set_data(self.xdata, self.maxcdata)
+        
+        self.linexrr.set_data(self.xdata, self.xrrdata)
+        self.fb.set_data(self.xdata, self.xrrdata_plus, self.xrrdata_minus)
+        
         self.raw.relim()
         self.raw.autoscale_view(True,True,True)
         self.xrr.relim()
@@ -1552,21 +1606,45 @@ class XRR():
             return
         if detector.lower() in ('bicron', 'apd', 'struck'):
             detector = 'monitor'
-        data = catalog[uid].primary['data']
 
-        x = numpy.array(data[motor])
+        data, count, x = None, 0, None
+        while x is None:
+            try:
+                data = catalog[uid].primary #['data']
+                x = data[motor].read()                
+            except:
+                pass
+            if x is not None:
+                break
+            count += 1
+            if count > 6:
+                return
+            this_pause = 0.1 * 2**count
+            print(f"{count = }, {this_pause = }", flush=True)
+            time.sleep(this_pause)
 
+        print(f'data table looks like this: {data}')
+        print(f"{motor} looks like this: {data[motor]}")
         det = detector
         if detector.lower() == 'mythen':
             if delta is False:
                 det = 'mca_full'
             else:
                 det = 'dir'
+        elif detector.lower() == 'mca_full':
+            det = det.lower()
+        elif detector.lower() == 'ic0':
+            det = 'I0'
+        elif detector.lower() in ('monitor', 'bicron', 'ard', 'struck'):
+            det = 'monitor'
         if det not in data:
             print(f'xrr.alignment: detector {det} not in data table')
             return
-            
-        y = numpy.array(data[det])
+
+        if 'dwti_dwell_time' in data:
+            y = data[det].read() / data['dwti_dwell_time'].read()
+        else:
+            y = data[det].read()
 
         #plt.close('all')
         fig = plt.figure()
@@ -1587,20 +1665,32 @@ class XRR():
         peak = y[imax]
         peakpos = x[imax]
 
-        xx = x[0:imax]
-        yy = y[0:imax]
+        xx = x[0:imax+1]
+        yy = y[0:imax+1]
         halfheight = peak/2
         q = len(xx[yy<halfheight])
         frac = (halfheight - yy[q-1]) / (yy[q] - yy[q-1])
         left = xx[q-1] + frac*(xx[q]-xx[q-1])
 
-        xx = x[imax:]
-        yy = y[imax:]
+        xx = x[imax+1:]
+        yy = y[imax+1:]
         q = len(xx[yy>halfheight])
+
+        ## if the peak position is too far off and the half height is
+        ## not present in the scan on both sides of the peak, this
+        ## next bit will fail with an IndexError because either right
+        ## or left will be outside the bounds of the array.  Same
+        ## could happen above at the line defining "left"
+        ##
+        ## immediate solution, extend the range the eta scan.
+        ##
+        ## long term solution, catch this error and handle it gracefully
         frac = (halfheight - yy[q-1]) / (yy[q] - yy[q-1])
         right = xx[q-1] + frac*(xx[q]-xx[q-1])
 
         plt.plot([left, (right+left)/2, right], [halfheight, halfheight, halfheight], label='FWHM', marker='o')
+
+            
         ymin, ymax = ax.get_ylim()
         plt.plot([com, com], [ymin, ymax], label='CoM')
         plt.plot([peakpos], [peak], label='peak', marker='x')
@@ -1638,25 +1728,29 @@ peak value = {peak:.1f} at {peakpos:.4f}'''
         '''Swiped from an IBM supplied python file written by Koen deKeyser .
         '''
         
-        etaval = float(catalog[uid].baseline['data']['eta'][0])
-        fullmca = catalog[uid].primary['data']['mythen-2_image'][:,0,:].astype(int)
+        etaval = float(catalog[uid].baseline['eta'].read()[0])
+        fullmca = catalog[uid].primary['mythen-2_image'].read()[:,0,:].astype(int)
         
-        monitor = catalog[uid].primary['data']['monitor'][:].reshape(-1,1)
+        monitor = catalog[uid].primary['monitor'].read()[:].reshape(-1,1)
         counts = fullmca / monitor
 
         maxvals = numpy.argmax(counts,axis=0) # find maximum number of counts that arrived in a specific detector pixel   
-        two_theta = catalog[uid].primary['data']['delta'][:]
+        two_theta = catalog[uid].primary['delta'][:]
 
-        calibration = -(two_theta[maxvals]-2.0*etaval) # the minus sign is due to the fact that a detector at position two_theta, will see the beam after we rotate over -two_theta
+        calibration = -(two_theta[maxvals]-2.0*etaval) # the minus sign is due to the fact that a detector at position
+                                                       # two_theta, will see the beam after we rotate over -two_theta  
 
-        weights = counts[maxvals,numpy.arange(self.mythen_channels)] # pixels with very low intensity are likely dead, and will result in errors in the calibration, so we ignore them by giving them a very low weight in the fitting
+        weights = counts[maxvals,numpy.arange(self.mythen_channels)] # pixels with very low intensity are likely dead,
+                                                                     # and will result in errors in the calibration,
+                                                                     # so we ignore them by giving them a very low
+                                                                     # weight in the fitting
 
         Yt = numpy.tan(numpy.radians(calibration))
         Xt = (numpy.arange(self.mythen_channels))
 
-        fitfunc = lambda p, x: (x-p[1])*p[0]# Target function
+        fitfunc = lambda p, x: (x-p[1])*p[0]  # Target function
         errfunc = lambda p, x, y, weight:((fitfunc(p, x) - y)*weight)
-        p0 = [1.0, 0.05] # detector_settings.pixel_in_Bragg_Brentano] # initial guess
+        p0 = [1.0, 0.05]  # detector_settings.pixel_in_Bragg_Brentano] # initial guess
         p2, success = optimize.leastsq(errfunc, p0[:], args=(Xt, Yt ,weights))
 
         lookup_table = numpy.arctan((numpy.arange(self.mythen_channels)-p2[1])*p2[0])
@@ -1671,10 +1765,10 @@ peak value = {peak:.1f} at {peakpos:.4f}'''
         ax.set_ylabel(motor)
         ax.set_xlabel('pixel at beam center')
         ax.set_facecolor((0.95, 0.95, 0.95))
-        ax.set_title(f'Mythen calibration result\npixel 0 at {int(numpy.round(p2[1]))}\ndistance = {d:.3f} mm')
+        ax.set_title(f'Mythen calibration result\npixel 0 at {int(numpy.round(p2[1]))} | distance = {d:.3f} mm')
         ax.legend(loc='best', shadow=True)
-            
-        results = {'pixelz': p2[1], 'angle_per_pixel': 1/p2[0], 'distance': d}
+
+        results = {'pixelz': float(p2[1]), 'angle_per_pixel': float(1/p2[0]), 'distance': float(d)}
         rkvs.set('BMM:xrd:mythen_calibration', str(results))
 
         if get_backend().lower() == 'agg':
@@ -1717,3 +1811,27 @@ def mythen_plot(roi=1, xmin=1, xmax=1280):
     axis.set_facecolor((0.95, 0.95, 0.95))
     ymin, ymax = axis.get_ylim()
     axis.add_patch(Rectangle((mythen_lower[roi-1].get(),0), mythen_size[roi-1].get(), ymax, facecolor=roicolor))
+
+
+def xrr_plot(catalog, uidlist):
+    if type(uidlist) is 'str':
+        uidlist = [uidlist,]
+    
+    fig = plt.figure()
+    axes = fig.add_subplot(111)
+    axes.set_facecolor((0.95, 0.95, 0.95))
+    axes.set_xlabel('eta (deg)')
+    axes.set_ylabel('XRR')
+    axes.set_title("X-ray reflectivity")
+    axes.grid(which='major', axis='both')
+    axes.set_yscale('log')
+    
+    for i,u in enumerate(uidlist):
+        data = catalog[u].primary.read(['eta', 'refl', 'monitor', 'dwti_dwell_time', 'attenuator_attenuation'])
+        factor = list(KNOWN_ATTENUATION[int(data['attenuator_attenuation'][i])] for i in range(0,len(data['eta'])))
+        plt.plot(data['eta'], 
+                 numpy.array(factor) * (data['refl'] / data['monitor']) / data['dwti_dwell_time'],
+                 label=f'data #{i+1}'
+        )
+    axes.legend(loc='best', shadow=True)
+    axes.autoscale_view(True,True,True)

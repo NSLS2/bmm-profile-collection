@@ -49,7 +49,7 @@ aw.logger = logger
 be_verbose = True
 doing = None
 
-from bmm_live import LineScan, XAFSScan, XRF, AreaScan, XRR, mythen_plot
+from bmm_live import LineScan, XAFSScan, XRF, AreaScan, XRR, mythen_plot, xrr_plot
 ls  = LineScan()
 ls.logger = logger
 xs  = XAFSScan()
@@ -98,7 +98,7 @@ def plot_from_kafka_messages(beamline_acronym):
                                           'xrfat', 'linescan', 'xafsscan', 'timescan', 'xrf', 'areascan', 'close',
                                           'logger', 'refresh_slack', 'describe_slack', 'test_slack', 'show_metadata',
                                           'peakfit', 'stepfit', 'rectanglefit', 'reset_rois',
-                                          'backend', 'xrr', 'xrr_alignment', 'xrr_calibration_plot', 'mythen_plot')) :
+                                          'backend', 'xrr', 'xrr_alignment', 'xrr_calibration_plot', 'mythen_plot', 'xrrplot')) :
                 if be_verbose is True:
                     print(f'\n[{datetime.datetime.now().isoformat(timespec="seconds")}]\n{pprint.pformat(message, compact=True)}')
                 else:
@@ -188,7 +188,7 @@ def plot_from_kafka_messages(beamline_acronym):
                     doing = 'areascan'
                 elif message['areascan'] == 'stop':
                     asc.stop(catalog=bmm_catalog, **message)
-                    bmm_plot.plot_areascan(bmm_catalog, message['uid'])
+                    #bmm_plot.plot_areascan(bmm_catalog, message['uid'])
                     doing = None
 
             elif 'xrf' in message:
@@ -209,6 +209,9 @@ def plot_from_kafka_messages(beamline_acronym):
                     xrr.stop(catalog=bmm_catalog, **message)
                     doing = None
 
+            elif 'xrrplot' in message:
+                xrr_plot(bmm_catalog, message['uid'])
+                    
             elif 'xrr_alignment' in message:
                 delta=False
                 if 'delta' in message: delta = message['delta']
@@ -231,12 +234,17 @@ def plot_from_kafka_messages(beamline_acronym):
                     spinner = message['spinner']
                 else:
                     spinner = None
+                if 'rate' in message:
+                    rate = message['rate']
+                else:
+                    rate = False
                 peakfit(catalog = bmm_catalog,
                         uid     = message['uid'],
                         motor   = message['motor_name'],
                         signal  = message['signal'],
                         choice  = message['choice'],
                         spinner = spinner,
+                        rate    = rate,
                         ga      = ga)
                     
             elif 'rectanglefit' in message:
@@ -265,7 +273,6 @@ def plot_from_kafka_messages(beamline_acronym):
                         motor    = message['motor_name'],
                         signal   = message['signal'],
                         spinner  = spinner,
-                        saveplot = saveplot,
                         ga       = ga)
 
 
@@ -384,5 +391,8 @@ def plot_from_kafka_messages(beamline_acronym):
         print('\n\nExiting Kafka consumer (plotting tool)')
         return()
 
+print(sys.path)
+print(f'{bmm_catalog.is_sql = }')
+print(f'{bmm_catalog.uri = }')
 print('Ready to receive documents...')
 plot_from_kafka_messages('bmm')
