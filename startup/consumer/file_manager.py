@@ -318,6 +318,23 @@ def manage_files_from_kafka_messages(beamline_acronym):
                     xrr.calibration_file(catalog=bmm_catalog, uid=message['uid'], stub=message['stub'],
                                      motor=message['motor'], detector=['detector'], logger=logger)
 
+            elif 'sample_alignment' in message:
+                xrr.sample_alignment_report(catalog=bmm_catalog,
+                                            results=message['results'],
+                                            path=message['path'],
+                                            stub=message['stub'],
+                                            folder=message['folder'],
+                                            logger=logger
+                )
+            elif 'eta_refinement' in message:
+                xrr.eta_refinement_report(catalog=bmm_catalog,
+                                          results=message['results'],
+                                          path=message['path'],
+                                          stub=message['stub'],
+                                          folder=message['folder'],
+                                          logger=logger
+                )
+                    
             elif 'mythen_calibration' in message:
                 xrr.mythen_calibration(catalog=bmm_catalog,
                                        uid=message['uid'],
@@ -338,7 +355,13 @@ def manage_files_from_kafka_messages(beamline_acronym):
                                        slits_o=message['slits_o'],
                                        slits_t=message['slits_t'],
                                        logger=logger)
-                                       
+
+            elif 'xrr_dossier' in message:
+                xrr.dossier(catalog=bmm_catalog,
+                            uid=message['uid'],
+                            stub=message['stub'],
+                            logger=logger)
+                            
                                        
                 
     kafka_config = nslsii.kafka_utils._read_bluesky_kafka_config_file(config_file_path="/etc/bluesky/kafka.yml")

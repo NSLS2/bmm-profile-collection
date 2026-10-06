@@ -460,7 +460,7 @@ def rectanglefit(catalog=None, uid=None, motor=None, signal='It', drop=None, aw=
             aw.y_amplitude = amplitude
             aw.y_detector = signal.lower()
 
-def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, ga=None):
+def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, fname=None, folder=None, ga=None):
 
     if uid == 'last':
         uid = catalog[-1].metadata['start']['uid']
@@ -544,22 +544,28 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, ga=No
     print(f'*** centroid of step function found at {motor} position {target:.3f}')
     print(rkvs.get('BMM:peakposition').decode('utf8'))
     
-    if get_backend().lower() != 'agg':
-        fig = plt.figure()
-        ax = fig.gca()
-        ax.scatter(positions, ss, color='blue')
-        ax.plot(positions, out.best_fit, color='red')
-        ax.scatter(target, out.params['amplitude'].value/2, s=160, marker='x', color='green')
-        ax.set_facecolor((0.95, 0.95, 0.95))
-        ax.set_xlabel(f'{motor}')
-        ax.set_ylabel(f'{inverted}{thissig} and error function')
-        if spinner is not None:
-            ax.set_title(f'fit to {motor} scan, spinner {spinner}, center={target:.3f}')
-        else:
-            ax.set_title(f'fit to {motor} scan, center={target:.3f}')
-        fig.canvas.manager.show()
-        fig.canvas.flush_events()
-        #out.plot()
+    #if get_backend().lower() != 'agg':
+    fig = plt.figure()
+    ax = fig.gca()
+    ax.scatter(positions, ss, color='blue')
+    ax.plot(positions, out.best_fit, color='red')
+    ax.scatter(target, out.params['amplitude'].value/2, s=160, marker='x', color='green')
+    ax.set_facecolor((0.95, 0.95, 0.95))
+    ax.set_xlabel(f'{motor}')
+    ax.set_ylabel(f'{inverted}{thissig} and error function')
+    if spinner is not None:
+        ax.set_title(f'fit to {motor} scan, spinner {spinner}, center={target:.3f}')
+    else:
+        ax.set_title(f'fit to {motor} scan, center={target:.3f}')
+    fig.canvas.manager.show()
+    fig.canvas.flush_events()
+    #out.plot()
+
+    if get_backend().lower() == 'agg' and fname is not None and fname.strip() != '':
+        fname = os.path.join(experiment_folder(catalog, uid), folder, fname+'.png')
+        plt.savefig(fname)
+        print(f'saved step-shaped linescan figure {folder}/{fname}.png')
+        
 
 
     ## gather the information needed for the glancing angle auto-alignment summary plot

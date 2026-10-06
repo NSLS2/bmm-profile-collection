@@ -1591,7 +1591,7 @@ class XRR():
         self.figure.canvas.draw()
         self.figure.canvas.flush_events()
         
-    def alignment(self, catalog=None, uid=None, motor=None, detector=None, delta=False, fname=None):
+    def alignment(self, catalog=None, uid=None, motor=None, detector=None, delta=False, with_refl=False, angle=None, stub=None, folder=None):
         if catalog is None:
             print('xrr.alignment: No catalog provided')
             return
@@ -1643,14 +1643,19 @@ class XRR():
 
         if 'dwti_dwell_time' in data:
             y = data[det].read() / data['dwti_dwell_time'].read()
+            r = data['refl'].read() / data['dwti_dwell_time'].read()
         else:
             y = data[det].read()
+            r = data['refl'].read()
 
         #plt.close('all')
         fig = plt.figure()
         cid = fig.canvas.mpl_connect('button_press_event', self.interpret_click)
         
         plt.plot(x, y, label='data')
+        if with_refl:
+            plt.plot(x, r, label='refl')
+            
         ax = plt.gca()
         ax.set_xlabel(motor)
         ax.set_ylabel(det)
@@ -1708,18 +1713,19 @@ class XRR():
         rkvs.set('BMM:xrd:peak_stats', str(results))
         
         report = f'''FWHM = {fwhm:.4f}, center = {fwhm_center:.4f}
-center of mass = {com:.4f}
-peak value = {peak:.1f} at {peakpos:.4f}'''
+center of mass = {com:.4f}  |  peak = {peak:.1f} at {peakpos:.4f}'''
         ax.set_title(report)
         print(report)
         
-        if fname is not None and fname.strip() != '':
+        if stub is not None and stub.strip() != '':
             if get_backend().lower() == 'agg':
-                if 'fname' in kwargs and 'uid' in kwargs:
-                    fname = os.path.join(experiment_folder(catalog, kwargs["uid"]), 'snapshots', fname)
-                    self.figure.savefig(fname)
-                    self.logger.info(f'saved linescan figure {fname}')
-                    img_to_slack(fname, title='Peak analysis', measurement='line')
+                if angle is not None:
+                    fname = os.path.join(experiment_folder(catalog, uid), folder, 'pictures', f'{stub}_{motor}_{angle}.png')
+                else:
+                    fname = os.path.join(experiment_folder(catalog, uid), folder, 'pictures', f'{stub}.png')
+                plt.savefig(fname)
+                self.logger.info(f'saved peak-shaped linescan figure {folder}/{fname}')
+                #img_to_slack(fname, title='Peak analysis', measurement='line')
             
 
         

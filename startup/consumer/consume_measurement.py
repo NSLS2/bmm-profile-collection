@@ -3,6 +3,17 @@ import datetime, signal, pprint, uuid, sys, os, time
 sys.path.insert(0,'/home/xf06bm/.ipython/bmm_tools/src/')
 sys.path.append('/home/xf06bm/.ipython/profile_collection/startup')
 
+crudehack =  ['/home/xf06bm/.cache/rattler/cache/envs/bmm-profile-collection-1916936126467812483/envs/terminal/bin',
+              '/home/xf06bm/.cache/rattler/cache/envs/bmm-profile-collection-1916936126467812483/envs/terminal/lib/python312.zip',
+              '/home/xf06bm/.cache/rattler/cache/envs/bmm-profile-collection-1916936126467812483/envs/terminal/lib/python3.12',
+              '/home/xf06bm/.cache/rattler/cache/envs/bmm-profile-collection-1916936126467812483/envs/terminal/lib/python3.12/lib-dynload',
+              '/home/xf06bm/.cache/rattler/cache/envs/bmm-profile-collection-1916936126467812483/envs/terminal/lib/python3.12/site-packages']
+crudehack.reverse()
+for x in crudehack:
+    sys.path.insert(2,x)
+
+pprint.pprint(sys.path)
+
 #from bluesky_kafka import RemoteDispatcher
 from bluesky_kafka.consume import BasicConsumer
 import nslsii
@@ -213,11 +224,25 @@ def plot_from_kafka_messages(beamline_acronym):
                 xrr_plot(bmm_catalog, message['uid'])
                     
             elif 'xrr_alignment' in message:
-                delta=False
+                with_refl=False
+                if 'with_refl' in message: with_refl = message['with_refl']
+                delta=None
                 if 'delta' in message: delta = message['delta']
-                fname=None
-                if 'fname' in message: fname = message['fname']
-                xrr.alignment(catalog=bmm_catalog, uid=message['uid'], motor=message['motor'], detector=message['detector'], delta=delta, fname=fname)
+                stub=None
+                if 'stub' in message: stub = message['stub']
+                folder='snapshots'
+                if 'folder' in message: folder = message['folder']
+                angle=None
+                if 'angle' in message: angle = message['angle']
+                xrr.alignment(catalog=bmm_catalog,
+                              uid=message['uid'],
+                              motor=message['motor'],
+                              detector=message['detector'],
+                              delta=delta,
+                              with_refl=with_refl,
+                              angle=angle,
+                              stub=stub,
+                              folder=folder)
 
             elif 'xrr_calibration_plot' in message:
                 xrr.calibration_plot(catalog=bmm_catalog, uid=message['uid'], motor=message['motor'],
@@ -268,11 +293,15 @@ def plot_from_kafka_messages(beamline_acronym):
                     saveplot = message['saveplot']
                 else:
                     saveplot = False
+                fname  = message['fname']  if 'fname'  in message else None
+                folder = message['folder'] if 'folder' in message else 'snapshots'
                 stepfit(catalog  = bmm_catalog,
                         uid      = message['uid'],
                         motor    = message['motor_name'],
                         signal   = message['signal'],
                         spinner  = spinner,
+                        fname    = fname,
+                        folder   = folder,
                         ga       = ga)
 
 
