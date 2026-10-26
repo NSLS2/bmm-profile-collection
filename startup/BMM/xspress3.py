@@ -46,7 +46,7 @@ md = user_ns["RE"].md
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 from bmm_tools.tools.periodictable import Z_number, edge_number
 
-from BMM.user_ns.bmm  import kafka, BMMuser
+from BMM.user_ns.bmm  import kafka, BMMuser, bmm_catalog
 from BMM.user_ns.base import startup_dir, profile_configuration, PROPOSALS, RE
 from BMM.user_ns.dcm  import dcm
 
@@ -326,8 +326,9 @@ class BMMXspress3DetectorBase(Xspress3Trigger, Xspress3Detector):
     def describe(self):        
         res = super().describe()
         for channel in self.iterate_channels():
-            res[channel.name+'_xrf']["shape"] = (1, 4096)
-            res[channel.name+'_xrf']["dims"] = ("frame", "bin_count")
+            if bmm_catalog.is_sql is True:
+                res[channel.name+'_xrf']["shape"] = (1, 4096)
+                res[channel.name+'_xrf']["dims"] = ("frame", "bin_count")
             res[channel.name+'_xrf']['dtype_str'] = '<f8'
         return res
 

@@ -199,13 +199,12 @@ bmm_mongo   = None
 print()
 if not is_re_worker_active():
     cprint('[cyan]Connecting to Tiled: bmm_catalog, db[/cyan]')
-    from tiled.client import from_profile, from_uri
-    #bmm_catalog = from_profile('bmm')
-    bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
+    from tiled.client import from_uri
+    #bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
+    bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/raw')
     bmm_catalog.context.http_client.headers['tiled-qos'] = 'acquisition'
     db = Broker(bmm_catalog)
 
-    bmm_mongo = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/raw')
 
 
 cprint('[cyan]Subscribing to Publisher[/cyan]')

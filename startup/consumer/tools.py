@@ -1,4 +1,5 @@
-import os, datetime, emojis, re, configparser, numpy, time, orjson
+import os, datetime, emojis, re, configparser, time, orjson
+from numpy import array
 import tomllib
 from lmfit.models import StepModel, RectangleModel
 from matplotlib import get_backend
@@ -6,6 +7,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from nslsii.utils import open_redis_client
 
+from bmm_tools.tools.math     import peak, com
 
 ELEMENTS = [
     "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne",
@@ -89,17 +91,18 @@ def facility_dict(endstation='XAS'):
 def experiment_folder(catalog, uid, endstation='XAS'):
     endstation = endstation.upper()
     fd = facility_dict(endstation)
+    startdoc = catalog[uid].metadata['start']
+    
 
-
-    if 'data_session' in catalog[uid].metadata['start']:
-        proposal = catalog[uid].metadata['start']['data_session'] #[5:]
+    if 'data_session' in startdoc:
+        proposal = startdoc['data_session'] #[5:]
     else:
         proposal = fd['data_session']
-    if 'XDI' in catalog[uid].metadata['start'] and 'Facility' in catalog[uid].metadata['start']['XDI']:
-        if catalog[uid].metadata['start']['XDI']['Facility']['commissioning'] is True:
+    if 'XDI' in startdoc and 'Facility' in startdoc['XDI']:
+        if startdoc['XDI']['Facility']['commissioning'] is True:
             cycle = 'commissioning'
         else:
-            cycle = catalog[uid].metadata['start']['XDI']['Facility']['cycle']            
+            cycle = startdoc['XDI']['Facility']['cycle']            
             
     else:
         if 'xas_cycle' in fd:
@@ -110,8 +113,8 @@ def experiment_folder(catalog, uid, endstation='XAS'):
     if DATA_SECURITY:
         folder    = os.path.join(PROPOSALS, cycle, f'{proposal}')
     else:
-        proposal  = catalog[uid].metadata['start']['XDI']['Facility']['SAF']
-        startdate = catalog[uid].metadata['start']['XDI']['_user']['startdate']
+        proposal  = startdoc['XDI']['Facility']['SAF']
+        startdate = startdoc['XDI']['_user']['startdate']
         folder = os.path.join(BMM, 'XAS', cycle, str(proposal), startdate)
     #print(f'folder is {folder}')
     return folder
@@ -246,15 +249,6 @@ def file_exists(folder, filename, start, stop, number):
         print(f'"{filename}" not found in {folder} in range {start} - {stop}.')
 
 
-from scipy.ndimage import center_of_mass
-def com(signal):
-    '''Return the center of mass of a 1D array. This is used to find the
-    center of rocking curve and slit height scans.'''
-    return int(center_of_mass(signal)[0])
-def peak(signal):
-    '''Return the index of the maximum of a 1D array. This is used to find the
-    center of rocking curve and slit height scans.'''
-    return numpy.argmax(signal)
 
 
 def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spinner=None, rate=False, ga=None):
@@ -267,15 +261,20 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
 
     ## be sure that the stop document is written
     print(f"fetching data {datetime.datetime.now()}")
-    table, dwti, count = None, None, 0
+    table, dwti, i0, count = None, None, None, 0
     while dwti is None:
         try:
-            table = catalog[uid].primary.read()
-            if 'dwti_dwell_time' in t:
-                dwti = table['dwti_dwell_time']
+            if catalog.is_sql is True:
+                table  = catalog[uid].primary.read()
+            else:
+                table  = catalog[uid].primary['data']
+            if 'dwti_dwell_time' in table:
+                dwti = array(table['dwti_dwell_time'])
+            #if 'I0' in table:
+            #    i0 = array(table['i0'])
         except:
             pass
-        if t is not None:
+        if table is not None: # and i0 is not None:
             break
         count  += 1
         if count >= 9:
@@ -287,54 +286,54 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
 
     if signal == 'I0':
         ylabel = 'I0'
-        sig = table[signal]
+        sig = array(table[signal])
     elif signal == 'It':
         ylabel = 'It/I0'
-        sig = table[signal] / table['I0']
+        sig = array(table[signal]) / array(table['I0'])
     elif signal == 'Ir':
         ylabel = 'Ir/It'
-        sig = table[signal] / table['It']
+        sig = array(table[signal]) / array(table['It'])
     elif signal == 'If':
         ylabel = 'If/I0'
         fluo_detectors = catalog[uid].metadata['start']['detectors']
         el = ''
         if '1-element SDD' in fluo_detectors:
             #for k in catalog[uid].primary['data'].keys():
-            for k in t.keys():
+            for k in table.keys():
                 if element_regex8.match(k):
                     el = element_regex8.match(k).groups()[0]
                     break
-            sig = table[el+'8'] / table['I0']
+            sig = array(table[el+'8']) / array(table['I0'])
         elif '4-element SDD' in fluo_detectors:
-            for k in t.keys():
+            for k in table.keys():
                 if element_regex1.match(k):
                     el = element_regex1.match(k).groups()[0]
                     break
-            sig = (table[el+'1'] +
-                   table[el+'2'] +
-                   table[el+'3'] +
-                   table[el+'4']) / table['I0']
+            sig = (array(table[el+'1']) +
+                   array(table[el+'2']) +
+                   array(table[el+'3']) +
+                   array(table[el+'4'])) / array(table['I0'])
         elif '7-element SDD' in fluo_detectors:
-            for k in t.keys():
+            for k in table.keys():
                 if element_regex1.match(k):
                     el = element_regex1.match(k).groups()[0]
                     break
-            sig = (table[el+'1'] +
-                   table[el+'2'] +
-                   table[el+'3'] +
-                   table[el+'4'] +
-                   table[el+'5'] +
-                   table[el+'6'] +
-                   table[el+'7']) / table['I0']
+            sig = (array(table[el+'1']) +
+                   array(table[el+'2']) +
+                   array(table[el+'3']) +
+                   array(table[el+'4']) +
+                   array(table[el+'5']) +
+                   array(table[el+'6']) +
+                   array(table[el+'7'])) / array(table['I0'])
     else:
         ylabel = signal
-        sig = table[signal]
+        sig = array(table[signal])
 
     if rate is True:
-        sig = sig / table['dwti_dwell_time']
+        sig = sig / array(table['dwti_dwell_time'])
 
-    sig = numpy.array(sig)
-    positions = numpy.array(table[motor])
+    sig = array(sig)
+    positions = array(table[motor])
     if choice.lower() == 'com':
         position = com(sig)
         top      = positions[position]
@@ -351,6 +350,10 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
 
     print(f"posting results {datetime.datetime.now()}")
     rkvs.set('BMM:peakposition', float(top))
+    time.sleep(1)
+    # while abs(float(rkvs.get('BMM:peakposition').decode('utf8')) - float(top)) > 100:
+    #     rkvs.set('BMM:peakposition', float(top))
+    #     time.sleep(0.5)
     print(f'*** peak found at {motor} position {top}')
 
     #if self.fig is not None:
@@ -394,28 +397,31 @@ def rectanglefit(catalog=None, uid=None, motor=None, signal='It', drop=None, aw=
 
     ## be sure that the stop document is written
     table, count = None, 0
-    while t is None:
+    while table is None:
         try:
-            table = catalog[uid].primary.read()
+            if catalog.is_sql is True:
+                table  = catalog[uid].primary.read()
+            else:
+                table  = catalog[uid].primary['data']
         except:
             pass
-        if t is not None:
+        if table is not None:
             break
         count  += 1
         if count >= 5:
             return
         time.sleep(1)
 
-    positions = table[motor]
+    positions = array(table[motor])
     signal = signal.capitalize()
     if signal == 'I0':
-        sig = table[signal]
+        sig = array(table[signal])
     elif signal == 'It':
-        sig = table[signal] / table['I0']
+        sig = array(table[signal]) / array(table['I0'])
     elif signal == 'Ir':
-        sig = table[signal] / table['It']
+        sig = array(table[signal]) / array(table['It'])
     else:
-        sig = table[signal]
+        sig = array(table[signal])
 
     if drop is not None:
         positions = positions[:-drop]
@@ -425,8 +431,8 @@ def rectanglefit(catalog=None, uid=None, motor=None, signal='It', drop=None, aw=
     #    ss       = -(sig - sig[2])
     #else:
     ss        = sig - sig[2]
-    ss        = numpy.array(ss)
-    positions = numpy.array(positions)
+    ss        = array(ss)
+    positions = array(positions)
     
     mod    = RectangleModel(form='erf')
     pars   = mod.guess(ss, x=positions)
@@ -479,8 +485,11 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, fname
     table, positions, count = None, None, 0
     while positions is None:
         try:
-            table  = catalog[uid].primary.read() # ['data']
-            positions = table[motor]
+            if catalog.is_sql is True:
+                table  = catalog[uid].primary.read()
+            else:
+                table  = catalog[uid].primary['data']
+            positions = array(table[motor])
         except:
             pass
         if positions is not None:
@@ -493,7 +502,6 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, fname
         print(f"{count = }, {this_pause = }", flush=True)
         time.sleep(this_pause)
 
-    print(f'{t = }')
     print(f'{positions = }')
     
     backwards = False
@@ -503,22 +511,22 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, fname
         signal = 'monitor'
 
     if signal == 'I0':
-        sig = table[signal]
+        sig = array(table[signal])
         thissig = 'I0'
     elif signal == 'It':
-        sig = table[signal] / table['I0']
+        sig = array(table[signal]) / array(table['I0'])
         thissig = 'It/I0'
     elif signal == 'Ir':
-        sig = table[signal] / table['It']
+        sig = array(table[signal]) / array(table['It'])
         thissig = 'Ir/It'
     elif signal == 'monitor':
-        sig = table[signal]
+        sig = array(table[signal])
         thissig = 'monitor'
     elif signal == 'mythen_dir':
-        sig = table['dir'] / table['dwti_dwell_time']
+        sig = array(table['dir']) / array(table['dwti_dwell_time'])
         thissig = 'monitor'
     else:
-        sig = table[signal]
+        sig = array(table[signal])
         thissig = signal
 
     if signal == 'monitor' and backwards is True:
@@ -542,8 +550,8 @@ def stepfit(catalog=None, uid=None, motor=None, signal='It', spinner=None, fname
         ss     = sig - fix
         inverted    = ''
 
-    ss        = numpy.array(ss)
-    positions = numpy.array(positions)
+    ss        = array(ss)
+    positions = array(positions)
         
     mod    = StepModel(form='erf')
     pars   = mod.guess(ss, x=positions)

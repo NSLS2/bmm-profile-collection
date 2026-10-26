@@ -1226,7 +1226,7 @@ def xafs(inifile=None, **kwargs):
     RE.msg_hook = BMM_msg_hook
 
 
-def remake_dossier(stub=None, uidlist=None, folder=None):
+def remake_dossier(stub=None, uidlist=None, folder=None, new=False):
     '''Regenerate a dossier given a list of UIDs for the xafs scan
     repetitions in the measurement.
 
@@ -1273,8 +1273,10 @@ def remake_dossier(stub=None, uidlist=None, folder=None):
     kafka.message({'dossier': 'start', 'stub': stub})
     kafka.message({'dossier': 'set', 'folder': folder, 'rid': str(uuid.uuid4())[:8]})
     kafka.message({'dossier': 'set', 'uidlist': uidlist})
-    kafka.message({'dossier': 'write'})
-
+    if new is False:
+        kafka.message({'dossier': 'write'})
+    else:
+        kafka.message({'dossier': 'new'})
 
     
 def xanes(filename=None, step=2):

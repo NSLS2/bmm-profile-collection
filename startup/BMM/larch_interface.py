@@ -17,6 +17,7 @@
 ##                           Book II:531-565
 
 import numpy, os, sys
+from numpy import array
 
 from larch import (Group, Parameter, isParameter, param_value, isNamedClass, Interpreter) 
 from larch.xafs import (find_e0, pre_edge, autobk, xftf, xftr)
@@ -173,59 +174,62 @@ class Pandrosus():
             record = self.db[self.uid]
             header = record.metadata
             start = header['start']
-            table  = record.primary
-            
-        self.group.energy = table['dcm_energy'].read()
-        self.group.i0 = table['I0'].read()
+            if self.db.is_sql is True:
+                table = record.primary.read()
+            else:
+                table = record.primary['data']
+                
+        self.group.energy = array(table['dcm_energy'])
+        self.group.i0 = array(table['I0'])
         #if mode in ('flourescence', 'xs', 'xs1', 'fluo', 'flou', 'both'): mode = 'fluorescence'
         if mode == 'reference':
-            self.group.mu = numpy.log(table['It'].read()/table['Ir'].read())
-            self.group.i0 = table['It'].read()
-            self.group.signal = table['Ir'].read()
+            self.group.mu = numpy.log(array(table['It'])/array(table['Ir']))
+            self.group.i0 = array(table['It'])
+            self.group.signal = array(table['Ir'])
 
         #######################################################################################
         # CAUTION!!  This only works when BMMuser is correctly set.  This is unlikely to work #
         # on data in past history.  See new '_dtc' element of start document.  9 Sep 2020     #
         #######################################################################################
         elif mode in ('yield', 'fluo+yield'):
-            self.group.mu = table['Iy'].read()/table['I0'].read()
-            self.group.i0 = table['I0'].read()
-            self.group.signal = table['Iy'].read()
+            self.group.mu = array(table['Iy'])/array(table['I0'])
+            self.group.i0 = array(table['I0'])
+            self.group.signal = array(table['Iy'])
 
         elif mode in ('pips'):
-            self.group.mu = table['Pips'].read()/table['I0'].read()
-            self.group.i0 = table['I0'].read()
-            self.group.signal = table['Pips'].read()
+            self.group.mu = array(table['Pips'])/array(table['I0'])
+            self.group.i0 = array(table['I0'])
+            self.group.signal = array(table['Pips'])
 
         elif mode in ('fluorescence', 'flourescence', 'fluo', 'flou', 'xs', 'xs1', 'xs4', 'xs7', 'both'):
             columns = start['XDI']['_dtc']
             if self.verbose:
                 print(columns)
-            self.group.i0 = table['I0'].read()
+            self.group.i0 = array(table['I0'])
             self.group.signal = numpy.zeros(len(self.group.i0))
             for col in columns:
-                self.group.signal += table[col].read()
+                self.group.signal += array(table[col])
             self.group.mu = self.group.signal / self.group.i0
 
         elif mode in ('icit', 'ici0'):
             if mode == 'icit':
-                self.group.mu = numpy.log(table['I0'].read()/table['I0a'].read())
-                self.group.i0 = table['I0'].read()
-                self.group.signal = table['I0a'].read()
+                self.group.mu = numpy.log(array(table['I0'])/array(table['I0a']))
+                self.group.i0 = array(table['I0'])
+                self.group.signal = array(table['I0a'])
             elif mode == 'icit':
-                self.group.mu = numpy.log(table['I0a'].read()/table['It'].read())
-                self.group.i0 = table['I0a'].read()
-                self.group.signal = table['It'].read()
+                self.group.mu = numpy.log(array(table['I0a'])/array(table['It']))
+                self.group.i0 = array(table['I0a'])
+                self.group.signal = array(table['It'])
 
         elif mode == 'ref':
-            self.group.mu = numpy.log(table['It'].read()/table['Ir'].read())
-            self.group.i0 = table['It'].read()
-            self.group.signal = table['Ir'].read()
+            self.group.mu = numpy.log(array(table['It'])/array(table['Ir']))
+            self.group.i0 = array(table['It'])
+            self.group.signal = array(table['Ir'])
 
         else:
-            self.group.mu = numpy.log(table['I0'].read()/table['It'].read())
-            self.group.i0 = table['I0'].read()
-            self.group.signal = table['It'].read()
+            self.group.mu = numpy.log(array(table['I0'])/array(table['It']))
+            self.group.i0 = array(table['I0'])
+            self.group.signal = array(table['It'])
 
         # why does self.group.signal get lost? weird....
         #print(self.group.signal)
@@ -240,10 +244,13 @@ class Pandrosus():
         else:                               # tiled catalog
             header = self.db[uid].metadata
             start = header['start']
-            table  = self.db[uid].primary
-            
-        self.group.energy = table['dcm_energy'].read()
-        self.group.reference = numpy.log(table['It'].read()/table['Ir'].read())
+            if self.db.is_sql is True:
+                table  = self.db[uid].primary.read()
+            else:
+                table  = self.db[uid].primary['data']
+                
+        self.group.energy = array(table['dcm_energy'])
+        self.group.reference = numpy.log(array(table['It'])/array(table['Ir']))
 
             
     def fetch(self, uid, name=None, mode='transmission', working_folder=None):

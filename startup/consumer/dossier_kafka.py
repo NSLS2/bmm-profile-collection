@@ -15,6 +15,7 @@ from pygments.lexers import PythonLexer, IniLexer
 from pygments.formatters import HtmlFormatter
 
 from bmm_tools.tools.periodictable import edge_energy, Z_number, element_symbol, element_name
+from bmm_tools.devices.cameras import camera_descriptions
 from tools import echo_slack, experiment_folder, file_resource, profile_configuration, rkvs
 from slack import img_to_slack, post_to_slack
 from nslsii.utils import open_redis_client
@@ -149,6 +150,7 @@ class BMMDossier():
     rid = None
     uidlist = []
     force_seqnumber = None
+    stub = ''
 
     def set_parameters(self, **kwargs):
         '''Set dossier parameters from strings in the Kafka message.
@@ -168,7 +170,293 @@ class BMMDossier():
             else:
                 setattr(self, k, kwargs[k])
 
+    def new_dossier(self, catalog=None, stub=None, logger=None):
+        metadata = catalog[self.uidlist[0]].metadata
+        XDI      = metadata['start']['XDI']
+        baseline = catalog[self.uidlist[0]].baseline.read()
+        
+        thiscontent = ''
+        pfolder = experiment_folder(catalog, self.uidlist[0])
 
+        
+        if stub is None:
+            stub = self.stub
+        if stub is None:
+            stub = XDI['Sample']['name']  # is this correct?  do we need a sample name AND a stub
+        
+        ## top of HTML file
+        with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_top.tmpl')) as f:
+            content = f.readlines()
+        thiscontent += ''.join(content).format(stub = stub,
+        )
+        results  = metadata['start']['XDI']['_snapshots']
+        basename = XDI['_user']['filename']
+
+
+        ################################################################################
+        #data plots section
+        with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_snapshots.tmpl')) as f:
+            content = f.readlines()
+        thiscontent += ''.join(content).format(stub = stub,
+                                               kind = 'Measured data')
+
+        with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_onecamera_nouid.tmpl')) as f:
+            content = f.readlines()
+        thiscontent += ''.join(content).format(stub = stub,
+                                               folder = '../snapshots/',
+                                               description = 'Automated data reduction',
+                                               imagefile = f'{basename}_02.png',
+        )
+        with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_onecamera_nouid.tmpl')) as f:
+            content = f.readlines()
+        thiscontent += ''.join(content).format(stub = stub,
+                                               folder = '../snapshots/',
+                                               description = 'Live plot of complete sequence',
+                                               imagefile = f'{basename}_liveplot_02.png',
+        )
+
+
+        if results['xrf_uid'] != '':
+            with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_onecamera.tmpl')) as f:
+                content = f.readlines()
+            thiscontent += ''.join(content).format(stub = stub,
+                                                   folder = '../XRF/',
+                                                   description = 'XRF metadata',
+                                                   camuid = results['xrf_uid'],
+                                                   imagefile = results['xrf_image'],
+            )
+
+        ## glancing angle alignment...
+        
+        ################################################################################
+
+
+        
+        ################################################################################
+        with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_snapshots_end.tmpl')) as f:
+            content = f.readlines()
+        thiscontent += ''.join(content).format(stub = stub,)
+        
+        #cameras section
+        with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_snapshots.tmpl')) as f:
+            content = f.readlines()
+        thiscontent += ''.join(content).format(stub = stub,
+                                               kind = 'Camera images')
+
+        for k in ['webcam-1', 'cam-8', 'cam-9']:
+            if k == 'webcam-1':
+                key = 'webcam'
+            else:
+                key = k.replace('-', '')
+            try:
+                with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_onecamera.tmpl')) as f:
+                    content = f.readlines()
+                thiscontent += ''.join(content).format(stub = stub,
+                                                       folder = '../snapshots/',
+                                                       description = camera_descriptions[k],
+                                                       camuid = results[key+'_uid'],
+                                                       imagefile = results[key+'_file'],
+                                                       
+                )
+            except Exception as E:
+                print(E + ' is unavailable')
+                with open(os.path.join(startup_dir, 'consumer', 'xrr_tmpl', 'dossier_onecamera_unavailable.tmpl')) as f:
+                    content = f.readlines()
+                thiscontent += ''.join(content).format(stub = stub,
+                                                       description = camera_descriptions[k],
+                )
+        
+
+        with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_snapshots_end.tmpl')) as f:
+            content = f.readlines()
+        thiscontent += ''.join(content).format(stub = stub,)
+        ################################################################################
+
+        
+        ################################################################################
+        ## sample details
+        try:
+            # it could happen that the last record has not yet made it into Tiled. if so, just use the current time
+            seqend = datetime.datetime.fromtimestamp(catalog[self.uidlist[-1]].stop['time']).strftime('%A, %B %d, %Y %I:%M %p')
+        except:
+            seqend = datetime.datetime.now()
+        instrument = XDI['_user']['instrument']
+        if instrument is None or instrument == '':
+            instrument = self.instrument_default()
+        if XDI['Element']['symbol'] in all_references:
+            this_ref = all_references[XDI['Element']['symbol']][3]
+        else:
+            this_ref = 'none'
+        
+        with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_sample.tmpl')) as f:
+            content = f.readlines()
+        thiscontent += ''.join(content).format(stub          = stub,
+                                               sample        = XDI['Sample']['name'],
+                                               prep          = XDI['Sample']['prep'],
+                                               comment       = XDI['_user']['comment'],
+                                               seqstart      = datetime.datetime.fromtimestamp(metadata['start']['time']).strftime('%A, %B %d, %Y %I:%M %p'),
+                                               seqend        = seqend,
+                                               
+                                               e0            = '%.1f' % edge_energy(XDI['Element']['symbol'], XDI['Element']['edge']),
+                                               edge          = XDI['Element']['edge'],
+                                               element       = self.element_text(XDI['Element']['symbol']),
+                                               mode          = XDI['_user']['mode'],
+                                               bounds        = ", ".join(map(str, XDI['_user']['bounds_given'])),
+                                               steps         = XDI['_user']['steps'],
+                                               times         = XDI['_user']['times'],
+                                               reference     = re.sub(r'(\d+)', r'<sub>\1</sub>', this_ref),
+                                               mono          = self.mono_text(baseline, XDI),
+                                               pdsmode       = '%s  (%s)' % self.pdstext(baseline),
+                                               pccenergy     = '%.1f' % XDI['_user']['pccenergy'],
+                                               experimenters = XDI['Scan']['experimenters'],
+                                               gup           = XDI['Facility']['GUP'],
+                                               saf           = XDI['Facility']['SAF'],
+                                               cycle         = XDI['Facility']['cycle'],
+                                               #url           = XDI['_user']['url'],
+                                               #doi           = XDI['_user']['doi'],
+                                               #cif           = XDI['_user']['cif'],
+                                               
+                                               inst          = instrument,
+                                               instname      = '',
+        )
+        ################################################################################
+
+        ################################################################################
+        ## files section
+
+        with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_files.tmpl')) as f:
+            content = f.readlines()
+        thiscontent += ''.join(content).format(stub = stub,
+                                               kind = 'Measured data')
+
+        for u in self.uidlist:
+            hdf5files = file_resource(catalog, u)
+            with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_onefile.tmpl')) as f:
+                content = f.readlines()
+            thiscontent += ''.join(content).format(fname = catalog[u].metadata['start']['XDI']['_filename'],
+                                                   uid = u,
+                                                   hdf5file = hdf5files[0],
+                                                   kind = 'XAS repetition',
+                                                   folder = '',
+            )
+            
+
+        if results['xrf_uid'] != '':
+            hdf5files = file_resource(catalog, results['xrf_uid'])
+            with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_onefile.tmpl')) as f:
+                content = f.readlines()
+            thiscontent += ''.join(content).format(fname = results['xrf_image'].replace('XRF_', '').replace('.png', '.xrf'),
+                                                   uid = results['xrf_uid'],
+                                                   hdf5file = hdf5files[0],
+                                                   kind = 'XRF metadata',
+                                                   folder = 'XRF/',
+            )
+
+            
+        with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_files_end.tmpl')) as f:
+            content = f.readlines()
+        thiscontent += ''.join(content).format(stub = stub,)
+        ################################################################################
+
+
+        
+        ################################################################################
+        ## baseline report
+        with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_baseline.tmpl')) as f:
+            content = f.readlines()
+        baselinetable = self.baseline_table(baseline)
+        thiscontent += ''.join(content).format(stub = stub,
+                                               text = baselinetable)
+        ################################################################################
+
+
+        ## bottom of HTML file
+        with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_bottom.tmpl')) as f:
+            content = f.readlines()
+        thiscontent += ''.join(content).format(stub = stub,
+                                               now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"))
+
+        
+        ## worry about numbering!!
+        htmlfilename = os.path.join(pfolder, '.reports', f'{stub}.html')
+        with open(htmlfilename, 'w') as o:
+            o.write(thiscontent)
+        
+        log_entry(logger, f'wrote new-style XAS dossier to {htmlfilename}')
+        
+
+    def baseline_table(self, baseline, tab='    '):
+
+        text = ''
+
+        def one_table(header=None, axis_list=(), columns=5):
+            this = ''
+            if header is not None:
+                this += f'{tab}<table class="baseline">\n'
+                this += f'{tab}  <tr>\n'
+                this += f'{tab}    <th colspan={columns} style="font-size:12pt">{header}</th>\n'
+                this += f'{tab}  </tr>\n'
+
+            this += f'{tab}  <tr>\n'
+            for thing in axis_list:
+                try:
+                    this += f'{tab}    <td>{thing}, {float(baseline[thing][0]):.4f}</td>'
+                except:
+                    this += f'{tab}    <td>{thing}, (missing)</td>'
+            this += f'\n{tab}  </tr>\n'
+            return this
+
+        text += one_table(header='XAFS stages',
+                          columns=6,
+                          axis_list=('xafs_x', 'xafs_y', 'xafs_pitch', 'xafs_roll', 'xafs_wheel', 'xafs_garot'))
+        text += one_table(axis_list=('xafs_ref', 'xafs_refx', 'xafs_refy', 'xafs_rots', 'xafs_adx', 'xafs_ady'))
+        text += one_table(axis_list=('xafs_detx', 'xafs_dety', 'xafs_detz', 'xafs_bsx', 'xafs_bsy', 'xafs_spare'))
+        text += f'{tab}</table><p></p>\n'
+        
+        text += one_table(header='Hutch slit assembly and XAFS table',
+                          columns=5,
+                          axis_list=('dm3_bct', 'xafs_table_yu', 'xafs_table_yd', 'xafs_table_vertical', 'xafs_table_pitch'))
+        text += f'{tab}</table><p></p>\n'
+
+        text += one_table(header='Monochromator',
+                          columns=7,
+                          axis_list=('dcm_bragg', 'dcm_para', 'dcm_perp', 'dcm_pitch', 'dcm_roll', 'dcm_x', 'dcm_y', ))
+        text += f'{tab}</table><p></p>\n'
+
+        text += one_table(header='Focusing mirror',
+                          axis_list=('m2_yu', 'm2_ydo', 'm2_ydi', 'm2_xu', 'm2_xd') )
+        text += one_table(axis_list=('m2_vertical', 'm2_lateral', 'm2_pitch', 'm2_roll', 'm2_yaw'))
+        text += one_table(axis_list=('m2_bender', ))
+        text += f'{tab}</table><p></p>\n'
+
+        text += one_table(header='Harmonic rejection mirror',
+                          axis_list=('m3_yu', 'm3_ydo', 'm3_ydi', 'm3_xu', 'm3_xd'))
+        text += one_table(axis_list=('m3_vertical', 'm3_lateral', 'm3_pitch', 'm3_roll', 'm3_yaw'))
+        text += f'{tab}</table><p></p>\n'
+
+        text += one_table(header='Slits2 (post-mono)',
+                          columns=4,
+                          axis_list=('slits2_top', 'slits2_bottom', 'slits2_outboard', 'slits2_inboard'))
+        text += one_table(columns=4,
+                          axis_list=('slits2_vsize', 'slits2_vcenter', 'slits2_hsize', 'slits2_hcenter'))
+        text += f'{tab}</table><p></p>\n'
+
+        text += one_table(header='Slits3 (hutch entrance)',
+                          columns=4,
+                          axis_list=('slits3_top', 'slits3_bottom', 'slits3_outboard', 'slits3_inboard'))
+        text += one_table(columns=4,
+                          axis_list=('slits3_vsize', 'slits3_vcenter', 'slits3_hsize', 'slits3_hcenter'))
+        text += f'{tab}</table><p></p>\n'
+
+        text += one_table(header='Diagnostics',
+                          columns=4,
+                          axis_list=('dm3_foils', 'dms_fs', 'dm3_bpm', 'dm2_fs'))
+        text += f'{tab}</table><p></p>\n'
+
+
+        return text
+            
+                
     def write_dossier(self, bmm_catalog, logger):
         '''
         Write a dossier for an XAFS scan sequence.
@@ -180,10 +468,12 @@ class BMMDossier():
 
         ## gather information for the dossier from the start document
         ## of the first scan in the sequence
-        XDI, count = None, 0
+        XDI, baseline, documents, count = None, None, None, 0
         while XDI is None:
             try:
-                XDI = bmm_catalog[self.uidlist[0]].start['XDI']
+                startdoc = bmm_catalog[self.uidlist[0]].start
+                XDI = startdoc['XDI']
+                baseline = bmm_catalog[self.uidlist[0]].baseline.read()
             except:
                 pass
             if XDI is not None:
@@ -192,7 +482,7 @@ class BMMDossier():
             if count >= 7:
                 return
             this_pause = 0.1 * 2**count
-            print(f"retrying start doc read in write_dossier {count = }, {this_pause = }", flush=True)
+            print(f"retrying start doc and baseline read in write_dossier {count = }, {this_pause = }", flush=True)
             time.sleep(this_pause)
         
         # XDI = bmm_catalog[self.uidlist[0]].start['XDI']
@@ -272,7 +562,7 @@ class BMMDossier():
             #     thiscontent += ''.join(content).format(hdf5file = pilatus_hdf5,
             #                                            basename = os.path.basename(pilatus_hdf5), )
 
-                
+            print(f"before scanlist and sidebar {datetime.datetime.now()}")                
             # middle part of dossier
             instrument = XDI['_user']['instrument']
             if instrument is None or instrument == '':
@@ -280,8 +570,8 @@ class BMMDossier():
             with open(os.path.join(startup_dir, 'consumer', 'tmpl', 'dossier_middle.tmpl')) as f:
                 content = f.readlines()
             thiscontent += ''.join(content).format(basename      = XDI['_user']['filename'], # awkward, wants un-numbered basename
-                                                   scanlist      = self.generate_scanlist(bmm_catalog),  # uses self.uidlist
-                                                   motors        = self.motor_sidebar(bmm_catalog),
+                                                   scanlist      = self.generate_scanlist(XDI, bmm_catalog),  # uses self.uidlist
+                                                   motors        = self.motor_sidebar(baseline),
                                                    sample        = XDI['Sample']['name'],
                                                    prep          = XDI['Sample']['prep'],
                                                    comment       = XDI['_user']['comment'],
@@ -289,6 +579,7 @@ class BMMDossier():
                                                    seqnumber     = seqnumber)
             
 
+            print(f"before snapshots {datetime.datetime.now()}")                
             # middle part, cameras, one at a time and only if actually snapped
             if 'webcam_uid' in snapshots and snapshots['webcam_uid'] != '':
                 with open(os.path.join(startup_dir, 'consumer', 'tmpl', 'dossier_img.tmpl')) as f:
@@ -332,38 +623,86 @@ class BMMDossier():
                                                        uid         = snapshots['cam9_uid'],
                                                        camera      = 'cam9',
                                                        description = 'GigE camera #9', )
-            
+
+            print(f"starting ocr/roi content {datetime.datetime.now()}")
             # middle part, XRF and glancing angle alignment images
+
+            def get_xrf_datum(catalog, record, element):
+                if catalog.is_sql is True:
+                    if 'SDD' in element:  # this is an ROI value
+                        return int( numpy.array(record[element].read()).sum() )
+                    else:                 # this is an MCA spectrum and we want the sum
+                        return int(record[element].read()[0])
+                else:
+                    if 'SDD' in element:  # this is an ROI value
+                        #return 0          # mongo is currently with the wrong shape (10/14/26)
+                        return int( numpy.array(record[element][0]).sum() )
+                    else:                 # this is an MCA spectrum and we want the sum
+                        return int(record[element][0])
+                
+            
             if thismode in ('xs', 'xs1', 'fluorescence'):
                 el = XDI['Element']['symbol']
                 if 'xrf_uid' in XDI['_snapshots']:
+                    #xrfrecord = bmm_catalog[snapshots['xrf_uid']]
+                    if bmm_catalog.is_sql is True:
+                        xrf_record = bmm_catalog[snapshots['xrf_uid']].primary
+                    else:
+                        xrf_record = bmm_catalog[snapshots['xrf_uid']].primary['data']
+                        
                     if '4-element SDD' in bmm_catalog[self.uidlist[0]].start['detectors']:
-                        rois = [int(bmm_catalog[snapshots['xrf_uid']].primary[el+'1'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'2'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'3'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'4'][0])]
-                        ocrs = [int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['4-element SDD_channel01_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['4-element SDD_channel02_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['4-element SDD_channel03_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['4-element SDD_channel04_xrf']).sum()) ]
+                        rois = [get_xrf_datum(bmm_catalog, xrf_record, el+'1'),
+                                get_xrf_datum(bmm_catalog, xrf_record, el+'2'),
+                                get_xrf_datum(bmm_catalog, xrf_record, el+'3'),
+                                get_xrf_datum(bmm_catalog, xrf_record, el+'4'),]
+                        ocrs = [get_xrf_datum(bmm_catalog, xrf_record, '7-element SDD_channel01_xrf'),
+                                get_xrf_datum(bmm_catalog, xrf_record, '7-element SDD_channel02_xrf'),
+                                get_xrf_datum(bmm_catalog, xrf_record, '7-element SDD_channel03_xrf'),
+                                get_xrf_datum(bmm_catalog, xrf_record, '7-element SDD_channel04_xrf'),]
+                        
+                        # rois = [int(bmm_catalog[snapshots['xrf_uid']].primary[el+'1'].read()[0]),
+                        #         int(bmm_catalog[snapshots['xrf_uid']].primary[el+'2'].read()[0]),
+                        #         int(bmm_catalog[snapshots['xrf_uid']].primary[el+'3'].read()[0]),
+                        #         int(bmm_catalog[snapshots['xrf_uid']].primary[el+'4'].read()[0])]
+                        # ocrs = [int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['4-element SDD_channel01_xrf'].read()).sum()),
+                        #         int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['4-element SDD_channel02_xrf'].read()).sum()),
+                        #         int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['4-element SDD_channel03_xrf'].read()).sum()),
+                        #         int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['4-element SDD_channel04_xrf'].read()).sum()) ]
                     elif '1-element SDD' in bmm_catalog[self.uidlist[0]].start['detectors']:
-                        rois = [int(bmm_catalog[snapshots['xrf_uid']].primary[el+'8'][0]),]
-                        ocrs = [int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['1-element SDD_channel08_xrf']).sum()),]
+                        rois = [get_xrf_datum(bmm_catalog, xrf_record, el+'8'),]
+                        ocrs = [get_xrf_datum(bmm_catalog, xrf_record, '7-element SDD_channel08_xrf'),]
+                        #rois = [int(bmm_catalog[snapshots['xrf_uid']].primary[el+'8'].read()[0]),]
+                        #ocrs = [int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['1-element SDD_channel08_xrf'].read()).sum()),]
                     elif '7-element SDD' in bmm_catalog[self.uidlist[0]].start['detectors']:
-                        rois = [int(bmm_catalog[snapshots['xrf_uid']].primary[el+'1'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'2'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'3'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'4'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'5'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'6'][0]),
-                                int(bmm_catalog[snapshots['xrf_uid']].primary[el+'7'][0]) ]
-                        ocrs = [int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel01_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel02_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel03_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel04_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel05_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel06_xrf']).sum()),
-                                int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel07_xrf']).sum()) ]
+                        rois = [get_xrf_datum(bmm_catalog, xrf_record, el+'1'),
+                                get_xrf_datum(bmm_catalog, xrf_record, el+'2'),
+                                get_xrf_datum(bmm_catalog, xrf_record, el+'3'),
+                                get_xrf_datum(bmm_catalog, xrf_record, el+'4'),
+                                get_xrf_datum(bmm_catalog, xrf_record, el+'5'),
+                                get_xrf_datum(bmm_catalog, xrf_record, el+'6'),
+                                get_xrf_datum(bmm_catalog, xrf_record, el+'7'),]
+                        ocrs = [get_xrf_datum(bmm_catalog, xrf_record, '7-element SDD_channel01_xrf'),
+                                get_xrf_datum(bmm_catalog, xrf_record, '7-element SDD_channel02_xrf'),
+                                get_xrf_datum(bmm_catalog, xrf_record, '7-element SDD_channel03_xrf'),
+                                get_xrf_datum(bmm_catalog, xrf_record, '7-element SDD_channel04_xrf'),
+                                get_xrf_datum(bmm_catalog, xrf_record, '7-element SDD_channel05_xrf'),
+                                get_xrf_datum(bmm_catalog, xrf_record, '7-element SDD_channel06_xrf'),
+                                get_xrf_datum(bmm_catalog, xrf_record, '7-element SDD_channel07_xrf'),]
+                                
+                        # rois = [int(bmm_catalog[snapshots['xrf_uid']].primary[el+'1'].read()[0]),
+                        #         int(bmm_catalog[snapshots['xrf_uid']].primary[el+'2'].read()[0]),
+                        #         int(bmm_catalog[snapshots['xrf_uid']].primary[el+'3'].read()[0]),
+                        #         int(bmm_catalog[snapshots['xrf_uid']].primary[el+'4'].read()[0]),
+                        #         int(bmm_catalog[snapshots['xrf_uid']].primary[el+'5'].read()[0]),
+                        #         int(bmm_catalog[snapshots['xrf_uid']].primary[el+'6'].read()[0]),
+                        #         int(bmm_catalog[snapshots['xrf_uid']].primary[el+'7'].read()[0]) ]
+                        # ocrs = [int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel01_xrf'].read()).sum()),
+                        #         int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel02_xrf'].read()).sum()),
+                        #         int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel03_xrf'].read()).sum()),
+                        #         int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel04_xrf'].read()).sum()),
+                        #         int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel05_xrf'].read()).sum()),
+                        #         int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel06_xrf'].read()).sum()),
+                        #         int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['7-element SDD_channel07_xrf'].read()).sum()) ]
 
                     with open(os.path.join(startup_dir, 'consumer', 'tmpl', 'dossier_xrf_image.tmpl')) as f:
                         content = f.readlines()
@@ -379,6 +718,7 @@ class BMMDossier():
                                                            ga_yuid  = snapshots['ga_yuid'],
                                                            ga_puid  = snapshots['ga_pitchuid'],
                                                            ga_fuid  = snapshots['ga_fuid'], )
+            print(f"finished ocr/roi content {datetime.datetime.now()}")
 
             # end of dossier
             with open(os.path.join(startup_dir, 'consumer', 'tmpl', 'dossier_bottom.tmpl')) as f:
@@ -401,10 +741,10 @@ class BMMDossier():
                                                    steps         = XDI['_user']['steps'],
                                                    times         = XDI['_user']['times'],
                                                    reference     = re.sub(r'(\d+)', r'<sub>\1</sub>', this_ref),
-                                                   seqstart      = datetime.datetime.fromtimestamp(bmm_catalog[self.uidlist[0]].start['time']).strftime('%A, %B %d, %Y %I:%M %p'),
+                                                   seqstart      = datetime.datetime.fromtimestamp(startdoc['time']).strftime('%A, %B %d, %Y %I:%M %p'),
                                                    seqend        = seqend,
-                                                   mono          = self.mono_text(bmm_catalog),
-                                                   pdsmode       = '%s  (%s)' % self.pdstext(bmm_catalog),
+                                                   mono          = self.mono_text(baseline, XDI),
+                                                   pdsmode       = '%s  (%s)' % self.pdstext(baseline),
                                                    pccenergy     = '%.1f' % XDI['_user']['pccenergy'],
                                                    experimenters = XDI['Scan']['experimenters'],
                                                    gup           = XDI['Facility']['GUP'],
@@ -417,6 +757,7 @@ class BMMDossier():
                                                    clargs        = highlight(XDI['_user']['clargs'],  PythonLexer(), HtmlFormatter()),
                                                    filename      = XDI['_user']['filename'],)
 
+            print(f"writing {datetime.datetime.now()}")
             with open(htmlfilename, 'w') as o:
                 o.write(thiscontent)
 
@@ -492,48 +833,58 @@ class BMMDossier():
             thistext += f'Z={Z_number(element)})'
             return thistext
         
-    def generate_scanlist(self, bmm_catalog):
+    def generate_scanlist(self, XDI, bmm_catalog):
         '''Generate the html text for the XAS scan side bar for the XAFS
         dossier from the uidlist.'''
         template = '''
-<li>
-  <a href="../{filename}.{ext:03d}"
-     title="Click to see the text of {filename}.{ext:03d}">
-         {printedname}.{ext:03d}
-  </a>
-  <br>&nbsp;&nbsp;
-  <a href="javascript:void(0)"
-     onclick="toggle_visibility(\'{filename}.{ext:03d}\');"
-     title="This is the scan number for {filename}.{ext:03d}, click to show/hide its UID">
-         #{scanid}
-  </a>
-  <div id="{filename}.{ext:03d}" style="display:none;"><small>{uid}</small></div>
-  <br>&nbsp;&nbsp;'''
-        hdf5template = '''<a href="javascript:void(0)"
-     onclick="toggle_visibility(\'{filename}.{ext:03d}.h5\');"
-     title="This is the HDF5 file associated with {filename}.{ext:03d}, click to show/hide the HDF5 filename">
-         XSpress3 HDF5
-  </a>
-  <div id="{filename}.{ext:03d}.h5" style="display:none;"><small>{hdf5file}</small></div>
-'''
-        pilatustemplate = '''<br>&nbsp;&nbsp;
-  <a href="javascript:void(0)"
-     onclick="toggle_visibility(\'{basename}\');"
-     title="This is the Pilatus HDF5 file containing the immage stack from {filename}.{ext:03d}, click to show/hide the HDF5 filename">
-         Pilatus HDF5
-  </a>
-  <div id="{basename}" style="display:none;"><small>{hdf5file}</small></div>
-'''
+              <li>
+                <a href="../{filename}.{ext:03d}"
+                   title="Click to see the text of {filename}.{ext:03d}">
+                       {printedname}.{ext:03d}
+                </a>
+                <br />
+                &nbsp;&nbsp;
+                <a href="javascript:void(0)"
+                   onclick="toggle_visibility(\'{filename}.{ext:03d}\');"
+                   title="This is the scan number for {filename}.{ext:03d}, click to show/hide its UID">
+                       #{scanid}
+                </a>
+                <div id="{filename}.{ext:03d}" style="display:none;"><small>{uid}</small></div>
+                <br />
+                &nbsp;&nbsp;'''
+        hdf5template = '''              <a href="javascript:void(0)"
+                   onclick="toggle_visibility(\'{filename}.{ext:03d}.h5\');"
+                   title="This is the HDF5 file associated with {filename}.{ext:03d}, click to show/hide the HDF5 filename">
+                       XSpress3 HDF5
+                </a>
+                <div id="{filename}.{ext:03d}.h5" style="display:none;"><small>{hdf5file}</small></div>
+              '''
+        pilatustemplate = '''              <br />
+                &nbsp;&nbsp;
+                <a href="javascript:void(0)"
+                   onclick="toggle_visibility(\'{basename}\');"
+                   title="This is the Pilatus HDF5 file containing the immage stack from {filename}.{ext:03d}, click to show/hide the HDF5 filename">
+                       Pilatus HDF5
+                </a>
+                <div id="{basename}" style="display:none;"><small>{hdf5file}</small></div>
+  '''
+        pilatustemplate = '''<br/ >
+                &nbsp;&nbsp;
+                <a href="javascript:void(0)"
+                   onclick="toggle_visibility(\'{basename}\');"
+                   title="This is the Eiger HDF5 file containing the immage stack from {filename}.{ext:03d}, click to show/hide the HDF5 filename">
+                       Eiger HDF5
+                </a>
+                <div id="{basename}" style="display:none;"><small>{hdf5file}</small></div>
+                '''
         
-#        template = '<li><a href="../{filename}.{ext:03d}" title="Click to see the text of {filename}.{ext:03d}">{printedname}.{ext:03d}</a>&nbsp;&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" onclick="toggle_visibility(\'{filename}.{ext:03d}\');" title="This is the scan number for {filename}.{ext:03d}, click to show/hide its UID">#{scanid}</a><div id="{filename}.{ext:03d}" style="display:none;"><small>{uid}</small></div></li>\n'
-
         text = ''
         for i,u in enumerate(self.uidlist):
-            filename = bmm_catalog[u].start['XDI']['_user']['filename']
-            ext = bmm_catalog[u].start['XDI']['_user']['start'] + i
+            filename = XDI['_user']['filename']
+            ext = XDI['_user']['start'] + i
             printedname = filename
-            hdf5file = self.hdf5_filename(bmm_catalog, u)
-            pilatusfile = self.pilatus_filename(bmm_catalog, u)
+            hdf5file, pilatusfile, eigerfile = self.hdf5_filename(bmm_catalog, u)
+            #pilatusfile = self.pilatus_filename(bmm_catalog, u)
             if len(filename) > 11:
                 printedname = filename[0:6] + '&middot;&middot;&middot;' + filename[-5:]
             text += template.format(filename    = filename,
@@ -550,30 +901,36 @@ class BMMDossier():
                                                filename    = filename,
                                                ext         = ext,
                                                hdf5file    = pilatusfile,)
+            if eigerfile is not None:
+                text += eigertemplate.format(basename    = os.path.basename(eigerfile),
+                                             filename    = filename,
+                                             ext         = ext,
+                                             hdf5file    = eigerfile,)
             ext = ext + 1
-            text += '</li>\n'
+            text += '               </li>\n'
         return text
 
-    def mono_text(self, bmm_catalog):
+    def mono_text(self, baseline, XDI):
         '''Text explaining the monochromator used for the measurement.  This
         is computed from motor values in the baseline.'''
-        dcmx = float(bmm_catalog[self.uidlist[0]].baseline['dcm_x'].read()[0])
+        dcmx = float(baseline['dcm_x'][0])
         if dcmx > 10:
             return 'Si(311)'
-        elif bmm_catalog[self.uidlist[0]].start['XDI']['_user']['ththth'] is True:
+        elif XDI['_user']['ththth'] is True:
             return 'Si(333)'
         else:
             return 'Si(111)'
 
 
-    def pdstext(self, bmm_catalog):
+    def pdstext(self, baseline):
         '''Text explaining the photon delivery mode used for the measurement.
         This is computed from motor values in the baseline.'''
-        m2v = float(bmm_catalog[self.uidlist[0]].baseline['m2_vertical'][0])
-        m2p = float(bmm_catalog[self.uidlist[0]].baseline['m2_pitch'][0])
-        m3p = float(bmm_catalog[self.uidlist[0]].baseline['m3_pitch'][0])
-        m3v = float(bmm_catalog[self.uidlist[0]].baseline['m3_vertical'][0])
-        m3l = float(bmm_catalog[self.uidlist[0]].baseline['m3_lateral'][0])
+        #baseline = bmm_catalog[self.uidlist[0]].baseline.read()
+        m2v = float(baseline['m2_vertical'][0])
+        m2p = float(baseline['m2_pitch'][0])
+        m3p = float(baseline['m3_pitch'][0])
+        m3v = float(baseline['m3_vertical'][0])
+        m3l = float(baseline['m3_lateral'][0])
         if m2v < 0: # this is a focused mode
             if m2p > 3:
                 return ('XRD', 'focused at goniometer, >8 keV')
@@ -618,26 +975,27 @@ class BMMDossier():
     def hdf5_filename(self, bmm_catalog, uid):
         '''Find the path/name of the asset file associated with UID
         '''
-        for d in bmm_catalog[uid].documents():
-            if d[0] == 'resource':
-                this = os.path.join(d[1]['root'], d[1]['resource_path'])
-                if '_%d' in this:
-                    this = this % 0
-                if 'xspress3' in this:
-                    return this 
-        return None
+        hfile, pfile, efile = None, None, None
+        for f in file_resource(bmm_catalog, uid):
+            if 'xspress3' in f:
+                hfile = f
+            if 'pilatus100k' in f:
+                pfile = f
+            if 'eiger1m-1' in f:
+                efile = f
+        return hfile, pfile, efile
 
-    def pilatus_filename(self, bmm_catalog, uid):
-        '''Find the path/name of the asset file associated with UID
-        '''
-        for d in bmm_catalog[uid].documents():
-            if d[0] == 'resource':
-                this = os.path.join(d[1]['root'], d[1]['resource_path'])
-                if '_%d' in this:
-                    this = this % 0
-                if 'pilatus100k' in this:
-                    return this
-        return None
+    # def pilatus_filename(self, bmm_catalog, uid):
+    #     '''Find the path/name of the asset file associated with UID
+    #     '''
+    #     for d in bmm_catalog[uid].documents():
+    #         if d[0] == 'resource':
+    #             this = os.path.join(d[1]['root'], d[1]['resource_path'])
+    #             if '_%d' in this:
+    #                 this = this % 0
+    #             if 'pilatus100k' in this:
+    #                 return this
+    #     return None
 
     def motor_entry(self, baseline, motor):
         '''Return a string for a single entry in the motor position sidebar.
@@ -676,7 +1034,7 @@ class BMMDossier():
                 text = ''
         return text
 
-    def motor_paragrph(self, baseline, title, motorlist):
+    def motor_paragraph(self, baseline, title, motorlist):
         '''Format a labeled group of motors for the motor position sidebar.
         '''
         content = ''
@@ -691,7 +1049,7 @@ class BMMDossier():
                            content = content)
         return text
     
-    def motor_sidebar_new(self, bmm_catalog):
+    def motor_sidebar_new(self, baseline):
         '''Generate a list of motor positions for the sidebar of the static
         html page for a scan sequence.  Return value is a long string
         with html tags and entities embedded in the string.
@@ -707,41 +1065,41 @@ class BMMDossier():
         >>> text = dossier.motor_sidebar(bmm_catalog)
 
         '''
-        baseline = bmm_catalog[self.uidlist[0]].baseline.read()
+        #baseline = bmm_catalog[self.uidlist[0]].baseline.read()
 
         motors = ''
         
         motorlist = ('xafs_x', 'xafs_y', 'xafs_pitch', 'xafs_roll', 'xafs_wheel', 'xafs_garot',
                      'xafs_ref', 'xafs_refx', 'xafs_refy',
                      'xafs_detx', 'xafs_dety', 'xafs_detz')
-        motors += self.motor_paragrph(baseline, 'XAFS stages', motorlist)
+        motors += self.motor_paragraph(baseline, 'XAFS stages', motorlist)
         
         motorlist = ('slot', 'spinner', 'dm3_bct')
-        motors += self.motor_paragrph(baseline, 'Instruments', motorlist)
+        motors += self.motor_paragraph(baseline, 'Instruments', motorlist)
 
         motorlist = ('slits3_vsize', 'slits3_vcenter', 'slits3_hsize', 'slits3_hcenter', 'slits3_top', 'slits3_bottom', 'slits3_inboard', 'slits3_outboard')
-        motors += self.motor_paragrph(baseline, 'Slits3', motorlist)
+        motors += self.motor_paragraph(baseline, 'Slits3', motorlist)
 
         motorlist = ('m2_vertical', 'm2_lateral', 'm2_pitch', 'm2_roll', 'm2_yaw', 'm2_yu', 'm2_ydo', 'm2_ydi', 'm2_xu', 'm2_xd', 'm2_bender')
-        motors += self.motor_paragrph(baseline, 'M2', motorlist)
+        motors += self.motor_paragraph(baseline, 'M2', motorlist)
         
         stripe = '(Rh/Pt stripe)'
         if baseline['m3_xu'][0] < 0:
             stripe = '(Si stripe)'
         motorlist = ('m3_vertical', 'm3_lateral', 'm3_pitch', 'm3_roll', 'm3_yaw', 'm3_yu', 'm3_ydo', 'm3_ydi', 'm3_xu', 'm3_xd')
-        motors += self.motor_paragrph(baseline, f'M3 {stripe}', motorlist)
+        motors += self.motor_paragraph(baseline, f'M3 {stripe}', motorlist)
 
         motorlist = ('xt_vertical', 'xt_pitch', 'xt_yu', 'xt_yd')
-        motors += self.motor_paragrph(baseline, 'XAFS table', motorlist)
+        motors += self.motor_paragraph(baseline, 'XAFS table', motorlist)
 
         motorlist = ('slits2_vsize', 'slits2_vcenter', 'slits2_hsize', 'slits2_hcenter', 'slits2_top', 'slits2_bottom', 'slits2_inboard', 'slits2_outboard')
-        motors += self.motor_paragrph(baseline, 'Slits2', motorlist)
+        motors += self.motor_paragraph(baseline, 'Slits2', motorlist)
 
         motorlist = ('dcm_x', 'dcm_pitch', 'dcm_roll')
-        motors += self.motor_paragrph(baseline, 'Monochromator', motorlist)
+        motors += self.motor_paragraph(baseline, 'Monochromator', motorlist)
 
         motorlist = ('dm3_foils', 'dm2_fs')
-        motors += self.motor_paragrph(baseline, 'Diagnostics', motorlist)
+        motors += self.motor_paragraph(baseline, 'Diagnostics', motorlist)
 
         return motors
 
@@ -873,8 +1231,8 @@ class BMMDossier():
 
 
 
-    def motor_sidebar(self, bmm_catalog):
-        motors = self.motor_sidebar_new(bmm_catalog)
+    def motor_sidebar(self, baseline):
+        motors = self.motor_sidebar_new(baseline)
         return motors
     
     def instrument_default(self):

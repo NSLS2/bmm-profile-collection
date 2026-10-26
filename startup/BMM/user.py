@@ -590,9 +590,9 @@ class BMM_User(Borg):
         prjfolder      = 'prj'
         htmlfolder     = 'dossier'
         templatefolder = "templates"
-        self.kafka_establish_folder(step, 'Lustre folder', folder)
+        #self.kafka_establish_folder(step, 'Lustre folder', folder)
         #self.kafka_establish_folder(0,    'data folder', data_folder)
-        self.kafka_establish_folder(0,    'snapshot folder', imagefolder)
+        self.kafka_establish_folder(step, 'snapshot folder', imagefolder)
         self.establish_folder(0,          'snapshot folder', os.path.join(self.workspace, imagefolder))
         self.kafka_establish_folder(0,    'Athena prj folder', prjfolder)
         self.establish_folder(0,          'Athena prj folder', os.path.join(self.workspace, prjfolder))

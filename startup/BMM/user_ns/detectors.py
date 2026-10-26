@@ -1,5 +1,6 @@
 
 import os, json, socket, uuid
+import asyncio
 
 from bmm_tools.tools.messages import whisper, error_msg
 
@@ -495,13 +496,13 @@ if with_pilatus is True:
 
 eiger = None
 
-eiger_use_async = True
+eiger_use_async = False
 
 from BMM.user_ns.dwelltime import with_eiger
 if with_eiger is True:
 
     pvbase = "XF:06BM-ES{Det-Eiger:1}"
-    eiger_plugins = ('Pva1', 'HDF1', 'ROI1', 'ROI2', 'ROI3', 'ROI4', 'Stats1' , 'Stats2' , 'Stats3' , 'Stats4', 'ROIStat1',)
+    eiger_plugins = ('Pva1', 'ROI1', 'ROI2', 'ROI3', 'ROI4', 'Stats1' , 'Stats2' , 'Stats3' , 'Stats4', 'ROIStat1',)
     
     if eiger_use_async is True:
         run_report('\t'+'Eiger (async)')
@@ -518,9 +519,26 @@ if with_eiger is True:
             eiger = BMMEiger(
                 prefix=pvbase, name="eiger1m-1", path_provider=pp
             )
+
+        eiger.stats1.total._name = 'full'
+        eiger.stats2.total._name = 'dir'
+        eiger.stats3.total._name = 'refl'
+        eiger.stats1.statistics.MaxValue._name = 'max_counts'
         ## make sure stream mode is enabled for file saving
-        # await eiger.driver.stream_enable.set(True)
-        # await eiger.driver.data_source.set(2)
+        async def prep_eiger():
+            await eiger.driver.fw_enable.set(True)
+            await eiger.driver.stream_enable.set(True)
+            await eiger.driver.data_source.set(2)
+
+            await eiger.stats1.nd_array_port.set('ROI1')
+            await eiger.stats2.nd_array_port.set('ROI2')
+            await eiger.stats3.nd_array_port.set('ROI3')
+            await eiger.stats4.nd_array_port.set('ROI4')
+
+            await eiger.driver.signed_data.set(1)
+
+            return
+        asyncio.run(prep_eiger())
 
     else:
         run_report('\t'+'Eiger (sync)')

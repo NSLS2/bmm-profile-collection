@@ -509,8 +509,8 @@ class LineScan():
             if self.fluo_detector == '1-element SDD':
                 self.y2data.append(signal2)
                 self.y3data.append(signal3)
-            if self.numerator == 'Eiger':
-                self.y2data.append(signal2)
+            #if self.numerator == 'Eiger':
+            #    self.y2data.append(signal2)
             if self.add_refl == True:
                 self.y2data.append(signal2)
                 
@@ -530,8 +530,8 @@ class LineScan():
                 self.y2data.append(signal2/kwargs['data'][self.denominator])
                 self.y3data.append(signal3/kwargs['data'][self.denominator])
         self.line.set_data(self.xdata, self.ydata)
-        if self.numerator == 'Eiger':
-            self.line2.set_data(self.xdata, self.y2data)
+        #if self.numerator == 'Eiger':
+        #    self.line2.set_data(self.xdata, self.y2data)
         if self.numerator == 'Mythen' and self.add_refl is True:
             self.line2.set_data(self.xdata, self.y2data)
         if self.fluo_detector == '1-element SDD':
@@ -1037,9 +1037,9 @@ class XRF():
         if 'XDI' in start:
             if 'Sample' in start['XDI'] and 'name' in start['XDI']['Sample']:
                 title = start['XDI']['Sample']['name']
-        this_energy = start['XDI']['_pccenergy']
-        self.title = f"{title}, incident energy={this_energy}"
-        self.axes.set_title(self.title)
+                this_energy = start['XDI']['_pccenergy']
+                self.title = f"{title}, incident energy={this_energy}"
+                self.axes.set_title(self.title)
         self.axes.grid(which='major', axis='both')
 
         s = []
@@ -1062,7 +1062,11 @@ class XRF():
         isok, count = False, 0
         while isok is False:
             try:
-                datatable = catalog[uid].primary[f'{nelem}-element SDD_channel01_xrf']
+                if catalog.is_sql is True:
+                    datatable = catalog[uid].primary.read()  # [f'{nelem}-element SDD_channel01_xrf']
+                else:
+                    datatable = catalog[uid].primary['data']
+                    
                 isok = True
             except:
                 count += 1
@@ -1073,7 +1077,7 @@ class XRF():
                 
 
         if nelem == 1:
-            s.append(catalog[uid].primary['1-element SDD_channel08_xrf'].read()[0])  #  note channel number!
+            s.append(numpy.array(datatable['1-element SDD_channel08_xrf'])[0])  #  note channel number!
             only = 1
             add = False
         elif 'dante-1' in start['detectors']:
@@ -1082,7 +1086,7 @@ class XRF():
         else:                   # this is inefficient
             for i in channels:
                 print(f'reading {nelem}-element SDD_channel0{i+1}_xrf')
-                s.append(catalog[uid].primary[f'{nelem}-element SDD_channel0{i+1}_xrf'].read()[0])
+                s.append(numpy.array(datatable[f'{nelem}-element SDD_channel0{i+1}_xrf'][0]))
                 #                          compress the (1,4096) array to 1D (4096) -----------^
 
                 
@@ -1235,7 +1239,7 @@ class XRF():
                 handle.write(f'# Facility.SAF: {xdi["Facility"]["SAF"]}\n')
         handle.write('# Column.1: energy eV\n')
 
-        column_list = []
+        column_list, channel_list = [], []
         if '1-element SDD' in catalog[uid].metadata['start']['detectors']:
             nchan = 1
             column_list.append('MCA8')
@@ -1249,6 +1253,7 @@ class XRF():
             handle.write(f'# Column.{c+1}: MCA{c} counts\n')
             if nchan > 1:
                 column_list.append(f'MCA{c}')
+                channel_list.append(f'{nchan}-element SDD_channel0{c}_xrf')
 
         handle.write('# //////////////////////////////////////////////////////////\n')
         if xdi is not None and "_comment" in xdi:
@@ -1260,22 +1265,32 @@ class XRF():
         handle.write('# energy ')
 
         ## data table
-        s = []
-        if nchan == 1:
-            s.append(catalog[uid].primary['1-element SDD_channel08_xrf'].read()[0])  #  note channel number!
-            datatable = numpy.array([s,])
-        elif 'dante-1' in catalog[uid].metadata['start']['detectors']:
-            s.append(catalog[uid].primary['dante-1_image'].read()[0][0])  #  note channel number!  works?
-            datatable = numpy.array([s,])
+        if catalog.is_sql is True:
+            xa = catalog[uid].primary.read(column_list)
+            s = xa.to_pandas()
         else:
-            for i in range(1, nchan+1):
-                s.append(catalog[uid].primary[f'{nchan}-element SDD_channel0{i}_xrf'].read()[0])
-            datatable = numpy.vstack(s)
+            dc = catalog[uid].primary['data']
+            s = pandas.DataFrame()
+            for col in channel_list:
+                #print(col, flush=True)
+                s[col] = numpy.array(numpy.array(dc[col])[0])
 
-        e=numpy.arange(0, len(s[0])) * 10
-        ndt=numpy.vstack(datatable)
-        b=pandas.DataFrame(ndt.transpose(), index=e, columns=column_list)
-        handle.write(b.to_csv(sep=' '))
+        #s = []
+        # if nchan == 1:
+        #     s.append(catalog[uid].primary['1-element SDD_channel08_xrf'].read()[0])  #  note channel number!
+        #     datatable = numpy.array([s,])
+        # elif 'dante-1' in catalog[uid].metadata['start']['detectors']:
+        #     s.append(catalog[uid].primary['dante-1_image'].read()[0][0])  #  note channel number!  works?
+        #     datatable = numpy.array([s,])
+        # else:
+        #     #for i in range(1, nchan+1):
+        #     #    s.append(catalog[uid].primary[f'{nchan}-element SDD_channel0{i}_xrf'].read()[0])
+        #     datatable = numpy.vstack(s)
+
+        #e=numpy.arange(0, len(s[0])) * 10
+        #ndt=numpy.vstack(datatable)
+        #b=pandas.DataFrame(ndt.transpose(), index=e, columns=column_list)
+        handle.write(s.to_csv(sep=' '))
 
         handle.flush()
         handle.close()

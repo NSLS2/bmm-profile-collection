@@ -263,7 +263,7 @@ class GlancingAngle(Device):
                        'signal'     : 'It',
                        'spinner'    : self.current() })
         yield from sleep(ABUNDANCE_OF_CAUTION)
-        maxtries = 7
+        maxtries = 5
         target = fetch_peak_position_via_redis(maxtries=maxtries, verbose=True)
         if target is None:
             uid = bmm_catalog[-1].metadata['start']['uid']
@@ -410,6 +410,7 @@ class GlancingAngle(Device):
                 countdown(BMMuser.macro_sleep)
                 return(yield from null())
 
+            yield from prepare_alignment_scan()
             report(f'Auto-aligning glancing angle stage, spinner {self.current()}', level='bold', slack=True)
 
             suspenders.set_suspenders()
@@ -637,6 +638,8 @@ class GlancingAngleMacroBuilder(BMMMacroBuilder):
                     self.content += self.tab + 'yield from mirror_pitch(mirror="m2", move=True)\n'
                 else:
                     self.content += self.tab + 'yield from mirror_pitch(mirror="m3", move=True)\n'
+                print('(pausing for 3 seconds)')
+                self.content += self.tab + f'yield from mv(busy, 3)\n'
                 self.content += self.tab + f'yield from ga.auto_align(pitch={m["angle"]})\n'
             else:
                 if m['sampley'] is not None:

@@ -1,55 +1,56 @@
-	      </ul>
-	    </div>
-	    <div>	
-            <h3>Scan details</h3>
-	      <ul>
-		<li><b>E0</b>: {e0} eV</li>
-		<li><b>Element</b>: {element}</li>
-		<li><b>Edge</b>: {edge}</li>
-		<li><b>Mode</b>: {mode}</li>
-		<li><b>Bounds</b>: {bounds}</li>
-		<li><b>Steps</b>: {steps}</li>
-		<li><b>Times</b>: {times}</li>
-		<li><b>Reference</b>: {reference}</li>
-	      </ul>
-	    </div>
-	    <div>
-            <h3>Experiment configuration</h3>
-	      <ul>
-		<li><b>Sequence start time:</b> {seqstart}</li>
-		<li><b>Sequence end time:</b> {seqend}</li>
-		<li><b>Monochromator:</b> {mono}</li>
-		<li><b>Photon delivery mode:</b> {pdsmode}</li>
-		<li><b>Pseudo-channel-cut energy</b>: {pccenergy} eV</li>
-		<li><b>Experimenters:</b> {experimenters}</li>
-		<li><b>General user proposal (GUP):</b> {gup}</li>
-		<li><b>Safety approval form (SAF):</b> {saf}</li>
-		<li><b>Cycle:</b> {cycle}</li>
-		<!-- <li><b>URL:</b> <a href="{url}">{url}</a></li> -->
-		<!-- <li><b>DOI:</b> <a href="https://doi.org/{doi}">{doi}</li> -->
-		<!-- <li><b>CIF:</b> <a href="{cif}">{cif}</a></li> -->
-	      </ul>
-              <input id="showhideini" type="button" 
-                     value="Show/hide the INI file used for this scan sequence" 
-                     onclick="toggle_visibility('inifile');" />
-              <br class="clear" />
-              <div id="inifile" style="display:none;">
-                <small>
-                  {initext}
-                  <br />
-                  command line arguments: {clargs}
-                </small>
+  	      </ul>
+  	    </div>
+  	    <div>	
+              <h3>Scan details</h3>
+  	      <ul>
+  		<li><b>E0</b>: {e0} eV</li>
+  		<li><b>Element</b>: {element}</li>
+  		<li><b>Edge</b>: {edge}</li>
+  		<li><b>Mode</b>: {mode}</li>
+  		<li><b>Bounds</b>: {bounds}</li>
+  		<li><b>Steps</b>: {steps}</li>
+  		<li><b>Times</b>: {times}</li>
+  		<li><b>Reference</b>: {reference}</li>
+  	      </ul>
+  	    </div>
+  	    <div>
+              <h3>Experiment configuration</h3>
+  	      <ul>
+  		<li><b>Sequence start time:</b> {seqstart}</li>
+  		<li><b>Sequence end time:</b> {seqend}</li>
+  		<li><b>Monochromator:</b> {mono}</li>
+  		<li><b>Photon delivery mode:</b> {pdsmode}</li>
+  		<li><b>Pseudo-channel-cut energy</b>: {pccenergy} eV</li>
+  		<li><b>Experimenters:</b> {experimenters}</li>
+  		<li><b>General user proposal (GUP):</b> {gup}</li>
+  		<li><b>Safety approval form (SAF):</b> {saf}</li>
+  		<li><b>Cycle:</b> {cycle}</li>
+  		<!-- <li><b>URL:</b> <a href="{url}">{url}</a></li> -->
+  		<!-- <li><b>DOI:</b> <a href="https://doi.org/{doi}">{doi}</li> -->
+  		<!-- <li><b>CIF:</b> <a href="{cif}">{cif}</a></li> -->
+  	      </ul>
+                <input id="showhideini" type="button" 
+                       value="Show/hide the INI file used for this scan sequence" 
+                       onclick="toggle_visibility('inifile');" />
+                <br class="clear" />
+                <div id="inifile" style="display:none;">
+                  <small>
+                    {initext}
+                    <br />
+                    command line arguments: {clargs}
+                  </small>
+                </div>
+                <br class="clear" />
               </div>
-              <br class="clear" />
             </div>
-          </div>
-      </div>
-      <div id="copyright">
-	measurement: {filename} | Design adapted from:
-	<a href="http://templated.org/free-css-templates/neutralcharisma/">Neutral Charisma</a>
-	by <a href="http://nodethirtythree.com">nodethirtythree</a> + <a href="http://templated.org/">Templated.org</a>
-	&amp; availble via
-	<a href="http://creativecommons.org/licenses/by/3.0/">Creative Commons Attribution 3.0 Unported</a>
+        </div>
+        <div id="copyright">
+  	measurement: {filename} | Design adapted from:
+  	<a href="http://templated.org/free-css-templates/neutralcharisma/">Neutral Charisma</a>
+  	by <a href="http://nodethirtythree.com">nodethirtythree</a> + <a href="http://templated.org/">Templated.org</a>
+  	&amp; availble via
+  	<a href="http://creativecommons.org/licenses/by/3.0/">Creative Commons Attribution 3.0 Unported</a>
+        </div>
       </div>
     </div>
   </body>

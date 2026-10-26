@@ -2,6 +2,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy
 import matplotlib.gridspec as gridspec
+import time
 
 from slack import img_to_slack
 
@@ -79,6 +80,7 @@ class GlancingAngle():
         self.fig.canvas.flush_events()
         
         if matplotlib.get_backend().lower() == 'agg':
+            time.sleep(1)
             self.fig.savefig(self.filename)
             self.logger.info(f'saved spinner alignment figure {self.filename}')
             img_to_slack(self.filename, title=f'Alignment of spinner {self.spinner}', measurement='xafs')

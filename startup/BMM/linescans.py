@@ -234,6 +234,11 @@ def prepare_alignment_scan(inttime=0.1):
 
     '''
     rkvs.set('BMM:peakposition', UNSET_PEAK_POSITION - 0.1)
+    while float(rkvs.get('BMM:peakposition').decode('utf8')) >= UNSET_PEAK_POSITION:
+        print('trying to prepare for an alignment scan')
+        print(float(rkvs.get('BMM:peakposition').decode('utf8')))
+        rkvs.set('BMM:peakposition', UNSET_PEAK_POSITION - 0.1)
+        sleep(0.5)
     yield from mv(_locked_dwell_time, inttime)
     
 
@@ -260,8 +265,10 @@ def fetch_peak_position_via_redis(maxtries=5, verbose=True):
         count += 1
         if verbose: cprint(f"[{color}]{count = }, {top = }, {this_pause = }[/{color}]", flush=True)
         if count > maxtries:
+            #rkvs.set('BMM:peakposition', UNSET_PEAK_POSITION - 0.1)
             return(None)
     if verbose: cprint(f"[{color}]obtained results {datetime.datetime.now()}[/{color}]")
+    rkvs.set('BMM:peakposition', UNSET_PEAK_POSITION - 0.1)
     return top
 
 def slit_height(start=-1.5, stop=1.5, nsteps=31, move=False, force=False, slp=1.0, choice='peak'):
@@ -336,10 +343,10 @@ def slit_height(start=-1.5, stop=1.5, nsteps=31, move=False, force=False, slp=1.
                                'signal' : 'I0',
                                'choice' : choice})
                 yield from sleep(ABUNDANCE_OF_CAUTION)
-                maxtries = 7
+                maxtries = 5
                 top = fetch_peak_position_via_redis(maxtries)
                 if top is None:
-                    totaltime = sum(list(0.1*2**x for x in range(1,maxtries+1)))
+                    totaltime = sum(list(0.1*2**(x+3) for x in range(1,maxtries+1)))
                     text = f'Failed to find slit height peak position ({maxtries} tries, {totaltime:.2f} seconds elapsed).'
                     error_msg(text)
                     raise ValueError(text)
@@ -453,10 +460,10 @@ def mirror_pitch(start=None, stop=None, nsteps=41, mirror='m3', move=False, forc
                                'signal' : 'I0',
                                'choice' : choice})
                 yield from sleep(ABUNDANCE_OF_CAUTION)
-                maxtries = 9
+                maxtries = 5
                 top = fetch_peak_position_via_redis(maxtries)
                 if top is None:
-                    totaltime = sum(list(0.1*2**x for x in range(1,maxtries+1)))
+                    totaltime = sum(list(0.1*2**(x+3) for x in range(1,maxtries+1)))
                     text = f'Failed to find mirror pitch peak position ({maxtries} tries, {totaltime:.2f} seconds elapsed).'
                     error_msg(text)
                     raise ValueError(text)
@@ -578,10 +585,10 @@ def rocking_curve(start=-0.10, stop=0.10, nsteps=101, detector='I0', choice='pea
                            'choice' : choice})
             yield from sleep(ABUNDANCE_OF_CAUTION)
 
-            maxtries = 7
+            maxtries = 5
             top = fetch_peak_position_via_redis(maxtries=maxtries)
             if top is None:
-                totaltime = sum(list(0.1*2**x for x in range(1,maxtries+1)))
+                totaltime = sum(list(0.1*2**(x+3) for x in range(1,maxtries+1)))
                 text = f'Failed to find rocking curve peak position ({maxtries} tries, {totaltime:.2f} seconds elapsed).'
                 error_msg(text)
                 raise ValueError(text)
@@ -696,10 +703,10 @@ def hcenter(start=-1, stop=1, nsteps=41, move=False, force=False, choice='peak')
                                'signal' : 'I0',
                                'choice' : choice})
                 yield from sleep(ABUNDANCE_OF_CAUTION)
-                maxtries = 7
+                maxtries = 5
                 top = fetch_peak_position_via_redis(maxtries)
                 if top is None:
-                    totaltime = sum(list(0.1*2**x for x in range(1,maxtries+1)))
+                    totaltime = sum(list(0.1*2**(x+3) for x in range(1,maxtries+1)))
                     text = f'Failed to find hcenter peak position ({maxtries} tries, {totaltime:.2f} seconds elapsed).'
                     error_msg(text)
                     raise ValueError(text)
@@ -796,10 +803,10 @@ def dcmroll(start=-2, stop=2, nsteps=41, move=False, force=False, choice='peak')
                                'signal' : 'I0',
                                'choice' : choice})
                 yield from sleep(ABUNDANCE_OF_CAUTION)
-                maxtries = 7
+                maxtries = 5
                 top = fetch_peak_position_via_redis(maxtries)
                 if top is None:
-                    totaltime = sum(list(0.1*2**x for x in range(1,maxtries+1)))
+                    totaltime = sum(list(0.1*2**(x+3) for x in range(1,maxtries+1)))
                     text = f'Failed to find dcmroll peak position ({maxtries} tries, {totaltime:.2f} seconds elapsed).'
                     error_msg(text)
                     raise ValueError(text)
@@ -933,10 +940,10 @@ def rectangle_scan(motor=None, start=-20, stop=20, nsteps=41, detector='It',
                                'signal'       : detector.capitalize(),
                                'motor_name'   : motor.name })
                 yield from sleep(ABUNDANCE_OF_CAUTION)
-                maxtries = 7
+                maxtries = 5
                 top = fetch_peak_position_via_redis(maxtries)
                 if top is None:
-                    totaltime = sum(list(0.1*2**x for x in range(1,maxtries+1)))
+                    totaltime = sum(list(0.1*2**(x+3) for x in range(1,maxtries+1)))
                     text = f'Failed to find rectangle midpoint position ({maxtries} tries, {totaltime:.2f} seconds elapsed).'
                     error_msg(text)
                     raise ValueError(text)

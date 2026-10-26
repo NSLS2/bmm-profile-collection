@@ -34,16 +34,16 @@ struck_description      = "use OG Struck system for fluorescence, deprecated and
 xspress3                = true
 xspress3_description    = "use the Xspress3X fluorescence readout system, almost certainly want this to be true"
 
-primary                 = 7
+primary                 = 4
 primary_description     = "specify which detector is the primary detector: 1- 4- or 7-element"
 
-4element                = false
+4element                = true
 4element_description    = "set true to enable the 4 element detector"
 
 1element                = true
 1element_description    = "set true to enable the 1 element detector"
 
-7element                = true
+7element                = false
 7element_description    = "set true to enable the 7 element detector"
 
 

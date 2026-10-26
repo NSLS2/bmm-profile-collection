@@ -14,7 +14,7 @@ from bluesky.plan_stubs import mv, mvr
 from .base import *
 
 # Setup Tiled writing clients
-from .tiled import *
+#from .tiled import *
 
 # kafka worker (this is imported early -- MANY things rely on talking via kafka)
 from .kafka import kafka
