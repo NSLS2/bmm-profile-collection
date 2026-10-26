@@ -2,10 +2,9 @@
 channels = ["conda-forge"]
 description = "Beamline profile for xf06bm"
 name = "bmm-profile-collection"
-platforms = ["linux-64"]
-version = "2026.2.0"
-
-[system-requirements]
+platforms = [{ platform = "linux-64" }]
+version = "2026.3.0"
+requires-pixi = ">=0.82.1"
 
 [feature.profile.dependencies]
 bluesky-base = "==1.15.1"
@@ -37,6 +36,9 @@ nslsii = "==0.11.9"
 gpytorch = "*"
 dash = ">=3,<4"
 scikit-image = ">=0.26,<0.27"
+ca-certificates = ">=2026.10.19"
+certifi = ">=2026.10.19"
+pip = ">=26.2.2"
 
 [feature.profile.pypi-dependencies]
 emojis = "*"
@@ -86,10 +88,18 @@ test = "pytest"
 qs-backend = "start-re-manager --profile-dir=."
 qs-server = "uvicorn --host localhost --port 60610 bluesky_httpserver.server:app"
 
-[environments]
-terminal = { features = ["profile", "terminal"], solve-group = "profile" }
-qs = { features = ["profile", "qs"], solve-group = "profile" }
-test = { features = ["profile", "test"], solve-group = "profile" }
+[environments.test]
+features = ["profile", "test"]
+solve-group = "profile"
+
+[environments.terminal]
+features = ["profile", "terminal"]
+solve-group = "profile"
+
+[environments.qs]
+features = ["profile", "qs"]
+solve-group = "profile"
 
 [dependencies]
 inflection = ">=0.5.1,<0.6"
+ca-certificates = ">=2026.10.19"
