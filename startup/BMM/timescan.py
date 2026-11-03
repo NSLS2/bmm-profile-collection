@@ -30,6 +30,7 @@ from BMM.resting_state import resting_state, resting_state_plan
 from BMM.xafs          import scan_metadata
 
 from BMM.user_ns.base       import bmm_catalog
+from BMM.user_ns.tiled      import flush_tiled
 from BMM.user_ns.bmm        import kafka
 from BMM.user_ns.detectors  import quadem1, ic0, ic1, ic2, xs, xs1, xs4, xs7, ION_CHAMBERS, bicron
 from BMM.user_ns.dwelltime  import _locked_dwell_time, use_7element, use_4element, use_1element
@@ -190,6 +191,8 @@ def sead(inifile=None, force=False, **kwargs):
     absorption detection measurement.
 
     '''
+    latest = {'uid': None}  # the uid of the just-acquired SEAD scan, for cleanup_plan
+
     def main_plan(inifile, force, **kwargs):
 
 
@@ -362,6 +365,12 @@ def sead(inifile=None, force=False, **kwargs):
         if p['shutter'] is True:
             yield from shb.close_plan()
 
+        latest['uid'] = seaduid
+        # make the just-acquired run visible in Tiled before the consumer reads it
+        try:
+            flush_tiled()
+        except Exception as e:
+            error_msg(f'Tiled buffers did not drain: {e}')
         kafka.message({'seadxdi': True, 'uid' : seaduid, 'filename': outfile})
         kafka.message({'dossier' : 'set',
                        'rid'     : rid,
@@ -375,11 +384,13 @@ def sead(inifile=None, force=False, **kwargs):
         suspenders.clear_suspenders()
         how = 'finished  :tada:'
         try:
-            if 'primary' not in bmm_catalog[-1].metadata['stop']['num_events']:
+            flush_tiled()  # make sure the stop document has reached Tiled
+            md = bmm_catalog[latest['uid']].metadata
+            if 'primary' not in md['stop']['num_events']:
                 how = '*stopped*'
-            elif bmm_catalog[-1].metadata['stop']['num_events']['primary'] != bmm_catalog[-1].metadata['start']['num_points']:
+            elif md['stop']['num_events']['primary'] != md['start']['num_points']:
                 how = '*stopped*'
-        except:
+        except Exception:
             how = '*stopped*'
         if how != 'stopped':
             report(f'== SEAD scan {how}', level='bold', slack=True)

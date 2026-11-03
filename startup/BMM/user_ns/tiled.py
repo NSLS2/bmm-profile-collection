@@ -2,11 +2,10 @@ import numpy
 import os
 
 from tiled.client import from_uri
-from bluesky.callbacks.buffer import BufferingWrapper
-from bluesky_tiled_plugins import TiledWriter
+from bluesky_tiled_plugins import BufferingWrapper, TiledWriter
 from bluesky_tiled_plugins.writing.consolidators import MultipartRelatedConsolidator
 
-from BMM.user_ns.base import RE, TILED_BACKUP_ROOT
+from BMM.user_ns.base import RE, TILED_BACKUP_ROOT, tiled_inserter
 
 from BMM.functions import run_report
 run_report(__file__, text='Write to SQL-backed Tiled')
@@ -139,7 +138,7 @@ tiled_writing_client_sql = from_uri("https://tiled.nsls2.bnl.gov",
                                     api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_BMM"])['bmm/migration']
 tiled_writing_client_sql.context.http_client.headers['tiled-qos'] = 'acquisition'
 tw = TiledWriter(client = tiled_writing_client_sql,
-                 backup_directory=TILED_BACKUP_ROOT,   # Might conflict with TiledInserter -- need to test
+                 backup_directory=f"{TILED_BACKUP_ROOT}/sql",
                  patches = {"descriptor": patch_descriptor,
                             "resource": patch_resource,
                             "datum": patch_datum},
@@ -153,3 +152,24 @@ tw = BufferingWrapper(tw)
 # Subscribe the TiledWriter
 RE.md["tiled_access_tags"] = (RE.md["data_session"],)
 RE.subscribe(tw)
+
+
+def flush_tiled(timeout=30):
+    '''Block until all buffered documents have been written to Tiled.
+
+    Call this before reading a just-acquired run back from Tiled (through
+    `bmm_catalog` or `db`): documents are buffered, so Tiled's view may lag
+    behind Bluesky. Also call it before sending a post-scan kafka message
+    that prompts the consumer process to read the run. Flushes every writer
+    buffer, so it stays correct regardless of which writers are subscribed
+    to RE.
+
+    Raises RuntimeError if a buffer does not drain within ``timeout``
+    seconds or its worker thread has died.
+    '''
+    for label, buffer in (("raw", tiled_inserter), ("migration", tw)):
+        if not buffer.flush(timeout):
+            raise RuntimeError(
+                f"Tiled {label} buffer was not flushed within {timeout} s "
+                "(timed out or its worker thread died)."
+            )
