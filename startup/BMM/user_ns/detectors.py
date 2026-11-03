@@ -624,8 +624,9 @@ import logging
 #config_ophyd_logging(file="xspress3_ophyd_debug.log", level=logging.DEBUG)
 
 xs  = None
-xs4 = None
 xs1 = None
+xs4 = None
+xs5 = None
 xs7 = None
 
 warmed_up = False
@@ -671,10 +672,7 @@ def _prep_xs(det):
             mcaroi.total_rbv.kind = 'omitted'
 
     det.set_rois()
-    # hdf5folder = os.path.join('/nsls2', 'data', 'bmm', 'assets', 'xspress3', *BMMuser.date.split('-'))
-    # xs4.hdf5.read_path_template = hdf5folder
-    # xs4.hdf5.write_path_template = hdf5folder
-    # xs4.hdf5.file_path.put(hdf5folder)
+    BMMuser.verify_roi(det, BMMuser.element, BMMuser.edge)
 
     for channel in det.iterate_channels():
         channel.xrf.dtype_str = "<f8"
@@ -688,7 +686,7 @@ def _prep_xs(det):
 
     
     
-from BMM.user_ns.dwelltime import with_xspress3, use_4element, use_1element, use_7element
+from BMM.user_ns.dwelltime import with_xspress3, use_1element, use_4element, use_5element, use_7element
 xs4_ioc, xs7_ioc = False, False
 
 if with_xspress3 is True:
@@ -698,11 +696,15 @@ if with_xspress3 is True:
     if 'xs3-4-1' in xs_app_dir.get():
         run_report('\t\t'+'The running XSpress3 IOC is for the 4-element SDD')
         xs4_ioc = True
-        use_4element, use_7element = True, False
+        use_4element, use_5element, use_7element = True, False, False
     elif 'xs3-7-1' in xs_app_dir.get():
         run_report('\t\t'+'The running XSpress3 IOC is for the 7-element SDD')
         xs7_ioc = True
-        use_4element, use_7element = False, True
+        use_4element, use_5element, use_7element = False, False, True
+    elif 'xs3-xfm' in xs_app_dir.get():
+        run_report('\t\t'+'The running XSpress3 IOC is for the 4-element + 1-elemeny SDD')
+        xs5_ioc = True
+        use_4element, use_5element, use_7element = False, True, False
 
 
     if use_7element is True:
@@ -729,12 +731,22 @@ if with_xspress3 is True:
                                            read_attrs = ['hdf5']    )
         _prep_xs(xs4)
 
+    if use_5element is True:
+        run_report('\t\t'+'instantiate 4-element + 1-element SDD')
+        from BMM.xspress3_5element import BMMXspress3Detector_5Element
+        xs5 = BMMXspress3Detector_5Element(prefix     = 'XF:06BM-ES{Xsp:1}:',
+                                           name       = '5-element SDD',
+                                           read_attrs = ['hdf5']    )
+        _prep_xs(xs5)
+
 def xspress3_set_detector(this=None):
     if this is None:
         if use_7element is True:
             this = 7
         elif use_4element is True:
             this = 4
+        elif use_5element is True:
+            this = 5
         elif use_1element is True:
             this = 1
         #run_report('\t\t'+'"xs" is the 4-element detector')  # change to 7
@@ -752,16 +764,34 @@ def xspress3_set_detector(this=None):
         run_report('\t\t'+'"xs" is the 7-element detector')
         rkvs.set('BMM:xspress3', 7)
         return xs7
+    elif this == 5:
+        run_report('\t\t'+'"xs" is the 4-element + 1-element detector')
+        rkvs.set('BMM:xspress3', 5)
+        return xs5
 
 primary = profile_configuration['sdd']['primary']  # primary SDD detector
-if primary == 4 and 'xs3-7-1' in xs_app_dir.get():
-    error_msg('\tYou have selected the 4-element detector as primary, but the 7-element IOC is running!')
-    warning_msg('\tProceeding with the 7-element detector as primary.')
-    primary = 7
-elif primary == 7 and 'xs3-4-1' in xs_app_dir.get():
+problem = False
+if primary == 4 and 'xs3-4-1' not in xs_app_dir.get():
+    error_msg('\tYou have selected the 4-element detector as primary, but the 4-element IOC is not running!')
+    problem = True
+elif primary == 7 and 'xs3-7-1' not in xs_app_dir.get():
     error_msg('\tYou have selected the 7-element detector as primary, but the 4-element IOC is running!')
-    warning_msg('\tProceeding with the 4-element detector as primary.')
-    primary = 4
+    problem = True
+elif primary == 5 and 'xs3-xfm' not in xs_app_dir.get():
+    error_msg('\tYou have selected the 5-element detector as primary, but the 5-element IOC is running!')
+    problem = True
+
+if problem is True:
+    if 'xs3-4-1' in xs_app_dir.get():
+        warning_msg('\tThe 4-element IOC is running, so proceeding with the 4-element detector as primary.')
+        primary = 4
+    elif 'xs3-7-1' in xs_app_dir.get():
+        warning_msg('\tThe 7-element IOC is running, so proceeding with the 7-element detector as primary.')
+        primary = 7
+    elif 'xs3-5' in xs_app_dir.get():
+        warning_msg('\tThe 5-element IOC is running, so proceeding with the 5-element detector as primary.')
+        primary = 5
+    
 if with_xspress3 is True:
     if primary == 4:
         xs=xspress3_set_detector(4)
@@ -769,6 +799,8 @@ if with_xspress3 is True:
         xs=xspress3_set_detector(7)
     elif primary == 1:
         xs=xspress3_set_detector(1)
+    elif primary == 5:
+        xs=xspress3_set_detector(5)
     else:
         xs=xspress3_set_detector(4)
         

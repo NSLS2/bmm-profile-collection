@@ -419,8 +419,8 @@ from BMM.settings import settings
 
 
 run_report('\t'+'final setup: Xspress3')
-from BMM.user_ns.dwelltime import with_xspress3, use_7element, use_4element, use_1element
-from BMM.user_ns.detectors import xs4, xs1, xs7, xs
+from BMM.user_ns.dwelltime import with_xspress3, use_1element, use_4element, use_5element, use_7element
+from BMM.user_ns.detectors import xs1, xs4, xs5, xs7, xs
 if BMMuser.element is not None and with_xspress3 is True: # make sure Xspress3 is configured to measure from the correct ROI
     if xs4 is not None and use_4element:
         BMMuser.verify_roi(xs4,  BMMuser.element, BMMuser.edge, tab='\t\t\t')
@@ -429,6 +429,9 @@ if BMMuser.element is not None and with_xspress3 is True: # make sure Xspress3 i
         BMMuser.verify_roi(xs1, BMMuser.element, BMMuser.edge, tab='\t\t\t')
     if xs7 is not None and use_7element:
         BMMuser.verify_roi(xs7, BMMuser.element, BMMuser.edge, tab='\t\t\t')
+        BMMuser.verify_roi(xs1, BMMuser.element, BMMuser.edge, tab='\t\t\t')
+    if xs5 is not None and use_5element:
+        BMMuser.verify_roi(xs5, BMMuser.element, BMMuser.edge, tab='\t\t\t')
         BMMuser.verify_roi(xs1, BMMuser.element, BMMuser.edge, tab='\t\t\t')
     #show_edges()
 

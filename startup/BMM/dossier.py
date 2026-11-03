@@ -261,10 +261,13 @@ class DossierTools():
             md['_filename'] = image_usb1
             #usbcam1._annotation_string = stub
             bold_msg('USB camera #1 snapshot')
-            yield from count([usb1], 1, md={'throwaway': 1})  # this camera often captures incomplete images on the first stab
-                                                              # this is a throwaway image in hopes of capturing a good one
-            usb1uid = yield from count([usb1], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
-            self.usb1snap, self.usb1uid = usb1snap, usb1uid
+            try:
+                yield from count([usb1], 1, md={'throwaway': 1})  # this camera often captures incomplete images on the first stab
+                                                                  # this is a throwaway image in hopes of capturing a good one
+                usb1uid = yield from count([usb1], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
+                self.usb1snap, self.usb1uid = usb1snap, usb1uid
+            except:
+                error_msg('Unable to capture image from camera USB1')
 
         ### --- USB camera #2 --------------------------------------------------------------
         if with_cam2 is True:
@@ -273,17 +276,23 @@ class DossierTools():
             md['_filename'] = image_usb2
             #usbcam2._annotation_string = stub
             bold_msg('USB camera #2 snapshot')
-            usb2uid = yield from count([usb2], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
-            self.usb2snap, self.usb2uid = usb2snap, usb2uid
-       
+            try:
+                usb2uid = yield from count([usb2], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
+                self.usb2snap, self.usb2uid = usb2snap, usb2uid
+            except:
+                error_msg('Unable to capture image from camera USB2')
+                
         ### --- Mako camera 8 --------------------------------------------------------------
         if with_cam8 is True:
             cam8snap = "%s_cam8_%s.jpg" % (stub, ahora)
             image_cam8 = os.path.join(folder, 'snapshots', cam8snap)
             md['_filename'] = image_cam8
             bold_msg('GigE cam8 snapshot')
-            cam8uid = yield from count([cam8], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
-            self.cam8snap, self.cam8uid = cam8snap, cam8uid
+            try:
+                cam8uid = yield from count([cam8], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
+                self.cam8snap, self.cam8uid = cam8snap, cam8uid
+            except:
+                error_msg('Unable to capture image from GigE cam8')
        
         ### --- Mako camera 9 --------------------------------------------------------------
         if with_cam9 is True:
@@ -291,8 +300,11 @@ class DossierTools():
             image_cam9 = os.path.join(folder, 'snapshots', cam9snap)
             md['_filename'] = image_cam9
             bold_msg('GigE cam9 snapshot')
-            cam9uid = yield from count([cam9], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
-            self.cam9snap, self.cam9uid = cam9snap, cam9uid
+            try:
+                cam9uid = yield from count([cam9], 1, md = {'XDI':md, 'plan_name' : 'count xafs_metadata snapshot'})
+                self.cam9snap, self.cam9uid = cam9snap, cam9uid
+            except:
+                error_msg('Unable to capture image from GigE cam9')
        
         ### --- capture metadata for dossier -----------------------------------------------
         self.cameras_md = {'webcam_file': websnap,  'webcam_uid': webuid,

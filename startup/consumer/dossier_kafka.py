@@ -668,6 +668,18 @@ class BMMDossier():
                         #         int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['4-element SDD_channel02_xrf'].read()).sum()),
                         #         int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['4-element SDD_channel03_xrf'].read()).sum()),
                         #         int(numpy.array(bmm_catalog[snapshots['xrf_uid']].primary['4-element SDD_channel04_xrf'].read()).sum()) ]
+                    elif '5-element SDD' in bmm_catalog[self.uidlist[0]].start['detectors']:
+                        rois = [get_xrf_datum(bmm_catalog, xrf_record, el+'1'),
+                                get_xrf_datum(bmm_catalog, xrf_record, el+'2'),
+                                get_xrf_datum(bmm_catalog, xrf_record, el+'3'),
+                                get_xrf_datum(bmm_catalog, xrf_record, el+'4'),
+                                get_xrf_datum(bmm_catalog, xrf_record, el+'8'),]
+                        ocrs = [get_xrf_datum(bmm_catalog, xrf_record, '5-element SDD_channel01_xrf'),
+                                get_xrf_datum(bmm_catalog, xrf_record, '5-element SDD_channel02_xrf'),
+                                get_xrf_datum(bmm_catalog, xrf_record, '5-element SDD_channel03_xrf'),
+                                get_xrf_datum(bmm_catalog, xrf_record, '5-element SDD_channel04_xrf'),
+                                get_xrf_datum(bmm_catalog, xrf_record, '5-element SDD_channel08_xrf'),]
+                        
                     elif '1-element SDD' in bmm_catalog[self.uidlist[0]].start['detectors']:
                         rois = [get_xrf_datum(bmm_catalog, xrf_record, el+'8'),]
                         ocrs = [get_xrf_datum(bmm_catalog, xrf_record, '7-element SDD_channel08_xrf'),]
@@ -1669,6 +1681,13 @@ class XASFile():
             if 'pilatus100k-1' in r.start['detectors']:
                 column_list.extend(['diffuse', 'specular'])
                 column_labels.extend(['diffuse', 'specular'])
+        elif '5-element SDD' in r.start['detectors']:
+            column_list.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4', f'{el}8'])
+            column_labels.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4', f'{el}8'])
+            nchan = 5
+            if 'pilatus100k-1' in r.start['detectors']:
+                column_list.extend(['diffuse', 'specular'])
+                column_labels.extend(['diffuse', 'specular'])
                 
         elif '7-element SDD' in r.start['detectors']:
             column_list.extend([f'{el}1', f'{el}2', f'{el}3', f'{el}4', f'{el}5', f'{el}6', f'{el}7'])
@@ -1681,10 +1700,16 @@ class XASFile():
         if nchan > 0:
             if 'yield' in r.start['plan_name'] or include_yield is True:
                 for i in range(1, nchan+1):
-                    handle.write(f'# Column.{i+8}: {el}{i} counts\n')
+                    if '5-element SDD' in r.start['detectors'] and i==5:  # special case of the 4+1 detector
+                        handle.write(f'# Column.{i+8}: {el}8 counts\n')
+                    else:
+                        handle.write(f'# Column.{i+8}: {el}{i} counts\n')
             else:
                 for i in range(1, nchan+1):
-                    handle.write(f'# Column.{i+7}: {el}{i} counts\n')
+                    if '5-element SDD' in r.start['detectors'] and i==5:  # special case of the 4+1 detector
+                        handle.write(f'# Column.{i+7}: {el}8 counts\n')
+                    else:
+                        handle.write(f'# Column.{i+7}: {el}{i} counts\n')
         if 'pilatus100k-1' in r.start['detectors']:
             handle.write(f'# Column.{8+nchan}: diffuse counts\n')
             handle.write(f'# Column.{9+nchan}: specular counts\n')
@@ -1707,6 +1732,8 @@ class XASFile():
             p['xmu'] = p[f'{el}8']/p['I0']
         elif '4-element SDD' in r.start['detectors']:
             p['xmu'] = (p[f'{el}1']+p[f'{el}2']+p[f'{el}3']+p[f'{el}4'])/p['I0']
+        elif '4-element SDD' in r.start['detectors']:
+            p['xmu'] = (p[f'{el}1']+p[f'{el}2']+p[f'{el}3']+p[f'{el}4']+p[f'{el}8'])/p['I0']
         elif '7-element SDD' in r.start['detectors']:
             p['xmu'] = (p[f'{el}1']+p[f'{el}2']+p[f'{el}3']+p[f'{el}4']+p[f'{el}5']+p[f'{el}6']+p[f'{el}7'])/p['I0']
         elif 'transmission' in r.start['plan_name']:

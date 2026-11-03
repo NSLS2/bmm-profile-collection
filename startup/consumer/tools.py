@@ -313,6 +313,16 @@ def peakfit(catalog=None, uid=None, motor=None, signal='I0', choice='peak', spin
                    array(table[el+'2']) +
                    array(table[el+'3']) +
                    array(table[el+'4'])) / array(table['I0'])
+        elif '5-element SDD' in fluo_detectors:
+            for k in table.keys():
+                if element_regex1.match(k):
+                    el = element_regex1.match(k).groups()[0]
+                    break
+            sig = (array(table[el+'1']) +
+                   array(table[el+'2']) +
+                   array(table[el+'3']) +
+                   array(table[el+'4']) +
+                   array(table[el+'8'])) / array(table['I0'])
         elif '7-element SDD' in fluo_detectors:
             for k in table.keys():
                 if element_regex1.match(k):

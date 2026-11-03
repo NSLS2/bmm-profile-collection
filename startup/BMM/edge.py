@@ -515,7 +515,7 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
         else:
             dcm.bragg_small_move(direction=-1, verbose=True)
 
-        yield from mv(dcm.roll, 3.5) #predict_roll(energy+target))
+        #yield from mv(dcm.roll, 3.5) #predict_roll(energy+target))
         yield from wiggle_bct()
         yield from mv(dcm.bragg.acceleration, BMMuser.acc_slow)
         print(f'mmode={mode}, edge={energy+target}, reference={el}, bender={bender}, insist={insist}, no_ref={no_ref}')
@@ -633,8 +633,8 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
         # run a slit horizontal center scan if focused #
         ################################################
         if mode in ('A', 'B', 'C'):
-            #yield from mv(m2.yaw, 0.0988)
-            #yield from mv(m2.lateral, -1.2459)
+            yield from mv(m2.yaw, 0.0988)
+            yield from mv(m2.lateral, -1.2459)
             if no_hslits is False:
                 print(f'pausing {ABUNDANCE_OF_CAUTION} seconds before hcenter scan')
                 yield from mv(user_ns['busy'], ABUNDANCE_OF_CAUTION)
@@ -697,8 +697,6 @@ Maybe the beam has dumped, maybe there is a motor controller problem.  Check scr
     user_ns['RE'].msg_hook = None
     start = time.time()
     m3, m2, m2_bender, dm3_bct = user_ns['m3'], user_ns['m2'], user_ns['m2_bender'], user_ns['dm3_bct']
-    #dcm_pitch, dcm_perp = user_ns["dcm_pitch"], user_ns["dcm_perp"]
-    #dcm_roll, dcm_bragg = user_ns["dcm_roll"], user_ns["dcm_bragg"]
     dm3_bct, slits3 = user_ns['dm3_bct'], user_ns['slits3']
     yield from finalize_wrapper(
         main_plan(el, focus, edge, energy, slits, mirror, tune, target, xrd, bender, insist, no_ref, no_hslits, do_dcmroll),

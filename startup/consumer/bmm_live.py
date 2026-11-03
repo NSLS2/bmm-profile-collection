@@ -427,6 +427,12 @@ class LineScan():
                           kwargs['data'][self.xs2] +
                           kwargs['data'][self.xs3] +
                           kwargs['data'][self.xs4])
+            elif self.fluo_detector == '5-element SDD':
+                signal = (kwargs['data'][self.xs1] +
+                          kwargs['data'][self.xs2] +
+                          kwargs['data'][self.xs3] +
+                          kwargs['data'][self.xs4] +
+                          kwargs['data'][self.xs8])
             elif self.fluo_detector == 'Dante':
                 signal = (kwargs['data'][self.xs1] +
                           kwargs['data'][self.xs2] +
@@ -914,6 +920,12 @@ class XAFSScan():
                                     kwargs['data'][self.xs2] +
                                     kwargs['data'][self.xs3] +
                                     kwargs['data'][self.xs4]   ) / kwargs['data']['I0'])
+            elif self.fluo_detector == '5-element SDD':
+                self.fluor.append( (kwargs['data'][self.xs1] +
+                                    kwargs['data'][self.xs2] +
+                                    kwargs['data'][self.xs3] +
+                                    kwargs['data'][self.xs4] +
+                                    kwargs['data'][self.xs8]   ) / kwargs['data']['I0'])
             elif self.fluo_detector == 'dante':
                 self.fluor.append( (kwargs['data'][self.xs1] +
                                     kwargs['data'][self.xs2] +
@@ -1052,6 +1064,9 @@ class XRF():
         elif '4-element SDD' in start['detectors']:
             nelem = 4
             channels = tuple(range(0, 4))
+        elif '5-element SDD' in start['detectors']:
+            nelem = 5
+            channels = (0,1,2,3,7)
         elif '7-element SDD' in start['detectors']:
             nelem = 7
             channels = tuple(range(0, 7))
@@ -1100,7 +1115,7 @@ class XRF():
                 ss = ss + s[i-1]
             plt.plot(e, ss, label=f'sum of {nelem} channels')
         else:
-            for i in channels:
+            for i,c in enumerate(channels):
                 plt.plot(e, s[i], label=f'channel {i+1}')
 
         if 'XDI' in start:
@@ -1158,8 +1173,12 @@ class XRF():
         plt.title(f'XRF Spectrum {el} {ed}, incident energy={energy:.1f}')
         
         s = list()
-        for ichann in range(1,sdd_primary+1):
-            s.append(xspress3_channels[ichann].get())
+        if sdd_primary == 5:
+            for ichann in (0,1,2,3,7):
+                s.append(xspress3_channels[ichann].get())
+        else:
+            for ichann in range(1,sdd_primary+1):
+                s.append(xspress3_channels[ichann].get())
         e = numpy.arange(0, len(s[0])) * 10
         if only is not None and only in range(1, sdd_primary+1):
             plt.plot(e, xspress3_channels[only].get(), label=f'channel {only}')
@@ -1241,19 +1260,26 @@ class XRF():
 
         column_list, channel_list = [], []
         if '1-element SDD' in catalog[uid].metadata['start']['detectors']:
+            channels = (7, )
             nchan = 1
-            column_list.append('MCA8')
+            #column_list.append('MCA8')
         elif '4-element SDD' in catalog[uid].metadata['start']['detectors']:
+            channels = tuple(range(0, 3))
             nchan = 4
+        elif '5-element SDD' in catalog[uid].metadata['start']['detectors']:
+            channels = (0,1,2,3,7)
+            nchan = 5
         elif '7-element SDD' in catalog[uid].metadata['start']['detectors']:
+            channels = tuple(range(0, 7))
             nchan = 7
         elif 'dante-1' in catalog[uid].metadata['start']['detectors']:
             nchan = 7
-        for c in range(1, nchan+1):
-            handle.write(f'# Column.{c+1}: MCA{c} counts\n')
+
+        for c in channels:
+            handle.write(f'# Column.{c+1}: MCA{c+1} counts\n')
             if nchan > 1:
-                column_list.append(f'MCA{c}')
-                channel_list.append(f'{nchan}-element SDD_channel0{c}_xrf')
+                column_list.append(f'MCA{c+1}')
+                channel_list.append(f'{nchan}-element SDD_channel0{c+1}_xrf')
 
         handle.write('# //////////////////////////////////////////////////////////\n')
         if xdi is not None and "_comment" in xdi:
@@ -1271,9 +1297,9 @@ class XRF():
         else:
             dc = catalog[uid].primary['data']
             s = pandas.DataFrame()
-            for col in channel_list:
+            for i,col in enumerate(channel_list):
                 #print(col, flush=True)
-                s[col] = numpy.array(numpy.array(dc[col])[0])
+                s[column_list[i]] = numpy.array(numpy.array(dc[col])[0])
 
         #s = []
         # if nchan == 1:

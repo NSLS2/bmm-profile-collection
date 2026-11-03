@@ -201,7 +201,7 @@ class Pandrosus():
             self.group.i0 = array(table['I0'])
             self.group.signal = array(table['Pips'])
 
-        elif mode in ('fluorescence', 'flourescence', 'fluo', 'flou', 'xs', 'xs1', 'xs4', 'xs7', 'both'):
+        elif mode in ('fluorescence', 'flourescence', 'fluo', 'flou', 'xs', 'xs1', 'xs4', 'xs5', 'xs7', 'both'):
             columns = start['XDI']['_dtc']
             if self.verbose:
                 print(columns)

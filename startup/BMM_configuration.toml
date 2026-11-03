@@ -34,11 +34,14 @@ struck_description      = "use OG Struck system for fluorescence, deprecated and
 xspress3                = true
 xspress3_description    = "use the Xspress3X fluorescence readout system, almost certainly want this to be true"
 
-primary                 = 4
+primary                 = 5
 primary_description     = "specify which detector is the primary detector: 1- 4- or 7-element"
 
-4element                = true
+4element                = false
 4element_description    = "set true to enable the 4 element detector"
+
+5element                = true
+5element_description    = "set true to enable the 4 element detector + 1 element detector"
 
 1element                = true
 1element_description    = "set true to enable the 1 element detector"
@@ -70,7 +73,7 @@ dante_description       = "set true to enable Dante readout at xf06bm-edxd1 as a
 anacam                  = false
 anacam_description      = "set to true to record analog pinhole camera  <good night, old friend>"
 
-cam8                    = true
+cam8                    = false
 cam8_description        = "set to true to record Mako cam8"
 
 cam9                    = true
@@ -279,6 +282,14 @@ roll_111_description             = "position of dcm.roll for the 111 mono (Feb 1
 roll_311                         = -18.1595
 roll_311_description             = "position of dcm.roll for the 311 mono (Feb 16, 2026)"
 
+
+
+
+################################################################################
+
+[dossier]
+style                            = "old"
+style_description                = "templating for measurement dossier, options are new and old"
 
 
 

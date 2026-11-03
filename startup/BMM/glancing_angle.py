@@ -39,7 +39,7 @@ user_ns = vars(user_ns_module)
 from BMM.user_ns.motors     import xafs_garot, xafs_pitch, xafs_x, xafs_y
 from BMM.user_ns.suspenders import suspenders
 
-ABUNDANCE_OF_CAUTION = 0
+ABUNDANCE_OF_CAUTION = 5
 
 
 class GlancingAngle(Device):
@@ -262,7 +262,6 @@ class GlancingAngle(Device):
                        'motor_name' : motor.name,
                        'signal'     : 'It',
                        'spinner'    : self.current() })
-        yield from sleep(ABUNDANCE_OF_CAUTION)
         maxtries = 5
         target = fetch_peak_position_via_redis(maxtries=maxtries, verbose=True)
         if target is None:
@@ -420,20 +419,20 @@ class GlancingAngle(Device):
 
             ## first pass in transmission
             yield from self.align_linear(drop=drop)
-            yield from sleep(1)
+            yield from sleep(ABUNDANCE_OF_CAUTION)
             yield from self.align_pitch()
-            yield from sleep(1)
+            yield from sleep(ABUNDANCE_OF_CAUTION)
 
             ## for realsies X or Y in transmission
             yield from self.align_linear(drop=drop)
             #self.y_uid = user_ns['db'].v2[-1].metadata['start']['uid'] 
-            yield from sleep(1)
+            yield from sleep(ABUNDANCE_OF_CAUTION)
             kafka.message({'close': 'all'})
 
             ## for realsies Y in pitch
             yield from self.align_pitch()
             #self.pitch_uid = user_ns['db'].v2[-1].metadata['start']['uid'] 
-            yield from sleep(1)
+            yield from sleep(ABUNDANCE_OF_CAUTION)
             kafka.message({'close': 'all'})
 
             ## record the flat position
@@ -533,6 +532,7 @@ class GlancingAngleMacroBuilder(BMMMacroBuilder):
         self.tab = ' '*8
         count = 0
 
+        self.content += self.tab + f'ga.orientation = "{self.orientation}"\n\n'
 
         if self.nreps > 1:
             self.content += self.tab + f'for rep in range({self.nreps}):\n\n'
@@ -611,7 +611,8 @@ class GlancingAngleMacroBuilder(BMMMacroBuilder):
             if m['detectorx'] is not None:
                 if self.check_limit(user_ns['xafs_detx'], m['detectorx']) is False: return(False)
                 self.content += self.tab + 'yield from mv(xafs_detx, %.2f)\n' % m['detectorx']
-            self.content += self.tab + f'yield from mvr(xafs_detx, {self.retract})\n'
+            if m['detectorx'] < 50:
+                self.content += self.tab + f'yield from mvr(xafs_detx, {self.retract})\n'
             if self.check_spinner(m['slot']) is False: return False
             self.content += self.tab + f'yield from ga.to({m["slot"]})\n'
 
@@ -634,10 +635,10 @@ class GlancingAngleMacroBuilder(BMMMacroBuilder):
             ####################################
             if m['method'].lower() == 'automatic':
                 user_ns['ga'].automatic = True
-                if get_mode() == 'A':
-                    self.content += self.tab + 'yield from mirror_pitch(mirror="m2", move=True)\n'
-                else:
-                    self.content += self.tab + 'yield from mirror_pitch(mirror="m3", move=True)\n'
+                #if get_mode() == 'A':
+                #    self.content += self.tab + 'yield from mirror_pitch(mirror="m2", move=True)\n'
+                #else:
+                #    self.content += self.tab + 'yield from mirror_pitch(mirror="m3", move=True)\n'
                 print('(pausing for 3 seconds)')
                 self.content += self.tab + f'yield from mv(busy, 3)\n'
                 self.content += self.tab + f'yield from ga.auto_align(pitch={m["angle"]})\n'
@@ -653,7 +654,8 @@ class GlancingAngleMacroBuilder(BMMMacroBuilder):
             ############################################################
             # measure XAFS, then return to 0 pitch and close all plots #
             ############################################################
-            self.content += self.tab + f'yield from mvr(xafs_detx, -{self.retract})\n'
+            if m['detectorx'] < 50:
+                self.content += self.tab + f'yield from mvr(xafs_detx, -{self.retract})\n'
             command = self.tab + 'yield from xafs(\'%s.ini\'' % self.basename
             for k in m.keys():
                 ## skip cells with macro-building parameters that are not INI parameters
@@ -680,9 +682,11 @@ class GlancingAngleMacroBuilder(BMMMacroBuilder):
             command += ', copy=False)\n'
             self.content += command
             if m['method'].lower() == 'automatic':
-                self.content += self.tab + f'yield from mvr(xafs_detx, {self.retract})\n'
+                if m['detectorx'] < 50:
+                    self.content += self.tab + f'yield from mvr(xafs_detx, {self.retract})\n'
                 self.content += self.tab +  'yield from ga.flatten()\n'
-                self.content += self.tab + f'yield from mvr(xafs_detx, -{self.retract})\n'
+                if m['detectorx'] < 50:
+                    self.content += self.tab + f'yield from mvr(xafs_detx, -{self.retract})\n'
             self.content += self.tab + 'kafka.close_plots()\n\n'
 
 

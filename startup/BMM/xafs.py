@@ -1026,6 +1026,8 @@ def xafs(inifile=None, **kwargs):
                     md['_dtc'] = (BMMuser.xs1, BMMuser.xs2, BMMuser.xs3, BMMuser.xs4, BMMuser.xs5, BMMuser.xs6, BMMuser.xs7)
                 elif which_detector == '4':
                     md['_dtc'] = (BMMuser.xs1, BMMuser.xs2, BMMuser.xs3, BMMuser.xs4)
+                elif which_detector == '5':
+                    md['_dtc'] = (BMMuser.xs1, BMMuser.xs2, BMMuser.xs3, BMMuser.xs4, BMMuser.xs8)
                 else:
                     md['_dtc'] = (BMMuser.xs1, BMMuser.xs2, BMMuser.xs3, BMMuser.xs4, BMMuser.xs5, BMMuser.xs6, BMMuser.xs7)
 
