@@ -22,6 +22,7 @@ from bmm_tools.tools.md import proposal_base
 
 from BMM.functions         import present_options
 from BMM.user_ns.base      import bmm_catalog
+from BMM.user_ns.tiled     import flush_tiled
 from BMM.user_ns.bmm       import kafka
 from BMM.logging           import BMM_log_info, BMM_msg_hook, report
 from BMM.linescans         import linescan, prepare_alignment_scan, fetch_peak_position_via_redis
@@ -206,8 +207,12 @@ class GlancingAngle(Device):
         kafka.message({'close': 'last'})
 
         
+        try:
+            flush_tiled()  # make the just-acquired run visible in Tiled for the consumer
+        except Exception as e:
+            error_msg(f'Tiled buffers did not drain: {e}')
         kafka.message({'peakfit'    : True,
-                       'uid'        : 'last',
+                       'uid'        : uid,
                        'motor_name' : motor.name,
                        'signal'     : 'It',
                        'choice'     : 'peak',
@@ -257,15 +262,20 @@ class GlancingAngle(Device):
         yield from prepare_alignment_scan()
         uid = yield from linescan(motor, 'it', -2.3, 2.3, 51, dopluck=False)
         kafka.message({'close': 'last'})
+        try:
+            flush_tiled()  # make the just-acquired run visible in Tiled for the consumer
+        except Exception as e:
+            error_msg(f'Tiled buffers did not drain: {e}')
         kafka.message({'stepfit'    : True,
-                       'uid'        : 'last',
+                       'uid'        : uid,
                        'motor_name' : motor.name,
                        'signal'     : 'It',
                        'spinner'    : self.current() })
         maxtries = 5
         target = fetch_peak_position_via_redis(maxtries=maxtries, verbose=True)
         if target is None:
-            uid = bmm_catalog[-1].metadata['start']['uid']
+            # the uid of the alignment scan is already in scope; do not read
+            # the (possibly lagging) catalog to recover it
             error_msg(f'Failed to retrieve result of step fit to alignment in {motor.name}.')
             error_msg(f'To investigate the cause, Bruce will need this UID: {uid}.')
             whisper('This first thing you should try is to simply rerun the auto_align() plan,')
@@ -317,8 +327,12 @@ class GlancingAngle(Device):
             motor = user_ns['xafs_x']
         uid = yield from linescan(motor, 'xs', start, stop, nsteps, dopluck=False, force=force, stack=False)
         kafka.message({'close': 'last'})
+        try:
+            flush_tiled()  # make the just-acquired run visible in Tiled for the consumer
+        except Exception as e:
+            error_msg(f'Tiled buffers did not drain: {e}')
         kafka.message({'peakfit'    : True,
-                       'uid'        : 'last',
+                       'uid'        : uid,
                        'motor_name' : motor.name,
                        'signal'     : 'If',
                        'choice'     : 'peak',
@@ -445,7 +459,6 @@ class GlancingAngle(Device):
             ## move to measurement angle and align
             yield from mvr(user_ns['xafs_pitch'], pitch)
             yield from self.align_fluo(stop=fluo_max)
-            self.f_uid = user_ns['db'].v2[-1].metadata['start']['uid'] 
 
 
         def cleanup_plan():

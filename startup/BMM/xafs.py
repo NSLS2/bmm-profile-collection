@@ -40,6 +40,7 @@ user_ns = vars(user_ns_module)
 
 from BMM.user_ns.base       import profile_configuration
 from BMM.user_ns.base       import bmm_catalog, WORKSPACE
+from BMM.user_ns.tiled      import flush_tiled
 from BMM.user_ns.dcm        import dcm
 from BMM.user_ns.dwelltime  import _locked_dwell_time, use_7element, use_4element, use_1element
 from BMM.user_ns.detectors  import quadem1, xs, xs1, xs4, xs7, ic0, ic1, ic2, pilatus, dante, ION_CHAMBERS, ic0
@@ -1064,6 +1065,15 @@ def xafs(inifile=None, **kwargs):
                 else:
                     error_msg('No valid plotting mode provided!')
 
+                # wait for the buffered writers, so that the just-acquired
+                # run is visible in Tiled before the consumer process and the
+                # code below read it back; do not abort the sequence if Tiled
+                # cannot catch up (e.g. during an outage)
+                try:
+                    flush_tiled()
+                except Exception as e:
+                    error_msg(f'Tiled buffers did not drain: {e}')
+
                 kafka.message({'xafs_sequence'      :'add',
                                'uid'                : uid})
                 
@@ -1075,7 +1085,11 @@ def xafs(inifile=None, **kwargs):
                 kafka.message({'verify_sql': True, 'uid': uid})
                 bold_msg('wrote %s' % datafile)
                 if not is_re_worker_active():
-                    BMM_log_info(f'energy scan finished, uid = {uid}, scan_id = {bmm_catalog[uid].metadata["start"]["scan_id"]}\ndata file written to {datafile}')
+                    try:
+                        scan_id = bmm_catalog[uid].metadata["start"]["scan_id"]
+                        BMM_log_info(f'energy scan finished, uid = {uid}, scan_id = {scan_id}\ndata file written to {datafile}')
+                    except Exception:
+                        BMM_log_info(f'energy scan finished, uid = {uid}\ndata file written to {datafile}')
                 else:
                     BMM_log_info(f'energy scan finished, uid = {uid}\ndata file written to {datafile}')
 
@@ -1167,6 +1181,12 @@ def xafs(inifile=None, **kwargs):
             #     pass
 
             kafka.message({'dossier' : 'set', 'uidlist' : uidlist, })
+            # make all runs of the sequence visible in Tiled before the
+            # consumer writes the dossier
+            try:
+                flush_tiled()
+            except Exception as e:
+                error_msg(f'Tiled buffers did not drain: {e}')
             time.sleep(3.0)
         kafka.message({'dossier' : 'write', })
 
