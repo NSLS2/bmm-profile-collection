@@ -4,11 +4,12 @@ from bluesky.plan_stubs import mv
 from numpy import array
 from sympy import geometry
 
-from bmm_tools.tools.messages import whisper
+from bmm_tools.tools.messages import error_msg, whisper
 
 from BMM.linescans     import linescan, prepare_alignment_scan, fetch_peak_position_via_redis
 from BMM.resting_state import resting_state_plan
 from BMM.user_ns.bmm   import kafka
+from BMM.user_ns.tiled import flush_tiled
 
 from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
@@ -90,8 +91,12 @@ class Wafer():
         uid = yield from linescan(motor, 'it', -2, 2, 41, dopluck=False)
         kafka.message({'close': 'last'})
 
+        try:
+            flush_tiled()  # make the just-acquired run visible in Tiled for the consumer
+        except Exception as e:
+            error_msg(f'Tiled buffers did not drain: {e}')
         kafka.message({'stepfit'    : True,
-                       'uid'        : 'last',
+                       'uid'        : uid,
                        'motor_name' : motor.name,
                        'signal'     : 'It',
                        'choice'     : 'peak'})

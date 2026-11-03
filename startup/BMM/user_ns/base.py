@@ -8,10 +8,9 @@ from pathlib import Path
 
 from event_model import pack_datum_page
 from bluesky.plan_stubs import mv, mvr, sleep
-from bluesky.callbacks.buffer import BufferingWrapper
 from databroker import Broker
 from tiled.client import from_uri, show_logs
-from bluesky_tiled_plugins import TiledInserter
+from bluesky_tiled_plugins import BufferingWrapper, TiledInserter
 
 from rich import print as cprint
 
@@ -154,7 +153,7 @@ tiled_writing_client = from_uri(profile_configuration['services']['tiled'],
 tiled_writing_client.context.http_client.headers['tiled-qos'] = 'acquisition'
 
 tiled_inserter = TiledInserter(tiled_writing_client, 'bmm',
-                               backup_directory=TILED_BACKUP_ROOT,
+                               backup_directory=f"{TILED_BACKUP_ROOT}/raw",
                                backup_dictionary=None)
 tiled_inserter = BufferingWrapper(tiled_inserter)
 

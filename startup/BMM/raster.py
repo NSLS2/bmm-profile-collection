@@ -35,6 +35,7 @@ from BMM import user_ns as user_ns_module
 user_ns = vars(user_ns_module)
 
 from BMM.user_ns.base       import bmm_catalog
+from BMM.user_ns.tiled      import flush_tiled
 from BMM.user_ns.dwelltime  import _locked_dwell_time
 from BMM.user_ns.suspenders import suspenders
 
@@ -267,6 +268,8 @@ def raster(inifile=None, **kwargs):
     7. Write a dossier
 
     '''
+    latest = {'uid': None}  # the uid of the just-acquired raster scan, for cleanup_plan
+
     def main_plan(inifile, **kwargs):
 
         verbose = False
@@ -439,12 +442,17 @@ def raster(inifile=None, **kwargs):
                                   fname=pngout, contour=p['contour'], log=p['log'], md=xdi)
         #preserve_data(uid, f'{p["filename"]} {dcm.energy.position} eV', xlsxout, matout)
 
-        thisuid = bmm_catalog[-1].metadata['start']['uid']  # not sure why this is necessary....
-        kafka.message({'raster': True, 'uid': thisuid})
+        latest['uid'] = uid
+        # make the just-acquired run visible in Tiled before the consumer reads it
+        try:
+            flush_tiled()
+        except Exception as e:
+            error_msg(f'Tiled buffers did not drain: {e}')
+        kafka.message({'raster': True, 'uid': uid})
 
         kafka.message({'dossier' : 'set',
                        'folder'  : BMMuser.folder,
-                       'uidlist' : [thisuid,],
+                       'uidlist' : [uid,],
                        })
         kafka.message({'dossier' : 'raster', })
 
@@ -457,11 +465,13 @@ def raster(inifile=None, **kwargs):
             dossier.seqend = now('%A, %B %d, %Y %I:%M %p')
             how = 'finished  :tada:'
             try:
-                if 'primary' not in bmm_catalog[-1].metadata['stop']['num_events']:
+                flush_tiled()  # make sure the stop document has reached Tiled
+                md = bmm_catalog[latest['uid']].metadata
+                if 'primary' not in md['stop']['num_events']:
                     how = '*stopped*'
-                elif bmm_catalog[-1].metadata['stop']['num_events']['primary'] != bmm_catalog[-1].metadata['start']['num_points']:
+                elif md['stop']['num_events']['primary'] != md['start']['num_points']:
                     how = '*stopped*'
-            except:
+            except Exception:
                 how = '*stopped*'
             report(f'== Raster scan {how}', level='bold', slack=True)
             try:
