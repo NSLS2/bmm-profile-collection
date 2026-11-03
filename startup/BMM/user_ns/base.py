@@ -17,6 +17,7 @@ from rich import print as cprint
 
 import bmm_tools.tools.md
 
+TILED_BACKUP_ROOT = "/nsls2/data/bmm/shared/config/bluesky/tiled_backup"
 
 try:
     from bluesky_queueserver import is_re_worker_active
@@ -153,7 +154,7 @@ tiled_writing_client = from_uri(profile_configuration['services']['tiled'],
 tiled_writing_client.context.http_client.headers['tiled-qos'] = 'acquisition'
 
 tiled_inserter = TiledInserter(tiled_writing_client, 'bmm',
-                               backup_directory='/tmp/tiled_backup',
+                               backup_directory=TILED_BACKUP_ROOT,
                                backup_dictionary=None)
 tiled_inserter = BufferingWrapper(tiled_inserter)
 

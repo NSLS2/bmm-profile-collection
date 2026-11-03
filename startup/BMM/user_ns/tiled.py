@@ -6,11 +6,10 @@ from bluesky.callbacks.buffer import BufferingWrapper
 from bluesky_tiled_plugins import TiledWriter
 from bluesky_tiled_plugins.writing.consolidators import MultipartRelatedConsolidator
 
-from BMM.user_ns.base import RE
+from BMM.user_ns.base import RE, TILED_BACKUP_ROOT
 
 from BMM.functions import run_report
 run_report(__file__, text='Write to SQL-backed Tiled')
-
 
 # Define a mapping from spec to mimetype
 # TODO: Only keep necessary specs/mimetypes
@@ -140,7 +139,7 @@ tiled_writing_client_sql = from_uri("https://tiled.nsls2.bnl.gov",
                                     api_key=os.environ["TILED_BLUESKY_WRITING_API_KEY_BMM"])['bmm/migration']
 tiled_writing_client_sql.context.http_client.headers['tiled-qos'] = 'acquisition'
 tw = TiledWriter(client = tiled_writing_client_sql,
-                 backup_directory="/tmp/tiled_backup",   # Might conflict with TiledInserter -- need to test
+                 backup_directory=TILED_BACKUP_ROOT,   # Might conflict with TiledInserter -- need to test
                  patches = {"descriptor": patch_descriptor,
                             "resource": patch_resource,
                             "datum": patch_datum},
