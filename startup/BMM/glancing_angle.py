@@ -501,6 +501,7 @@ class GlancingAngle(Device):
             thistext +=  '               <li><b>Alignment:</b> manual</li>\n'
             thistext += f'               <li><b>Tilt angle:</b> {xafs_pitch.position:.1f}</li>\n'
         thistext += f'               <li><b>Spinning:</b> {"yes" if self.spin else "no"}</li>\n'
+        thistext += f'               <li><b>Orientation::</b> {self.orientation}</li>\n'
         thistext +=  '	      </ul>\n'
         thistext +=  '	    </div>\n'
         return thistext

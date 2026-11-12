@@ -1665,11 +1665,12 @@ class XRR():
         if detector.lower() in ('bicron', 'apd', 'struck'):
             detector = 'monitor'
 
+        print(with_refl)
         data, count, x = None, 0, None
         while x is None:
             try:
-                data = catalog[uid].primary #['data']
-                x = data[motor].read()                
+                data = catalog[uid].primary['data']
+                x = numpy.array(data[motor])
             except:
                 pass
             if x is not None:
@@ -1699,12 +1700,15 @@ class XRR():
             print(f'xrr.alignment: detector {det} not in data table')
             return
 
+        print(det, motor)
         if 'dwti_dwell_time' in data:
-            y = data[det].read() / data['dwti_dwell_time'].read()
-            r = data['refl'].read() / data['dwti_dwell_time'].read()
+            y = numpy.array(data[det]) / numpy.array(data['dwti_dwell_time'])
+            if 'refl' in data:
+                r = numpy.array(data['refl']) / numpy.array(data['dwti_dwell_time'])
         else:
-            y = data[det].read()
-            r = data['refl'].read()
+            y = numpy.array(data[det])
+            if 'refl' in data:
+                r = numpy.array(data['refl'])
 
         #plt.close('all')
         fig = plt.figure()

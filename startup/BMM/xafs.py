@@ -963,6 +963,7 @@ def xafs(inifile=None, **kwargs):
                 report(f'starting repetition {cnt} of {p["nscans"]} -- {fname} -- {len(energy_grid)} energy points{slotno}{ring}', level='bold', slack=True)
                 md['_filename'] = fname
                 md['_user']['instrument'] = this_instrument
+                md['_user']['rid'] = rid
 
                 ## --*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--*--
                 ## compute trajectory

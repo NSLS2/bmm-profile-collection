@@ -101,7 +101,7 @@ usb2_description        = "set to true to record USB camera 2 (usb cameras are d
 
 ## special configuration as required for particular user experiments
 [experiments]
-lakeshore                  = false
+lakeshore                  = true
 lakeshore_description      = "LakeShore 331 for use with Displex cryostat, typically offline when not in use"
 
 linkam                     = true

@@ -1,0 +1,8 @@
+          <div class="threecolumn">
+            <span class="snapshot-header">{description}</span>
+            <a href="{folder}{imagefile}">
+              <img class="left" src="{folder}{imagefile}" width="95%" alt="" /></a>
+              <a href="javascript:void(0)" onclick="toggle_visibility('{description}_y');" title="Click to show/hide the UID of the linear scan">(linear UID)</a><div id="{description}_y" style="display:none;"><small>{yuid}</small></div>
+              <a href="javascript:void(0)" onclick="toggle_visibility('{description}_p');" title="Click to show/hide the UID of the pitch scan">(pitch UID)</a><div id="{description}_p" style="display:none;"><small>{yuid}</small></div>
+              <a href="javascript:void(0)" onclick="toggle_visibility('{description}_f');" title="Click to show/hide the UID of the fluorescence scan">(fluorescence UID)</a><div id="{description}_f" style="display:none;"><small>{yuid}</small></div>
+          </div>

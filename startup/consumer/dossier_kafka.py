@@ -1,4 +1,4 @@
-import os, sys, re, socket, json, datetime, pathlib, uuid, time
+import os, sys, re, socket, json, datetime, pathlib, uuid, time, re
 from urllib.parse import quote
 import numpy, pandas, openpyxl
 from scipy.io import savemat
@@ -14,6 +14,7 @@ from pygments import highlight
 from pygments.lexers import PythonLexer, IniLexer
 from pygments.formatters import HtmlFormatter
 
+from bmm_tools.tools.physics import IonChamber
 from bmm_tools.tools.periodictable import edge_energy, Z_number, element_symbol, element_name
 from bmm_tools.devices.cameras import camera_descriptions
 from tools import echo_slack, experiment_folder, file_resource, profile_configuration, rkvs
@@ -170,24 +171,124 @@ class BMMDossier():
             else:
                 setattr(self, k, kwargs[k])
 
+            # <div>
+	    #   <h3>Instrument: Ex situ sample wheel</h3>
+	    #   <ul>
+            #    <li><b>Slot number:</b> 7</li>
+            #    <li><b>Ring:</b> inner</li>
+	    #   </ul>
+	    # </div>
+     
+    def fix_instrument(self, instrument):
+        pattern = re.compile('<h3>Instrument: (.*)</h3>')
+        m = pattern.search(instrument)
+        inst = m.groups()[0]
+        instrument = re.sub(pattern, '', instrument)
+        
+        instrument = instrument.replace('<div>\n', '')
+        instrument = instrument.replace('</div>\n', '')
+        instrument = instrument.replace('<ul>\n', '')
+        instrument = instrument.replace('</ul>\n', '')
+        instrument = instrument.replace('<li><b>', '<dt>')
+        instrument = instrument.replace('</b>', '</dt><dd>')
+        instrument = instrument.replace('</li>\n', '</dd>')
+        instrument = instrument.replace(':', '')
+
+        #print(inst)
+        #print(instrument)
+        return instrument, inst
+
+
+    def get_xrf_datum(self, is_sql, record, element):
+        if is_sql is True:
+            if 'SDD' in element:  # this is an ROI value
+                return int( numpy.array(record[element].read()).sum() )
+            else:                 # this is an MCA spectrum and we want the sum
+                return int(record[element].read()[0])
+        else:
+            if 'SDD' in element:  # this is an ROI value
+                #return 0          # mongo is currently with the wrong shape (10/14/26)
+                return int( numpy.array(record[element][0]).sum() )
+            else:                 # this is an MCA spectrum and we want the sum
+                return int(record[element][0])
+
+
+    def get_rois_ocrs(self, catalog, xrfuid, el):
+        rois, ocrs = None, None
+
+        is_sql = catalog.is_sql
+        if is_sql is True:
+            xrf_record = catalog[xrfuid].primary
+        else:
+            xrf_record = catalog[xrfuid].primary['data']
+
+        if '4-element SDD' in catalog[self.uidlist[0]].start['detectors']:
+            rois = [self.get_xrf_datum(is_sql, xrf_record, el+'1'),
+                    self.get_xrf_datum(is_sql, xrf_record, el+'2'),
+                    self.get_xrf_datum(is_sql, xrf_record, el+'3'),
+                    self.get_xrf_datum(is_sql, xrf_record, el+'4'),]
+            ocrs = [self.get_xrf_datum(is_sql, xrf_record, '7-element SDD_channel01_xrf'),
+                    self.get_xrf_datum(is_sql, xrf_record, '7-element SDD_channel02_xrf'),
+                    self.get_xrf_datum(is_sql, xrf_record, '7-element SDD_channel03_xrf'),
+                    self.get_xrf_datum(is_sql, xrf_record, '7-element SDD_channel04_xrf'),]
+
+        elif '5-element SDD' in catalog[self.uidlist[0]].start['detectors']:
+            rois = [self.get_xrf_datum(is_sql, xrf_record, el+'1'),
+                    self.get_xrf_datum(is_sql, xrf_record, el+'2'),
+                    self.get_xrf_datum(is_sql, xrf_record, el+'3'),
+                    self.get_xrf_datum(is_sql, xrf_record, el+'4'),
+                    self.get_xrf_datum(is_sql, xrf_record, el+'8'),]
+            ocrs = [self.get_xrf_datum(is_sql, xrf_record, '5-element SDD_channel01_xrf'),
+                    self.get_xrf_datum(is_sql, xrf_record, '5-element SDD_channel02_xrf'),
+                    self.get_xrf_datum(is_sql, xrf_record, '5-element SDD_channel03_xrf'),
+                    self.get_xrf_datum(is_sql, xrf_record, '5-element SDD_channel04_xrf'),
+                    self.get_xrf_datum(is_sql, xrf_record, '5-element SDD_channel08_xrf'),]
+
+        elif '1-element SDD' in catalog[self.uidlist[0]].start['detectors']:
+            rois = [self.get_xrf_datum(is_sql, xrf_record, el+'8'),]
+            ocrs = [self.get_xrf_datum(is_sql, xrf_record, '7-element SDD_channel08_xrf'),]
+        elif '7-element SDD' in catalog[self.uidlist[0]].start['detectors']:
+            rois = [self.get_xrf_datum(is_sql, xrf_record, el+'1'),
+                    self.get_xrf_datum(is_sql, xrf_record, el+'2'),
+                    self.get_xrf_datum(is_sql, xrf_record, el+'3'),
+                    self.get_xrf_datum(is_sql, xrf_record, el+'4'),
+                    self.get_xrf_datum(is_sql, xrf_record, el+'5'),
+                    self.get_xrf_datum(is_sql, xrf_record, el+'6'),
+                    self.get_xrf_datum(is_sql, xrf_record, el+'7'),]
+            ocrs = [self.get_xrf_datum(is_sql, xrf_record, '7-element SDD_channel01_xrf'),
+                    self.get_xrf_datum(is_sql, xrf_record, '7-element SDD_channel02_xrf'),
+                    self.get_xrf_datum(is_sql, xrf_record, '7-element SDD_channel03_xrf'),
+                    self.get_xrf_datum(is_sql, xrf_record, '7-element SDD_channel04_xrf'),
+                    self.get_xrf_datum(is_sql, xrf_record, '7-element SDD_channel05_xrf'),
+                    self.get_xrf_datum(is_sql, xrf_record, '7-element SDD_channel06_xrf'),
+                    self.get_xrf_datum(is_sql, xrf_record, '7-element SDD_channel07_xrf'),]
+        return(rois, ocrs)
+
+            
+                
     def new_dossier(self, catalog=None, stub=None, logger=None):
-        metadata = catalog[self.uidlist[0]].metadata
-        XDI      = metadata['start']['XDI']
-        baseline = catalog[self.uidlist[0]].baseline.read()
+        metadata  = catalog[self.uidlist[0]].metadata
+        XDI       = metadata['start']['XDI']
+        baseline  = catalog[self.uidlist[0]].baseline.read()
+        firstscan = catalog[self.uidlist[0]].primary['data']
         
         thiscontent = ''
         pfolder = experiment_folder(catalog, self.uidlist[0])
 
-        
         if stub is None:
             stub = self.stub
         if stub is None:
             stub = XDI['Sample']['name']  # is this correct?  do we need a sample name AND a stub
-        
+
+        if 'rid' not in XDI['_user'] and self.rid is None:
+            self.rid='__nolink__'
+
+            
         ## top of HTML file
         with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_top.tmpl')) as f:
             content = f.readlines()
         thiscontent += ''.join(content).format(stub = stub,
+                                               rid  = self.rid
         )
         results  = metadata['start']['XDI']['_snapshots']
         basename = XDI['_user']['filename']
@@ -205,38 +306,65 @@ class BMMDossier():
         thiscontent += ''.join(content).format(stub = stub,
                                                folder = '../snapshots/',
                                                description = 'Automated data reduction',
-                                               imagefile = f'{basename}_02.png',
+                                               imagefile = f'{basename}_01.png',
         )
         with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_onecamera_nouid.tmpl')) as f:
             content = f.readlines()
         thiscontent += ''.join(content).format(stub = stub,
                                                folder = '../snapshots/',
                                                description = 'Live plot of complete sequence',
-                                               imagefile = f'{basename}_liveplot_02.png',
+                                               imagefile = f'{basename}_liveplot_01.png',
         )
 
 
         if results['xrf_uid'] != '':
+            print(f"before XRF {datetime.datetime.now()}")                
+            rois, ocrs = self.get_rois_ocrs(catalog, XDI['_snapshots']['xrf_uid'], XDI["Element"]["symbol"])
             with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_onecamera.tmpl')) as f:
                 content = f.readlines()
-            thiscontent += ''.join(content).format(stub = stub,
-                                                   folder = '../XRF/',
+            thiscontent += ''.join(content).format(stub        = stub,
+                                                   folder      = '../XRF/',
                                                    description = 'XRF metadata',
-                                                   camuid = results['xrf_uid'],
-                                                   imagefile = results['xrf_image'],
+                                                   camuid      = results['xrf_uid'],
+                                                   imagefile   = results['xrf_image'],
+                                                   what        = 'XRF measurement',
+                                                   line1       = 'Total counts: ' + ', '.join(map(str,ocrs)),
+                                                   line2       = f'{XDI["Element"]["symbol"]} counts: ' + ', '.join(map(str,rois)),
             )
-
-        ## glancing angle alignment...
-        
-        ################################################################################
-
-
-        
-        ################################################################################
+            print(f"after XRF {datetime.datetime.now()}")                
         with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_snapshots_end.tmpl')) as f:
             content = f.readlines()
         thiscontent += ''.join(content).format(stub = stub,)
         
+
+        ## glancing angle alignment...
+        if 'ga_filename' in results:
+            with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_snapshots.tmpl')) as f:
+                content = f.readlines()
+            thiscontent += ''.join(content).format(stub = stub,
+                                               kind = '')
+            with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_ga.tmpl')) as f:
+                content = f.readlines()
+            thiscontent += ''.join(content).format(stub = stub,
+                                                   folder = '../snapshots/',
+                                                   description = 'glancing angle alignment',
+                                                   yuid = results['ga_yuid'],
+                                                   puid = results['ga_pitchuid'],
+                                                   fuid = results['ga_fuid'],
+                                                   imagefile = results['ga_filename'],
+            )
+            
+            
+            with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_snapshots_end.tmpl')) as f:
+                content = f.readlines()
+            thiscontent += ''.join(content).format(stub = stub,)
+        
+        
+        ################################################################################
+
+
+        
+        ################################################################################
         #cameras section
         with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_snapshots.tmpl')) as f:
             content = f.readlines()
@@ -248,7 +376,7 @@ class BMMDossier():
                 key = 'webcam'
             else:
                 key = k.replace('-', '')
-            try:
+            if results[key+'_uid'] != '':
                 with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_onecamera.tmpl')) as f:
                     content = f.readlines()
                 thiscontent += ''.join(content).format(stub = stub,
@@ -256,10 +384,12 @@ class BMMDossier():
                                                        description = camera_descriptions[k],
                                                        camuid = results[key+'_uid'],
                                                        imagefile = results[key+'_file'],
-                                                       
+                                                       what = 'image', 
+                                                       line1 = '',
+                                                       line2 = '',
                 )
-            except Exception as E:
-                print(E + ' is unavailable')
+            else:
+                print(f'{k} is unavailable')
                 with open(os.path.join(startup_dir, 'consumer', 'xrr_tmpl', 'dossier_onecamera_unavailable.tmpl')) as f:
                     content = f.readlines()
                 thiscontent += ''.join(content).format(stub = stub,
@@ -283,11 +413,15 @@ class BMMDossier():
         instrument = XDI['_user']['instrument']
         if instrument is None or instrument == '':
             instrument = self.instrument_default()
+        instrument, instname = self.fix_instrument(instrument)
         if XDI['Element']['symbol'] in all_references:
             this_ref = all_references[XDI['Element']['symbol']][3]
         else:
             this_ref = 'none'
-        
+        ion = IonChamber()
+        ee = firstscan.read(['dcm_energy','I0'])
+
+            
         with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_sample.tmpl')) as f:
             content = f.readlines()
         thiscontent += ''.join(content).format(stub          = stub,
@@ -301,6 +435,7 @@ class BMMDossier():
                                                edge          = XDI['Element']['edge'],
                                                element       = self.element_text(XDI['Element']['symbol']),
                                                mode          = XDI['_user']['mode'],
+                                               flux          = f'{numpy.mean(ion.flux(ee["dcm_energy"], ee["I0"])):.2g}'.replace('e+', ' x 10^'),
                                                bounds        = ", ".join(map(str, XDI['_user']['bounds_given'])),
                                                steps         = XDI['_user']['steps'],
                                                times         = XDI['_user']['times'],
@@ -317,7 +452,11 @@ class BMMDossier():
                                                #cif           = XDI['_user']['cif'],
                                                
                                                inst          = instrument,
-                                               instname      = '',
+                                               instname      = instname,
+
+                                               initext       = highlight(XDI['_user']['initext'], IniLexer(),    HtmlFormatter()),
+                                               clargs        = highlight(XDI['_user']['clargs'].replace('\n',''),  PythonLexer(), HtmlFormatter()),
+                                               
         )
         ################################################################################
 
@@ -348,7 +487,7 @@ class BMMDossier():
             thiscontent += ''.join(content).format(fname = results['xrf_image'].replace('XRF_', '').replace('.png', '.xrf'),
                                                    uid = results['xrf_uid'],
                                                    hdf5file = hdf5files[0],
-                                                   kind = 'XRF metadata',
+                                                   kind = 'XRF metadata ',
                                                    folder = 'XRF/',
             )
 
@@ -374,7 +513,7 @@ class BMMDossier():
         with open(os.path.join(startup_dir, 'consumer', 'xas_tmpl', 'dossier_bottom.tmpl')) as f:
             content = f.readlines()
         thiscontent += ''.join(content).format(stub = stub,
-                                               now = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"))
+                                               now = datetime.datetime.now().strftime('%A, %B %d, %Y %I:%M %p'))
 
         
         ## worry about numbering!!
@@ -450,7 +589,7 @@ class BMMDossier():
 
         text += one_table(header='Diagnostics',
                           columns=4,
-                          axis_list=('dm3_foils', 'dms_fs', 'dm3_bpm', 'dm2_fs'))
+                          axis_list=('dm3_foils', 'dm3_fs', 'dm3_bpm', 'dm2_fs'))
         text += f'{tab}</table><p></p>\n'
 
 

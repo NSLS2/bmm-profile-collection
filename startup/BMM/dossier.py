@@ -367,3 +367,12 @@ class DossierTools():
                 kafka.message({'echoslack': True,
                                'img': os.path.join(proposal_base(), 'snapshots', websnap)})
                 
+    def prep_new_dossier(self, folder=None):
+        if folder is None:
+            folder = proposal_base()
+        kafka.message({'mkdir': os.path.join(folder, '.reports')})
+        kafka.message({'mkdir': os.path.join(folder, '.reports', 'css')})
+        for f in ('bmm.css',  'tract.css', 'bootstrap.css',  'floor_mat.png',  'missing.png',  'nist_logo.png',  'No_icon_red.svg',  'one-page-wonder.css'):
+            kafka.message({'copy':True,
+                           'file':f'/home/xf06bm/.ipython/profile_collection/startup/consumer/xas_tmpl/{f}',
+                           'target':os.path.join(proposal_base(), '.reports', 'css')})
