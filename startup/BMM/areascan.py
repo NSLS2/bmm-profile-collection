@@ -26,6 +26,7 @@ from BMM.functions         import plotting_mode
 from BMM.workspace         import rkvs
 
 from BMM.user_ns.base      import bmm_catalog
+from BMM.user_ns.tiled     import flush_tiled
 from BMM.user_ns.bmm       import BMMuser
 from BMM.user_ns.dwelltime import _locked_dwell_time
 from BMM.user_ns.detectors import quadem1, xs, xs1, xs4, xs7, ic0, ic1, ic2, ION_CHAMBERS
@@ -67,6 +68,8 @@ def areascan(detector,
 
     Plotting and file output are handled by kafka clients.
     '''
+
+    latest = {'uid': None}  # the uid of the just-acquired area scan, for cleanup_plan
 
     def main_plan(detector,
                   slow, startslow, stopslow, nslow,
@@ -220,6 +223,12 @@ def areascan(detector,
                                        slow, slow.position+startslow, slow.position+stopslow, nslow,
                                        fast, fast.position+startfast, fast.position+stopfast, nfast,
                                        fname, snake=False)
+        latest['uid'] = asuid
+        # make the just-acquired run visible in Tiled before the consumer reads it
+        try:
+            flush_tiled()
+        except Exception as e:
+            error_msg(f'Tiled buffers did not drain: {e}')
         kafka.message({'areascan': 'stop', 'uid' : asuid, 'filename': fname})
         report(f'map uid = {asuid}', level='bold', slack=True)
 
@@ -230,9 +239,14 @@ def areascan(detector,
         db = user_ns['db']
         suspenders.clear_suspenders()
         if BMMuser.final_log_entry is True:
-            if is_re_worker_active() is False:
-                BMM_log_info('areascan finished\n\tuid = %s, scan_id = %d' % (bmm_catalog[-1].metadata['start']['uid'],
-                                                                              bmm_catalog[-1].metadata['start']['scan_id']))
+            if is_re_worker_active() is False and latest['uid'] is not None:
+                try:
+                    flush_tiled()  # make sure the run has reached Tiled
+                    md = bmm_catalog[latest['uid']].metadata
+                    BMM_log_info('areascan finished\n\tuid = %s, scan_id = %d' % (md['start']['uid'],
+                                                                                  md['start']['scan_id']))
+                except Exception:
+                    BMM_log_info('areascan finished\n\tuid = %s' % latest['uid'])
         yield from resting_state_plan()
         user_ns['RE'].msg_hook = BMM_msg_hook
         BMMuser.x, BMMuser.y, BMMuser.motor, BMMuser.motor2, BMMuser.fig, BMMuser.ax = [None] * 6

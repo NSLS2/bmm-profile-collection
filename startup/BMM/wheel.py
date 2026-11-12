@@ -178,14 +178,19 @@ class WheelMotor(EndStationEpicsMotor):
         else:
             return 'outer'
 
-    def dossier_entry(self):
-        thistext  =  '	    <div>\n'
-        thistext +=  '	      <h3>Instrument: Ex situ sample wheel</h3>\n'
-        thistext +=  '	      <ul>\n'
-        thistext += f'               <li><b>Slot number:</b> {self.current_slot()}</li>\n'
-        thistext += f'               <li><b>Ring:</b> {self.slot_ring()}</li>\n'
-        thistext +=  '	      </ul>\n'
-        thistext +=  '	    </div>\n'
+    def dossier_entry(self, style='old'):
+        if style == 'new':
+            thistext  = ''
+            thistext += f'               <dt>Slot number:</dt> <dd>{self.current_slot()}</dd>\n'
+            thistext += f'               <dt>Ring:</dt> <dd>{self.slot_ring()}</dd>\n'
+        else:
+            thistext  =  '	    <div>\n'
+            thistext +=  '	      <h3>Instrument: Ex situ sample wheel</h3>\n'
+            thistext +=  '	      <ul>\n'
+            thistext += f'               <li><b>Slot number:</b> {self.current_slot()}</li>\n'
+            thistext += f'               <li><b>Ring:</b> {self.slot_ring()}</li>\n'
+            thistext +=  '	      </ul>\n'
+            thistext +=  '	    </div>\n'
         return thistext
 
 

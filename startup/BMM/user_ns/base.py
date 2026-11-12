@@ -6,15 +6,15 @@ from collections import deque
 
 from event_model import pack_datum_page
 from bluesky.plan_stubs import mv, mvr, sleep
-from bluesky.callbacks.buffer import BufferingWrapper
 from databroker import Broker
 from tiled.client import from_uri, show_logs
-from bluesky_tiled_plugins import TiledInserter
+from bluesky_tiled_plugins import BufferingWrapper, TiledInserter
 
 from rich import print as cprint
 
 import bmm_tools.tools.md
 
+TILED_BACKUP_ROOT = "/nsls2/data/bmm/shared/config/bluesky/tiled_backup"
 
 try:
     from bluesky_queueserver import is_re_worker_active
@@ -124,7 +124,7 @@ tiled_writing_client = from_uri(profile_configuration['services']['tiled'],
 tiled_writing_client.context.http_client.headers['tiled-qos'] = 'acquisition'
 
 tiled_inserter = TiledInserter(tiled_writing_client, 'bmm',
-                               backup_directory='/tmp/tiled_backup',
+                               backup_directory=f"{TILED_BACKUP_ROOT}/raw",
                                backup_dictionary=None)
 tiled_inserter = BufferingWrapper(tiled_inserter)
 
@@ -170,13 +170,12 @@ bmm_mongo   = None
 print()
 if not is_re_worker_active():
     cprint('[cyan]Connecting to Tiled: bmm_catalog, db[/cyan]')
-    from tiled.client import from_profile, from_uri
-    #bmm_catalog = from_profile('bmm')
-    bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
+    from tiled.client import from_uri
+    #bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
+    bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/raw')
     bmm_catalog.context.http_client.headers['tiled-qos'] = 'acquisition'
     db = Broker(bmm_catalog)
 
-    bmm_mongo = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/raw')
 
 
 cprint('[cyan]Subscribing to Publisher[/cyan]')

@@ -21,12 +21,11 @@ from nslsii.utils import open_redis_client
 import bmm_tools.tools.db
 
 from tiled.client import from_profile, from_uri
-#bmm_catalog = from_profile('bmm')
-bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
+#bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
+bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/raw')
 bmm_tools.tools.db.bmm_catalog = bmm_catalog
 from bmm_tools.tools.db import file_resource
 
-bmm_mongo = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/raw')
 
 
 # #import redis
@@ -135,6 +134,8 @@ def manage_files_from_kafka_messages(beamline_acronym):
             if 'dossier' in message:
                 if message['dossier'] == 'start':
                     dossier = BMMDossier()
+                    if 'stub' in message:
+                        dossier.stub = message['stub']
                     logger.info(f'starting dossier for {message["stub"]}')
 
                 elif message['dossier'] == 'set':
@@ -157,8 +158,16 @@ def manage_files_from_kafka_messages(beamline_acronym):
                         logger.error(str(E))
 
                 elif message['dossier'] == 'write':
+                    print(f"start writing dossier {datetime.datetime.now()}")
                     dossier.write_dossier(bmm_catalog, logger)
+                    print(f"finished writing dossier {datetime.datetime.now()}")
 
+                elif message['dossier'] == 'new':
+                    print(f"start writing new-style dossier {datetime.datetime.now()}")
+                    dossier.new_dossier(catalog=bmm_catalog, logger=logger)
+                    print(f"finished writing new-style dossier {datetime.datetime.now()}")
+
+                    
                 elif message['dossier'] == 'sead':
                     dossier.sead_dossier(bmm_catalog, logger)
 
@@ -256,32 +265,33 @@ def manage_files_from_kafka_messages(beamline_acronym):
                         
 
             elif 'verify_sql' in message:
-                uid = message['uid']
-                try:
-                    mongo_primary = bmm_mongo[uid].primary['data']
-                    mongo_ok = list(mongo_primary) != []
-                    sql_primary = bmm_catalog[uid].primary.read()
-                    sql_ok = list(sql_primary) != []
-                    primary_ok = True
-                    if sql_ok is False and mongo_ok is True:
-                        primary_ok = False
-                        bmmbot.chat(f':rotating_light: the primary stream of `{uid}` is present in mongo and absent in SQL :rotating_light:')
-                        print(f'the primary stream of `{uid}` is present in mongo and absent in SQL')
+                pass
+                # uid = message['uid']
+                # try:
+                #     mongo_primary = bmm_mongo[uid].primary['data']
+                #     mongo_ok = list(mongo_primary) != []
+                #     sql_primary = bmm_catalog[uid].primary.read()
+                #     sql_ok = list(sql_primary) != []
+                #     primary_ok = True
+                #     if sql_ok is False and mongo_ok is True:
+                #         primary_ok = False
+                #         bmmbot.chat(f':rotating_light: the primary stream of `{uid}` is present in mongo and absent in SQL :rotating_light:')
+                #         print(f'the primary stream of `{uid}` is present in mongo and absent in SQL')
                         
-                    mongo_baseline = bmm_mongo[uid].baseline['data']
-                    mongo_ok = list(mongo_baseline) != []
-                    sql_baseline = bmm_catalog[uid].baseline.read()
-                    sql_ok = list(sql_baseline) != []
-                    baseline_ok = True
-                    if sql_ok is False and mongo_ok is True:
-                        baseline_ok = False
-                        bmmbot.chat(f':rotating_light: the baseline stream of `{uid}` is present in mongo and absent in SQL :rotating_light:')
-                        print(f'the baseline stream of `{uid}` is present in mongo and absent in SQL')
+                #     mongo_baseline = bmm_mongo[uid].baseline['data']
+                #     mongo_ok = list(mongo_baseline) != []
+                #     sql_baseline = bmm_catalog[uid].baseline.read()
+                #     sql_ok = list(sql_baseline) != []
+                #     baseline_ok = True
+                #     if sql_ok is False and mongo_ok is True:
+                #         baseline_ok = False
+                #         bmmbot.chat(f':rotating_light: the baseline stream of `{uid}` is present in mongo and absent in SQL :rotating_light:')
+                #         print(f'the baseline stream of `{uid}` is present in mongo and absent in SQL')
 
-                    if primary_ok is True and baseline_ok is True:
-                        print(f"{uid = } looks fine.")
-                except:
-                    print(f"{uid = } is not an available record")
+                #     if primary_ok is True and baseline_ok is True:
+                #         print(f"{uid = } looks fine.")
+                # except:
+                #     print(f"{uid = } is not an available record")
                     
             elif 'touch' in message:
                 target = message['touch']

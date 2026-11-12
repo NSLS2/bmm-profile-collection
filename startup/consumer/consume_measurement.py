@@ -19,9 +19,9 @@ from bluesky_kafka.consume import BasicConsumer
 import nslsii
 import nslsii.kafka_utils
 
-from tiled.client import from_profile, from_uri
-#bmm_catalog = from_profile('bmm')
-bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
+from tiled.client import from_uri
+#bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/migration')
+bmm_catalog = from_uri('https://tiled.nsls2.bnl.gov/api/v1/metadata/bmm/raw')
 
 import matplotlib.pyplot as plt
 import bmm_plot

@@ -26,8 +26,9 @@ with_dualem    = profile_configuration['electrometers']['dualem'] # False       
 # fluorescence detectors and readout systems
 with_struck    = False # profile_configuration['sdd']['struck']   # False           # deprecated OG fluorescence read out
 with_xspress3  = profile_configuration['sdd']['xspress3'] # True
-use_4element   = profile_configuration['sdd']['4element'] # True
 use_1element   = profile_configuration['sdd']['1element'] # True
+use_4element   = profile_configuration['sdd']['4element'] # True
+use_5element   = profile_configuration['sdd']['5element'] # True
 use_7element   = profile_configuration['sdd']['7element'] # False
 
 # area detectors

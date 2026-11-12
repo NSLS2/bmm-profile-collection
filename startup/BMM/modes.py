@@ -463,13 +463,13 @@ def change_mode(mode=None, prompt=True, edge=None, reference=None, bender=True, 
                if mode == 'XRD':
                     if abs(m2_bender.user_readback.get() - BMMuser.bender_xrd) > BMMuser.bender_margin: # give some wiggle room for having
                          base.extend([m2_bender, BMMuser.bender_xrd])                                   # recently adjusted the bend
-                    base.extend([m2_xu,  0.091])
-                    base.extend([m2_xd,  0.315])
+                    #base.extend([m2_xu,  0.091])
+                    #base.extend([m2_xd,  0.315])
                elif mode in ('A', 'B', 'C'):
                     if abs(m2_bender.user_readback.get() - BMMuser.bender_xas) > BMMuser.bender_margin:
                          base.extend([m2_bender, BMMuser.bender_xas])
-                    base.extend([m2_xu, -1.015])
-                    base.extend([m2_xd, -0.779])
+                    #base.extend([m2_xu, -1.015])
+                    #base.extend([m2_xd, -0.779])
 
           base.extend([m2.yu,  float(MODEDATA['m2_yu'][mode])])
           base.extend([m2.ydo, float(MODEDATA['m2_ydo'][mode])])

@@ -87,7 +87,7 @@ def ca(arg):
     kafka.message({'close': 'all'})
     return None
 
-from BMM.user_ns.detectors import xs4, xs1, xs7, xs
+from BMM.user_ns.detectors import xs4, xs1, xs7, xs, xs5
 @register_line_magic
 def xrf4(arg):
     xs4.measure_xrf()
@@ -110,6 +110,9 @@ def xrf(arg):
         return None
     elif xs is xs1:
         xs1.measure_xrf()
+        return None
+    elif xs is xs5:
+        xs5.measure_xrf()
         return None
     elif xs is xs7:
         xs7.measure_xrf()

@@ -15,6 +15,7 @@ from redis_json_dict import RedisJSONDict
 
 from bmm_tools.tools.messages import *  # error_msg et al. + boxedtext
 from bmm_tools.tools.animated_prompt import PROMPTNC, animated_prompt
+from bmm_tools.tools.physics  import KTOE
 
 from BMM.user_ns.base import PROPOSALS, BMM
 

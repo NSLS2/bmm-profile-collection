@@ -1,0 +1,5 @@
+            <li>
+              <b>{kind}</b>: <a href="../{folder}{fname}" alt=''>{fname}</a>
+              <a href="javascript:void(0)" onclick="toggle_visibility('{fname}');" title="Click to show/hide the UID of this measurements">(UID)</a><div id="{fname}" style="display:none;"><small>{uid}</small></div>
+              <a href="javascript:void(0)" onclick="toggle_visibility('{fname}_hdf');" title="Click to show/hide the path to the HDF resource for this measurement">(XSpress3 HDF5)</a><div id="{fname}_hdf" style="display:none;"><small>{hdf5file}</small></div>
+            </li>
