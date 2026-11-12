@@ -2,8 +2,6 @@
 import logging
 logger = logging.getLogger('ophyd')
 logger.setLevel('INFO')
-logger = logging.getLogger('bluesky')
-logger.setLevel('WARNING')
 
 import redis
 from nslsii.utils import open_redis_client
