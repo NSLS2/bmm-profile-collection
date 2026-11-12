@@ -32,7 +32,7 @@ emojis = ">=0.7.0,<0.8"
 bluesky-tiled-plugins = ">=2.0.13"
 ophyd-async = ">=0.21.2"
 matplotlib-base = ">=3.10"
-nslsii = "==0.11.9"
+nslsii = "==0.12.0"
 gpytorch = "*"
 dash = ">=3,<4"
 scikit-image = ">=0.26,<0.27"
@@ -52,7 +52,7 @@ blop = { git = "https://github.com/bluesky/blop", branch = "main", extras = [
 #XASDenoise = { git = "https://github.com/tomasaidukas/XASDenoise", branch = "main" }
 
 [feature.terminal.dependencies]
-nslsii = "==0.11.9"
+nslsii = "==0.12.0"
 ipython = ">=9.5.0"
 numpy = ">2"
 python-pptx = "*"
