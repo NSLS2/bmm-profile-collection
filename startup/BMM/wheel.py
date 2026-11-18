@@ -361,9 +361,10 @@ class WheelMacroBuilder(BMMMacroBuilder):
                 #if here < 150:
                 #    self.content += self.tab + 'yield from mvr(xafs_det, 20)\n'
                 if m['ring'].lower() == 'inner':
-                    self.content += self.tab + f'yield from xafs_wheel.inner() # inner ring\n'
+                    self.content += self.tab + f'yield from xafs_wheel.inner() # return to inner ring position \n'
                 else:
-                    self.content += self.tab + f'yield from xafs_wheel.outer() # outer ring\n'
+                    self.content += self.tab + f'yield from xafs_wheel.outer() # return outer ring position\n'
+                self.content += self.tab + f'yield from xafs_wheel.height() # return to nominal y position\n'
                 #if here < 150:
                 #    self.content += self.tab + f'yield from mv(xafs_det, {here:.3f})\n'
             if m['samplex'] is not None:
